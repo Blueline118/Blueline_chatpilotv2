@@ -147,27 +147,43 @@ export default function BluelineChatpilot() {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  function handleSend(e) {
-    e?.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed) return;
+  async function handleSend(e) {
+  e?.preventDefault();
+  const trimmed = input.trim();
+  if (!trimmed) return;
 
+  setMessages((prev) => [
+    ...prev,
+    { role: "user", text: trimmed, meta: { type: messageType, tone } },
+  ]);
+  setInput("");
+
+  setIsTyping(true);
+  try {
+    const r = await fetch("/.netlify/functions/generate-gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
+    });
+    const data = await r.json();
+    const reply = r.ok && data?.text
+      ? data.text
+      : generateAssistantReply(trimmed, messageType, tone); // fallback indien fout
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: trimmed, meta: { type: messageType, tone } },
+      { role: "assistant", text: reply, meta: { type: messageType, tone } },
     ]);
-    setInput("");
-
-    setIsTyping(true);
-    setTimeout(() => {
-      const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone } },
-      ]);
-      setIsTyping(false);
-    }, 500);
+  } catch (err) {
+    const reply = generateAssistantReply(trimmed, messageType, tone);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", text: reply, meta: { type: messageType, tone } },
+    ]);
+  } finally {
+    setIsTyping(false);
   }
+}
+
 
   function onKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
