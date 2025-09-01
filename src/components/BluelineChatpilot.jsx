@@ -19,13 +19,11 @@ function safeLoad() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // minimale schema-check
     if (!Array.isArray(data?.messages)) return null;
     return {
       messages: data.messages,
       messageType: typeof data.messageType === "string" ? data.messageType : "Social Media",
       tone: typeof data.tone === "string" ? data.tone : "Formeel",
-      temperature: typeof data.temperature === "number" ? data.temperature : 0.7,
     };
   } catch {
     return null;
@@ -37,12 +35,9 @@ function safeSave(state) {
       messages: (state.messages || []).slice(-200),
       messageType: state.messageType,
       tone: state.tone,
-      temperature: state.temperature,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // ignore quota/serialization errors
-  }
+  } catch {}
 }
 
 // Extract a likely order number (e.g., 12345 or #12345) from user text
@@ -62,7 +57,7 @@ function extractOrderNumber(text = "") {
   return null;
 }
 
-// --- Reply generator ---
+// --- Reply generator (fallback) ---
 function generateAssistantReply(text, type, tone) {
   const t = (tone || "").toLowerCase();
   const isEmail = type === "E-mail";
@@ -162,7 +157,6 @@ export default function BluelineChatpilot() {
 
   const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
   const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
-  const [temperature, setTemperature] = useState(loaded?.temperature ?? 0.7);
   const [messages, setMessages] = useState(
     loaded?.messages ?? [
       {
@@ -172,6 +166,8 @@ export default function BluelineChatpilot() {
       },
     ]
   );
+  // Controlled input (ZORGT dat de send-knop enabled wordt bij typen)
+  const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
   const listRef = useRef(null);
@@ -193,30 +189,27 @@ export default function BluelineChatpilot() {
 
   // ---- Persist to localStorage on changes
   useEffect(() => {
-    safeSave({ messages, messageType, tone, temperature });
-  }, [messages, messageType, tone, temperature]);
+    safeSave({ messages, messageType, tone });
+  }, [messages, messageType, tone]);
 
   async function handleSend(e) {
     e?.preventDefault();
-    const trimmed = inputRef.current?.value?.trim() ?? "";
+    const trimmed = input.trim();
     if (!trimmed) return;
 
     setMessages((prev) => [
       ...prev,
       { role: "user", text: trimmed, meta: { type: messageType, tone } },
     ]);
-    if (inputRef.current) {
-      inputRef.current.value = "";
-      // reset height after send
-      autoresizeTextarea(inputRef.current);
-    }
+    setInput("");
+    if (inputRef.current) autoresizeTextarea(inputRef.current); // reset hoogte na send
 
     setIsTyping(true);
     try {
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone, temperature }),
+        body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
       });
       const data = await r.json();
       const reply = r.ok && data?.text
@@ -237,15 +230,6 @@ export default function BluelineChatpilot() {
     }
   }
 
-  function onKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    } else if (e.key === "Escape") {
-      inputRef.current?.focus();
-    }
-  }
-
   const pillBase =
     "inline-flex items-center justify-center rounded-full h-8 px-4 text-sm transition-colors select-none whitespace-nowrap";
   const pillActive = "bg-[#2563eb] text-white border border-[#2563eb]";
@@ -254,18 +238,20 @@ export default function BluelineChatpilot() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200 dark:bg-gray-950/80 dark:border-gray-800">
-        <div className="mx-auto max-w-5xl px-4 py-4 flex items-center gap-3">
-          {/* Logo */}
-          <div aria-hidden className="w-10 h-10 rounded-full bg-[#2563eb] flex items-center justify-center shadow-sm">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="currentColor">
-              <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">Blueline Chatpilot</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
+      {/* Blue gradient header "skin" */}
+      <header className="sticky top-0 z-20 border-b border-blue-600/20">
+        <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
+          <div className="mx-auto max-w-5xl px-4 py-4 flex items-center gap-3">
+            {/* Logo: wit rondje met blauw icoon */}
+            <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+              <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
+                <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot</h1>
+              <p className="text-sm text-white/80 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
+            </div>
           </div>
         </div>
       </header>
@@ -273,37 +259,37 @@ export default function BluelineChatpilot() {
       {/* Chat Window */}
       <main className="flex-1">
         <div className="mx-auto max-w-5xl px-4">
-          <section className="mt-6 mb-40 rounded-xl border border-transparent dark:border-gray-800" style={{ backgroundColor: "#f2f8ff" }}>
+          <section className="mt-6 mb-40 rounded-xl border border-transparent dark:border-gray-800 bg-white">
             <div className="p-4 sm:p-6">
               <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                {messages.map((m, idx) => (
-                  <div key={idx} className={cx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                    <div
-                      className={cx(
-                        "max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm leading-relaxed break-words",
-                        m.role === "user"
-                          ? "bg-[#2563eb] text-white"
-                          : "bg-white text-gray-900 border border-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-800"
-                      )}
-                    >
-                      <p className="whitespace-pre-wrap">{m.text}</p>
-                      {m.meta?.type && (
-                        <div className={cx("mt-2 text-[11px]", m.role === "user" ? "text-white/90" : "text-gray-500")}>
-                          {m.meta.type} · {m.meta.tone}
-                        </div>
-                      )}
+                {messages.map((m, idx) => {
+                  const isUser = m.role === "user";
+                  return (
+                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cx(
+                          // Bubble styles per role (ref. mockup)
+                          "max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm leading-relaxed break-words",
+                          isUser
+                            ? "bg-white text-[#2563eb] border border-gray-300" // user: white with blue text + border
+                            : "bg-gray-100 text-gray-900 border border-gray-200" // assistant: light gray
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap">{m.text}</p>
+                        {/* Meta-tekst onder bubbel verwijderd */}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {isTyping && (
                   <div className="flex justify-start">
-                    <div className="max-w-[520px] rounded-2xl shadow-sm px-4 py-3 text-sm bg-white text-gray-900 border border-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-800">
+                    <div className="max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm bg-gray-100 text-gray-900 border border-gray-200">
                       <span className="inline-flex items-center gap-2">
                         <span className="relative inline-block w-6 h-2 align-middle">
-                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:-0.2s]"></span>
-                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0s]"></span>
-                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce [animation-delay:0.2s]"></span>
+                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
+                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
+                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
                         </span>
                         Typen…
                       </span>
@@ -316,13 +302,56 @@ export default function BluelineChatpilot() {
         </div>
       </main>
 
-      {/* Dock */}
-      <div className="fixed bottom-0 inset-x-0 z-30 border-t border-gray-200 dark:border-gray-800" style={{ backgroundColor: "#f9fafb", paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
+      {/* Dock: input boven, pills eronder */}
+      <div className="fixed bottom-0 inset-x-0 z-30 border-t border-gray-200 bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
         <div className="mx-auto max-w-5xl px-4 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            {/* Message type */}
+          {/* Input row */}
+          <form onSubmit={handleSend} aria-label="Bericht verzenden">
+            <div className="relative">
+              <label htmlFor="message" className="sr-only">Typ een bericht…</label>
+              <textarea
+                id="message"
+                ref={inputRef}
+                rows={1}
+                className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden"
+                placeholder="Typ een bericht…"
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  autoresizeTextarea(e.target);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                aria-label="Bericht invoeren"
+                autoComplete="off"
+              />
+              {/* Send button */}
+              <button
+                type="submit"
+                aria-label="Verzenden"
+                disabled={isTyping || !input.trim()}
+                className={cx(
+                  "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-colors",
+                  (!input.trim() || isTyping) ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
+                )}
+                style={{ backgroundColor: "#2563eb" }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+                  <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
+                </svg>
+              </button>
+            </div>
+          </form>
+
+          {/* Pills UNDER the input */}
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Kanaal */}
             <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300 mr-1 sm:mr-2">Berichttype:</span>
+              <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
               {["Social Media", "E-mail"].map((t) => (
                 <button
                   key={t}
@@ -336,9 +365,9 @@ export default function BluelineChatpilot() {
               ))}
             </div>
 
-            {/* Tone (only Formeel & Informeel) */}
+            {/* Stijl */}
             <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300 mr-1 sm:mr-2">Stijl:</span>
+              <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
               {["Formeel", "Informeel"].map((t) => (
                 <button
                   key={t}
@@ -352,75 +381,6 @@ export default function BluelineChatpilot() {
               ))}
             </div>
           </div>
-
-          {/* Temperature slider */}
-          <div className="mt-3 flex items-center gap-3">
-            <label htmlFor="temp" className="text-xs font-medium text-gray-600 dark:text-gray-300">Creativiteit:</label>
-            <input
-              id="temp"
-              type="range"
-              min="0.1"
-              max="1.0"
-              step="0.1"
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-              className="w-40 accent-[#2563eb]"
-              aria-label="Creativiteit (temperature)"
-            />
-            <span className="text-xs text-gray-600 dark:text-gray-300 w-10 tabular-nums text-right">
-              {temperature.toFixed(1)}
-            </span>
-          </div>
-
-          {/* Bottom row: textarea + send button */}
-          <form onSubmit={handleSend} className="mt-3" aria-label="Bericht verzenden">
-            <div className="relative">
-              <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-              <textarea
-                id="message"
-                ref={inputRef}
-                rows={1}
-                className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3 overflow-hidden"
-                placeholder="Typ een bericht…"
-                onChange={(e) => {
-                  // we lezen direct uit ref bij verzenden; state niet nodig
-                  autoresizeTextarea(e.target);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault(); // geen newline
-                    handleSend();       // verzenden
-                  }
-                }}
-                aria-label="Bericht invoeren"
-                autoComplete="off"
-              />
-              {/* Send button inside the field (right aligned) */}
-              <button
-                type="submit"
-                aria-label="Verzenden"
-                disabled={isTyping || !(inputRef.current?.value?.trim())}
-                className={cx(
-                  "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                  (!(inputRef.current?.value?.trim()) || isTyping) ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
-                )}
-                style={{ backgroundColor: "#2563eb" }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
-                  <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
-                </svg>
-              </button>
-            </div>
-            {/* Context hint below input */}
-            <div className="mt-2 text-xs text-gray-600 dark:text-gray-300 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1">
-                <span className="font-medium">Berichttype:</span> {messageType}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="font-medium">Stijl:</span> {tone}
-              </span>
-            </div>
-          </form>
         </div>
       </div>
     </div>

@@ -11,17 +11,14 @@ function withTimeout(promise, ms = 12000) {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-// Helper om temperature veilig te lezen en te begrenzen
 function clampTemp(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
-  // Begrens tussen 0.1 en 1.0
   return Math.min(1.0, Math.max(0.1, n));
 }
 
 export default async (request) => {
   try {
-    // Ping: GET /.netlify/functions/generate-gemini?ping=1
     const url = new URL(request.url);
     if (url.searchParams.get("ping")) {
       return new Response(JSON.stringify({ ok: true, pong: true }), {
@@ -36,7 +33,6 @@ export default async (request) => {
       });
     }
 
-    // Body lezen (en robuust omgaan met lege/ongeldige JSON)
     let payload = {};
     try {
       payload = await request.json();
@@ -61,17 +57,16 @@ export default async (request) => {
     }
 
     const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
-    // Temperature: alleen ENV of default 0.4 (client stuurt geen temperature meer)
-const envTemp =
-  typeof process !== "undefined" &&
-  process.env &&
-  process.env.GEMINI_TEMPERATURE
-    ? clampTemp(process.env.GEMINI_TEMPERATURE)
-    : null;
 
-const temperature = envTemp ?? 0.4;
+    // Temperature: alleen ENV of default 0.4
+    const envTemp =
+      typeof process !== "undefined" &&
+      process.env &&
+      process.env.GEMINI_TEMPERATURE
+        ? clampTemp(process.env.GEMINI_TEMPERATURE)
+        : null;
+    const temperature = envTemp ?? 0.4;
 
-    // ---------- Aangescherpte instructies ----------
     const systemDirectives = `
 Je bent een klantenservice-assistent van **Blueline Customer Care**. Antwoord altijd in het **Nederlands**.
 
@@ -100,7 +95,6 @@ Valkuilen:
 - Geen meta-uitleg of systeemtekst; alleen de reactie naar de klant.
 `.trim();
 
-    // ---------- Few-shot voorbeelden sturen ----------
     const fewshotSocialUser = `Type: Social Media
 Stijl: Informeel
 
@@ -137,18 +131,11 @@ ${userText}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
-            // Richtlijnen
             { role: "user", parts: [{ text: systemDirectives }] },
-
-            // Few-shot 1: Social (gewenste korte antwoordstijl)
             { role: "user", parts: [{ text: fewshotSocialUser }] },
             { role: "model", parts: [{ text: fewshotSocialModel }] },
-
-            // Few-shot 2: E-mail (gewenste emailopbouw)
             { role: "user", parts: [{ text: fewshotEmailUser }] },
             { role: "model", parts: [{ text: fewshotEmailModel }] },
-
-            // Huidige vraag
             { role: "user", parts: [{ text: userPrompt }] },
           ],
           generationConfig: { temperature, maxOutputTokens: 512 },
