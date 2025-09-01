@@ -337,26 +337,26 @@ export default function BluelineChatpilot() {
             <div className="relative">
               <label htmlFor="message" className="sr-only">Typ een bericht…</label>
               <textarea
-                id="message"
-                ref={inputRef}
-                rows={1}
-                className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3"
-                placeholder="Typ een bericht…"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  autoresizeTextarea(e.target);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault(); // geen newline
-                    handleSend();       // verzenden
-                  }
-                  // Shift+Enter: newline toegestaan
-                }}
-                aria-label="Bericht invoeren"
-                autoComplete="off"
-              />
+  id="message"
+  ref={inputRef}
+  rows={1}
+  className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3 overflow-hidden"
+  placeholder="Typ een bericht…"
+  value={input}
+  onChange={(e) => {
+    setInput(e.target.value);
+    autoresizeTextarea(e.target);
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // geen newline
+      handleSend();       // verzenden
+    }
+    // Shift+Enter: newline toegestaan
+  }}
+  aria-label="Bericht invoeren"
+  autoComplete="off"
+/>
               {/* Send button inside the field (right aligned) */}
               <button
                 type="submit"
