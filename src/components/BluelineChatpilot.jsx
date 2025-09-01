@@ -10,8 +10,7 @@ class ErrorBoundary extends React.Component {
     return { hasError: true, errorMsg: error?.message || "Onbekende fout" };
   }
   componentDidCatch(error, info) {
-    // In productie kun je dit naar logging sturen
-    // console.error("UI crash:", error, info);
+    // Optioneel: logging
   }
   render() {
     if (this.state.hasError) {
@@ -176,7 +175,6 @@ function getGreeting() {
       return text;
     }
   } catch {
-    // Fallback als er iets misgaat
     return "Hallo! Klaar om aan de slag te gaan?";
   }
 }
@@ -266,10 +264,7 @@ function runSelfTests() {
       console.assert(typeof out === "string" && out.length > 20, "Invalid output");
       if (c.type === "E-mail") console.assert(out.startsWith("Onderwerp:"), "Email needs subject");
     });
-    // console.log("[Blueline Chatpilot] Self-tests passed ✅");
-  } catch (err) {
-    // console.error("[Blueline Chatpilot] Self-tests failed ❌", err);
-  }
+  } catch {}
 }
 
 /* ---------------- Copy helpers ---------------- */
@@ -306,7 +301,7 @@ function CopyButton({ id, text, onCopied, isCopied }) {
         "inline-flex items-center gap-1.5 text-[11px] rounded-full px-2 py-1 border transition-colors",
         isCopied
           ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-          : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+          : "bg-white/80 border-white/60 text-gray-700 hover:bg-white"
       )}
       aria-label={isCopied ? "Gekopieerd" : "Kopieer bericht"}
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
@@ -428,32 +423,30 @@ function InnerChatpilot() {
                 <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                   {messages.map((m, idx) => {
                     const isUser = m.role === "user";
-                    const bubble = (
-                      <div
-                        className={cx(
-                          "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
-                          isUser
-                            ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
-                            : "bg-gray-100 text-gray-900 border border-gray-200"
-                        )}
-                      >
-                        <p className="whitespace-pre-wrap">{m.text}</p>
-                      </div>
-                    );
-                    const toolbar = (
-                      <div className={cx("mt-1 flex", isUser ? "justify-end" : "justify-start")}>
-                        <CopyButton
-                          id={`msg-${idx}`}
-                          text={m.text}
-                          onCopied={handleCopied}
-                          isCopied={copiedId === `msg-${idx}`}
-                        />
-                      </div>
-                    );
                     return (
-                      <div key={idx} className={cx("flex flex-col", isUser ? "items-end" : "items-start")}>
-                        {bubble}
-                        {toolbar}
+                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+                        <div
+                          className={cx(
+                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words relative",
+                            isUser
+                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                              : "bg-gray-100 text-gray-900 border border-gray-200"
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap">{m.text}</p>
+
+                          {/* Copy alleen voor assistent en BINNEN de bubbel, onderin rechts */}
+                          {!isUser && (
+                            <div className="mt-2 flex justify-end">
+                              <CopyButton
+                                id={`msg-${idx}`}
+                                text={m.text}
+                                onCopied={handleCopied}
+                                isCopied={copiedId === `msg-${idx}`}
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
