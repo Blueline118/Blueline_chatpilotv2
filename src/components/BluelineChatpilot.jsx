@@ -1,21 +1,73 @@
 import React, { useEffect, useRef, useState } from "react";
 
-// Utility to merge class names
+/* ---------------- Error Boundary (voorkomt wit scherm) ---------------- */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMsg: "", showDetails: false };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, errorMsg: error?.message || "Onbekende fout" };
+  }
+  componentDidCatch(error, info) {
+    // In productie kun je dit naar logging sturen
+    // console.error("UI crash:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-white text-gray-800 px-4">
+          <div className="max-w-md w-full border rounded-xl p-5 shadow-sm">
+            <h2 className="text-lg font-semibold mb-2">Er ging iets mis</h2>
+            <p className="text-sm text-gray-600">
+              De interface kon niet geladen worden. Probeer de pagina te verversen.
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ showDetails: !this.state.showDetails })}
+              className="mt-3 text-xs underline text-blue-600"
+            >
+              {this.state.showDetails ? "Verberg details" : "Toon details"}
+            </button>
+            {this.state.showDetails && (
+              <pre className="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-auto max-h-40">
+{this.state.errorMsg}
+              </pre>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* ---------------- Utility ---------------- */
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
-
-// Auto-resize helper for textarea
 function autoresizeTextarea(el) {
   if (!el) return;
   el.style.height = "0px";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
+  el.style.height = Math.min(el.scrollHeight, 200) + "px";
 }
 
-// Local storage helpers (we bewaren GEEN messages meer, alleen voorkeuren)
+/* ---------------- Veilige opslag helpers (géén messages bewaren) ---------------- */
 const STORAGE_KEY = "blueline-chatpilot:v1";
+function canUseStorage() {
+  try {
+    if (typeof window === "undefined") return false;
+    const t = "__t__";
+    window.localStorage.setItem(t, "1");
+    window.localStorage.removeItem(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function safeLoad() {
   try {
+    if (!canUseStorage()) return { messageType: "Social Media", tone: "Formeel" };
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { messageType: "Social Media", tone: "Formeel" };
     const data = JSON.parse(raw);
@@ -27,15 +79,16 @@ function safeLoad() {
     return { messageType: "Social Media", tone: "Formeel" };
   }
 }
-function safeSave({ messageType, tone }) {
+function safeSave(pref) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ messageType, tone }));
+    if (!canUseStorage()) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ messageType: pref.messageType, tone: pref.tone }));
   } catch {}
 }
 
-// --- Fase 2: begroetingen ---
+/* ---------------- Fase 2: begroetingen + ringbuffer ---------------- */
 const GREET_COUNT_KEY = "greetingCount";
-const GREET_HIST_KEY = "greetingHist:v1"; // per-type ringbuffer (laatste 2)
+const GREET_HIST_KEY  = "greetingHist:v1";
 
 const gimmicks = [
   "Tijd om samen de wachtrijen korter te maken.",
@@ -49,7 +102,6 @@ const gimmicks = [
   "Tijd voor koffie én een goede klantcase.",
   "Klaar voor een dag vol empathie en oplossingen?",
 ];
-
 const energizers = [
   "✨ Vandaag gewoon doen waar je zin in hebt (en klanten blij maken onderweg).",
   "☕ Eerst koffie, dan magie voor je klanten.",
@@ -64,15 +116,19 @@ const energizers = [
 ];
 
 function getDaypartPrefix() {
-  const h = new Date().getHours();
-  if (h >= 6 && h < 12) return "Goedemorgen";
-  if (h >= 12 && h < 18) return "Goedemiddag";
-  if (h >= 18 && h < 24) return "Goedenavond";
-  return "Hallo"; // nacht fallback
+  try {
+    const h = new Date().getHours();
+    if (h >= 6 && h < 12) return "Goedemorgen";
+    if (h >= 12 && h < 18) return "Goedemiddag";
+    if (h >= 18 && h < 24) return "Goedenavond";
+    return "Hallo";
+  } catch {
+    return "Hallo";
+  }
 }
-
 function loadGreetHist() {
   try {
+    if (!canUseStorage()) return { gimmicks: [], energizers: [] };
     const raw = localStorage.getItem(GREET_HIST_KEY);
     if (!raw) return { gimmicks: [], energizers: [] };
     const j = JSON.parse(raw);
@@ -86,46 +142,46 @@ function loadGreetHist() {
 }
 function saveGreetHist(hist) {
   try {
+    if (!canUseStorage()) return;
     localStorage.setItem(GREET_HIST_KEY, JSON.stringify(hist));
   } catch {}
 }
-
 function pickIndexAvoidingRecent(len, recent = []) {
   const all = Array.from({ length: len }, (_, i) => i);
   const candidates = all.filter((i) => !recent.includes(i));
-  const pool = candidates.length > 0 ? candidates : all; // fallback als (bijna) alle items recent
+  const pool = candidates.length > 0 ? candidates : all;
   const n = Math.floor(Math.random() * pool.length);
   return pool[n];
 }
-
 function getGreeting() {
-  // Teller ophalen & ophogen (persistente rotatie 1–2 gimmick, 3 energizer)
-  let count = Number(localStorage.getItem(GREET_COUNT_KEY) || "0");
-  count += 1;
-  localStorage.setItem(GREET_COUNT_KEY, String(count));
+  try {
+    const can = canUseStorage();
+    let count = 0;
+    if (can) count = Number(localStorage.getItem(GREET_COUNT_KEY) || "0");
+    count += 1;
+    if (can) localStorage.setItem(GREET_COUNT_KEY, String(count));
 
-  // Hist ophalen
-  const hist = loadGreetHist();
+    const hist = can ? loadGreetHist() : { gimmicks: [], energizers: [] };
 
-  if (count % 3 === 0) {
-    // Energizer (zonder dagdeelprefix) met anti-herhaling
-    const idx = pickIndexAvoidingRecent(energizers.length, hist.energizers);
-    const text = energizers[idx];
-    const next = [...hist.energizers, idx].slice(-2);
-    saveGreetHist({ ...hist, energizers: next });
-    return text;
-  } else {
-    // Gimmick (mét dagdeelprefix) met anti-herhaling
-    const prefix = getDaypartPrefix();
-    const idx = pickIndexAvoidingRecent(gimmicks.length, hist.gimmicks);
-    const text = `${prefix}! ${gimmicks[idx]}`;
-    const next = [...hist.gimmicks, idx].slice(-2);
-    saveGreetHist({ ...hist, gimmicks: next });
-    return text;
+    if (count % 3 === 0) {
+      const idx = pickIndexAvoidingRecent(energizers.length, hist.energizers);
+      const text = energizers[idx];
+      if (can) saveGreetHist({ ...hist, energizers: [...hist.energizers, idx].slice(-2) });
+      return text;
+    } else {
+      const prefix = getDaypartPrefix();
+      const idx = pickIndexAvoidingRecent(gimmicks.length, hist.gimmicks);
+      const text = `${prefix}! ${gimmicks[idx]}`;
+      if (can) saveGreetHist({ ...hist, gimmicks: [...hist.gimmicks, idx].slice(-2) });
+      return text;
+    }
+  } catch {
+    // Fallback als er iets misgaat
+    return "Hallo! Klaar om aan de slag te gaan?";
   }
 }
 
-// Extract a likely order number (e.g., 12345 or #12345) from user text
+/* ---------------- Ordernummer & reply fallback ---------------- */
 function extractOrderNumber(text = "") {
   if (!text) return null;
   const patterns = [
@@ -141,8 +197,6 @@ function extractOrderNumber(text = "") {
   }
   return null;
 }
-
-// --- Reply generator (fallback) ---
 function generateAssistantReply(text, type, tone) {
   const t = (tone || "").toLowerCase();
   const isEmail = type === "E-mail";
@@ -181,7 +235,6 @@ Hartelijke groet,
 Blueline Customer Care`;
   }
 
-  // SOCIAL (DM-context): direct helpen, geen "stuur DM"
   if (t === "formeel") {
     return `Dank voor uw bericht. We kijken dit graag voor u na. Kunt u het ordernummer en uw postcode delen? Dan controleren we direct de status en koppelen we terug met een update.`;
   }
@@ -191,7 +244,7 @@ Blueline Customer Care`;
   return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Als je je ordernummer en postcode deelt, sturen we je snel een update.`;
 }
 
-// --- Dev self-tests (lichtgewicht) ---
+/* ---------------- Dev self-tests (veilig in prod) ---------------- */
 const IS_DEV =
   (typeof process !== "undefined" &&
     process &&
@@ -208,40 +261,28 @@ function runSelfTests() {
       { type: "Social Media", tone: "Formeel", text: "Order 4567 niet ontvangen" },
       { type: "Social Media", tone: "Informeel", text: "Bestelling kapot aangekomen #33333" },
     ];
-
     baseCases.forEach((c) => {
       const out = generateAssistantReply(c.text, c.type, c.tone);
-      console.assert(typeof out === "string", `Output is not a string for ${c.type} / ${c.tone}`);
-      console.assert(out.length > 20, `Output too short for ${c.type} / ${c.tone}`);
-      if (c.type === "E-mail") {
-        console.assert(out.startsWith("Onderwerp:"), `Email missing subject line for ${c.tone}`);
-        if (/\d{4,}/.test(c.text)) {
-          const num = extractOrderNumber(c.text);
-          console.assert(new RegExp(`#${num}`).test(out), `Email subject missing #${num}`);
-        }
-        console.assert(/Blueline Customer Care/.test(out), `Email missing signature for ${c.tone}`);
-      } else {
-        console.assert(!out.startsWith("Onderwerp:"), `Social should not start with 'Onderwerp:' for ${c.tone}`);
-      }
+      console.assert(typeof out === "string" && out.length > 20, "Invalid output");
+      if (c.type === "E-mail") console.assert(out.startsWith("Onderwerp:"), "Email needs subject");
     });
-    console.log("[Blueline Chatpilot] Self-tests passed ✅");
+    // console.log("[Blueline Chatpilot] Self-tests passed ✅");
   } catch (err) {
-    console.error("[Blueline Chatpilot] Self-tests failed ❌", err);
+    // console.error("[Blueline Chatpilot] Self-tests failed ❌", err);
   }
 }
 
-// --- Copy helpers ---
+/* ---------------- Copy helpers ---------------- */
 async function copyToClipboard(text) {
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text || "");
       return true;
     }
   } catch {}
-  // Fallback
   try {
     const ta = document.createElement("textarea");
-    ta.value = text;
+    ta.value = text || "";
     ta.style.position = "fixed";
     ta.style.opacity = "0";
     document.body.appendChild(ta);
@@ -253,7 +294,6 @@ async function copyToClipboard(text) {
     return false;
   }
 }
-
 function CopyButton({ id, text, onCopied, isCopied }) {
   return (
     <button
@@ -272,12 +312,10 @@ function CopyButton({ id, text, onCopied, isCopied }) {
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
       {isCopied ? (
-        // check icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z" />
         </svg>
       ) : (
-        // copy icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z" />
         </svg>
@@ -287,19 +325,19 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
-export default function BluelineChatpilot() {
-  const TONES = ["Formeel", "Informeel"];
-
-  const loaded = typeof window !== "undefined" ? safeLoad() : null;
-  const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
-  const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
+/* ---------------- Hoofdcomponent ---------------- */
+function InnerChatpilot() {
+  const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel" };
+  const [messageType, setMessageType] = useState(loaded.messageType);
+  const [tone, setTone] = useState(loaded.tone);
 
   // Altijd starten met 1 dynamische begroeting (géén history laden)
   const [messages, setMessages] = useState([
     { role: "assistant", text: getGreeting(), meta: { type: "System", tone: "-" } },
   ]);
 
-  // Copy state
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const copiedTimer = useRef(null);
 
@@ -316,31 +354,25 @@ export default function BluelineChatpilot() {
 
   useEffect(() => {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
-  }, []);
-
-  // Alleen messageType/tone bewaren (géén messages)
-  useEffect(() => {
-    safeSave({ messageType, tone });
-  }, [messageType, tone]);
-
-  useEffect(() => {
     return () => {
       if (copiedTimer.current) clearTimeout(copiedTimer.current);
     };
   }, []);
 
+  useEffect(() => {
+    safeSave({ messageType, tone });
+  }, [messageType, tone]);
+
   async function handleSend(e) {
     e?.preventDefault();
-    const trimmed = input.trim();
+    const trimmed = (input || "").trim();
     if (!trimmed) return;
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: trimmed, meta: { type: messageType, tone } },
-    ]);
+    setMessages((prev) => [...prev, { role: "user", text: trimmed, meta: { type: messageType, tone } }]);
     setInput("");
     if (inputRef.current) autoresizeTextarea(inputRef.current);
 
+    setIsTyping(true);
     try {
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
@@ -348,19 +380,13 @@ export default function BluelineChatpilot() {
         body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
       });
       const data = await r.json();
-      const reply = r.ok && data?.text
-        ? data.text
-        : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone } },
-      ]);
+      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
+      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone } }]);
     } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone } },
-      ]);
+      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone } }]);
+    } finally {
+      setIsTyping(false);
     }
   }
 
@@ -378,12 +404,9 @@ export default function BluelineChatpilot() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
-      {/* MAIN CONTENT */}
       <div className="flex-1">
         <div className="mx-auto max-w-[760px] px-3 pt-6">
-          {/* CARD / PANEL met GPT-achtige bodemruimte */}
           <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-1rem)]">
-            {/* Sticky header binnen de kaart */}
             <header className="sticky top-0 z-10 border-b border-blue-600/20">
               <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
                 <div className="px-5 py-4 flex items-center gap-3">
@@ -400,7 +423,6 @@ export default function BluelineChatpilot() {
               </div>
             </header>
 
-            {/* Scrollbare messages (scrollbar verborgen) */}
             <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               <div className="px-5 py-5">
                 <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
@@ -435,14 +457,27 @@ export default function BluelineChatpilot() {
                       </div>
                     );
                   })}
+
+                  {isTyping && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="relative inline-block w-6 h-2 align-middle">
+                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
+                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
+                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
+                          </span>
+                          Typen…
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </main>
 
-            {/* Sticky dock onderaan binnen de kaart */}
             <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
               <div className="px-5 py-3">
-                {/* Input row */}
                 <form onSubmit={handleSend} aria-label="Bericht verzenden">
                   <div className="relative">
                     <label htmlFor="message" className="sr-only">Typ een bericht…</label>
@@ -466,7 +501,6 @@ export default function BluelineChatpilot() {
                       aria-label="Bericht invoeren"
                       autoComplete="off"
                     />
-                    {/* Send button: perfect gecentreerd */}
                     <button
                       type="submit"
                       aria-label="Verzenden"
@@ -486,9 +520,7 @@ export default function BluelineChatpilot() {
                   </div>
                 </form>
 
-                {/* Pills onder input */}
                 <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  {/* Kanaal */}
                   <div className="flex items-center flex-wrap gap-2">
                     <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
                     {["Social Media", "E-mail"].map((t) => (
@@ -504,7 +536,6 @@ export default function BluelineChatpilot() {
                     ))}
                   </div>
 
-                  {/* Stijl */}
                   <div className="flex items-center flex-wrap gap-2">
                     <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
                     {["Formeel", "Informeel"].map((t) => (
@@ -525,12 +556,20 @@ export default function BluelineChatpilot() {
             {/* /Dock */}
           </div>
 
-          {/* Disclaimer direct onder de kaart */}
           <div className="mt-2 text-center text-[12px] text-gray-500">
             Chatpilot kan fouten maken. Controleer belangrijke informatie.
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---------------- Export met ErrorBoundary ---------------- */
+export default function BluelineChatpilot() {
+  return (
+    <ErrorBoundary>
+      <InnerChatpilot />
+    </ErrorBoundary>
   );
 }
