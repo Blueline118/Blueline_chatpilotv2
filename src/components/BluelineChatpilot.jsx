@@ -57,7 +57,7 @@ function extractOrderNumber(text = "") {
   return null;
 }
 
-// --- Reply generator (fallback, alleen gebruikt bij function-fout) ---
+// --- Reply generator (fallback) ---
 function generateAssistantReply(text, type, tone) {
   const t = (tone || "").toLowerCase();
   const isEmail = type === "E-mail";
@@ -96,7 +96,7 @@ Hartelijke groet,
 Blueline Customer Care`;
   }
 
-  // SOCIAL MEDIA (DM-context) — direct helpen (geen “stuur DM”)
+  // SOCIAL (DM-context): direct helpen, geen "stuur DM"
   if (t === "formeel") {
     return `Dank voor uw bericht. We kijken dit graag voor u na. Kunt u het ordernummer en uw postcode delen? Dan controleren we direct de status en koppelen we terug met een update.`;
   }
@@ -148,9 +148,7 @@ function runSelfTests() {
 export default function BluelineChatpilot() {
   const TONES = ["Formeel", "Informeel"];
 
-  // ---- Load initial state from localStorage if available
   const loaded = typeof window !== "undefined" ? safeLoad() : null;
-
   const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
   const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
   const [messages, setMessages] = useState(
@@ -229,22 +227,27 @@ export default function BluelineChatpilot() {
     "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 active:bg-gray-100";
 
   return (
-  <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
-    {/* MAIN CONTENT */}
-    <div className="flex-1">
-      <div className="mx-auto max-w-[760px] px-3 pt-6">
-        {/* CARD / PANEL */}
-        <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[80vh]">
-          {/* ... header, messages, dock ... */}
-        </div>
-        {/* Disclaimer direct onder de kaart */}
-        <div className="mt-2 text-center text-[12px] text-gray-500">
-          Chatpilot kan fouten maken. Controleer belangrijke informatie.
-        </div>
-      </div>
-    </div>
-  </div>
-);
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
+      {/* MAIN CONTENT */}
+      <div className="flex-1">
+        <div className="mx-auto max-w-[760px] px-3 pt-6">
+          {/* CARD / PANEL met vaste hoogte zodat header/dock sticky werken */}
+          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[80vh]">
+            {/* Sticky header binnen de kaart */}
+            <header className="sticky top-0 z-10 border-b border-blue-600/20">
+              <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
+                <div className="px-5 py-4 flex items-center gap-3">
+                  <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+                    <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
+                      <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot</h1>
+                    <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
+                  </div>
+                </div>
+              </div>
             </header>
 
             {/* Scrollbare messages (alleen dit deel scrolt) */}
@@ -372,16 +375,13 @@ export default function BluelineChatpilot() {
             </div>
             {/* /Dock */}
           </div>
-          {/* /CARD */}
+
+          {/* Disclaimer direct onder de kaart, met kleine marge */}
+          <div className="mt-2 text-center text-[12px] text-gray-500">
+            Chatpilot kan fouten maken. Controleer belangrijke informatie.
+          </div>
         </div>
       </div>
-
-      {/* FOOTER — kleine regel onderaan zoals GPT */}
-      <footer className="px-3 pb-4">
-        <div className="mx-auto max-w-[760px] text-center text-[12px] text-gray-500">
-          Chatpilot kan fouten maken. Controleer belangrijke informatie.
-        </div>
-      </footer>
     </div>
   );
 }
