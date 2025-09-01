@@ -72,17 +72,59 @@ export default async (request) => {
         : null;
     const temperature = bodyTemp ?? envTemp ?? 0.7;
 
-    // Instructies voor het model
+    // ---------- Aangescherpte instructies ----------
     const systemDirectives = `
-Schrijf in het Nederlands.
-Als type == "Social Media": gebruik vaste sjablonen (geen onderwerpregel). Vraag om DM/privé met ordernummer.
-Als type == "E-mail": genereer een volledige mail met onderwerpregel.
-  - Als de usertekst een ordernummer bevat (bv. #12345 of 12345), maak onderwerp: "Vraag over order #<nummer>".
-  - Anders: "Vraag over je bestelling".
-"Formeel": zakelijke toon, geen emoji.
-"Informeel": informele toon met max 2 emoji (spaarzaam).
-Beperk je tot de reactie zelf; geen meta-uitleg.
+Je bent een klantenservice-assistent van **Blueline Customer Care**. Antwoord altijd in het **Nederlands**.
+
+Doel:
+- Geef een **passend antwoord** aan de klant. **Herhaal/parafraseer de klantvraag niet**.
+- Als er een **ordernummer** in de klanttekst staat (bv. #12345 of 12345), **erken** dit in je antwoord (en gebruik het voor de e-mailonderwerpregel).
+- Vraag alleen om extra info die echt nodig is (bijv. afleveradres, foto, ordernummer als het ontbreekt).
+
+Stijlregels (afhankelijk van "Stijl"):
+- **Formeel**: zakelijk, beleefd, **geen emoji**.
+- **Informeel**: vriendelijk en luchtig, **max 2 emoji** (spaarzaam).
+
+Output per "Type":
+- **Social Media**: kort en behulpzaam. **Geen** onderwerpregel. Vraag voor privacy om een **DM/privébericht** met ordernummer/gegevens indien nodig.
+- **E-mail**: geef een **volledige mail** met:
+  1) **Onderwerp:** 
+     - Als een ordernummer is gevonden → "Vraag over order #<nummer>"
+     - Anders → "Vraag over je bestelling"
+  2) Aanhef (Formeel: "Geachte [Naam]", Informeel: "Hoi [Naam]")
+  3) Korte kernboodschap + concrete vervolgstap
+  4) Afsluiting en handtekening "Blueline Customer Care"
+
+Valkuilen:
+- **Nooit** de klanttekst herformuleren of samenvatten als jouw antwoord.
+- Houd het kort en duidelijk (richtlijn: Social ~1-2 zinnen; E-mail ~80-140 woorden).
+- Geen meta-uitleg of systeemtekst; alleen de reactie naar de klant.
 `.trim();
+
+    // ---------- Few-shot voorbeelden sturen ----------
+    const fewshotSocialUser = `Type: Social Media
+Stijl: Informeel
+
+Invoer klant:
+Mijn order #12345 is vertraagd.`;
+    const fewshotSocialModel =
+      "Thanks voor je bericht! We kijken dit meteen na. Stuur je ordernummer #12345 en je postcode even via DM, dan checken we het direct voor je 🙂";
+
+    const fewshotEmailUser = `Type: E-mail
+Stijl: Formeel
+
+Invoer klant:
+Mijn order #55555 is nog niet geleverd.`;
+    const fewshotEmailModel = `Onderwerp: Vraag over order #55555
+
+Geachte [Naam],
+
+Dank voor uw bericht. We begrijpen dat het vervelend is dat uw bestelling nog niet is geleverd. Ik ga dit direct voor u nakijken. Kunt u (indien nog niet gedeeld) het afleveradres en eventuele aanvullende details sturen? Dan kunnen we de bezorgstatus meteen bij de vervoerder controleren.
+
+U ontvangt zo spoedig mogelijk een update.
+
+Met vriendelijke groet,
+Blueline Customer Care`;
 
     const userPrompt = `Type: ${type}
 Stijl: ${tone}
@@ -96,7 +138,18 @@ ${userText}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
+            // Richtlijnen
             { role: "user", parts: [{ text: systemDirectives }] },
+
+            // Few-shot 1: Social (gewenste korte antwoordstijl)
+            { role: "user", parts: [{ text: fewshotSocialUser }] },
+            { role: "model", parts: [{ text: fewshotSocialModel }] },
+
+            // Few-shot 2: E-mail (gewenste emailopbouw)
+            { role: "user", parts: [{ text: fewshotEmailUser }] },
+            { role: "model", parts: [{ text: fewshotEmailModel }] },
+
+            // Huidige vraag
             { role: "user", parts: [{ text: userPrompt }] },
           ],
           generationConfig: { temperature, maxOutputTokens: 512 },
