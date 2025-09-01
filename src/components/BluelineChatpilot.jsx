@@ -96,13 +96,14 @@ Hartelijke groet,
 Blueline Customer Care`;
   }
 
+  // SOCIAL MEDIA (DM-context) — géén "stuur DM" meer; direct helpen
   if (t === "formeel") {
-    return `Dank voor uw bericht. We helpen u graag verder. Zou u uw ordernummer in een privébericht kunnen sturen? Dan zoeken wij het direct voor u uit.`;
+    return `Dank voor uw bericht. We kijken dit graag voor u na. Kunt u het ordernummer en uw postcode delen? Dan controleren we direct de status en koppelen we terug met een update.`;
   }
   if (t === "informeel") {
-    return `Thanks voor je bericht! We duiken er meteen in. Stuur je ordernummer even via DM, dan fixen we het voor je 🙂`;
+    return `Thanks voor je bericht! We checken het gelijk. Stuur je ordernummer en je postcode even mee? Dan geven we je snel een update 🙂`;
   }
-  return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Zou je je ordernummer via DM kunnen delen? Dan helpen we je snel verder.`;
+  return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Als je je ordernummer en postcode deelt, sturen we je snel een update.`;
 }
 
 // --- Dev self-tests (lichtgewicht) ---
@@ -136,7 +137,7 @@ function runSelfTests() {
         console.assert(/Blueline Customer Care/.test(out), `Email missing signature for ${c.tone}`);
       } else {
         console.assert(!out.startsWith("Onderwerp:"), `Social should not start with 'Onderwerp:' for ${c.tone}`);
-        console.assert(/DM|privé/i.test(out), `Social should request DM/privé for ${c.tone}`);
+        // in DM-context vragen we nu om gegevens, dus geen DM/privé check meer
       }
     });
     console.log("[Blueline Chatpilot] Self-tests passed ✅");
@@ -225,7 +226,7 @@ export default function BluelineChatpilot() {
     }
   }
 
-  // Pill styles (met betere focus/hover)
+  // Pill styles
   const pillBase =
     "inline-flex items-center justify-center rounded-full h-8 px-4 text-sm transition-colors duration-200 select-none whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40";
   const pillActive = "bg-[#2563eb] text-white border border-[#2563eb] shadow-sm";
@@ -236,10 +237,10 @@ export default function BluelineChatpilot() {
     <div className="min-h-screen bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
       {/* Page container */}
       <div className="mx-auto max-w-[760px] px-3 py-6">
-        {/* CARD / PANEL (geen overflow-hidden → scroll blijft werken) */}
-        <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white min-h-[70vh]">
-          {/* Blauwe header bovenaan de kaart (zichtbaar) */}
-          <header className="border-b border-blue-600/20">
+        {/* CARD / PANEL: vaste viewport-hoogte zodat header/dock sticky kunnen werken */}
+        <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[80vh]">
+          {/* Sticky header binnen de kaart */}
+          <header className="sticky top-0 z-10 border-b border-blue-600/20">
             <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
               <div className="px-5 py-4 flex items-center gap-3">
                 <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
@@ -255,133 +256,130 @@ export default function BluelineChatpilot() {
             </div>
           </header>
 
-          {/* Chat area + dock */}
-          <div className="flex-1 flex flex-col">
-            {/* Messages: interne scroll wanneer nodig */}
-            <main className="flex-1 overflow-y-auto">
-              <div className="px-5 py-5">
-                <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                  {messages.map((m, idx) => {
-                    const isUser = m.role === "user";
-                    return (
-                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cx(
-                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
-                            isUser
-                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
-                              : "bg-gray-100 text-gray-900 border border-gray-200"
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap">{m.text}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
-                        <span className="inline-flex items-center gap-2">
-                          <span className="relative inline-block w-6 h-2 align-middle">
-                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
-                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
-                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
-                          </span>
-                          Typen…
-                        </span>
+          {/* Scrollbare messages */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="px-5 py-5">
+              <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
+                {messages.map((m, idx) => {
+                  const isUser = m.role === "user";
+                  return (
+                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cx(
+                          "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
+                          isUser
+                            ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                            : "bg-gray-100 text-gray-900 border border-gray-200"
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap">{m.text}</p>
                       </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })}
+
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="relative inline-block w-6 h-2 align-middle">
+                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
+                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
+                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
+                        </span>
+                        Typen…
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            </main>
+            </div>
+          </main>
 
-            {/* Dock: sticky binnen kaart */}
-            <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-              <div className="px-5 py-3">
-                {/* Input row */}
-                <form onSubmit={handleSend} aria-label="Bericht verzenden">
-                  <div className="relative">
-                    <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-                    <textarea
-                      id="message"
-                      ref={inputRef}
-                      rows={1}
-                      className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-[15px] border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden transition-shadow"
-                      placeholder="Typ een bericht…"
-                      value={input}
-                      onChange={(e) => {
-                        setInput(e.target.value);
-                        autoresizeTextarea(e.target);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend();
-                        }
-                      }}
-                      aria-label="Bericht invoeren"
-                      autoComplete="off"
-                    />
-                    {/* Send button: verticaal PERFECT gecentreerd */}
+          {/* Sticky dock onderaan binnen de kaart */}
+          <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+            <div className="px-5 py-3">
+              {/* Input row */}
+              <form onSubmit={handleSend} aria-label="Bericht verzenden">
+                <div className="relative">
+                  <label htmlFor="message" className="sr-only">Typ een bericht…</label>
+                  <textarea
+                    id="message"
+                    ref={inputRef}
+                    rows={1}
+                    className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-[15px] border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden transition-shadow"
+                    placeholder="Typ een bericht…"
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      autoresizeTextarea(e.target);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    aria-label="Bericht invoeren"
+                    autoComplete="off"
+                  />
+                  {/* Send button PERFECT gecentreerd */}
+                  <button
+                    type="submit"
+                    aria-label="Verzenden"
+                    disabled={isTyping || !input.trim()}
+                    className={cx(
+                      "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+                      (!input.trim() || isTyping)
+                        ? "opacity-60 cursor-not-allowed"
+                        : "hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+                    )}
+                    style={{ backgroundColor: "#2563eb" }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+                      <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+
+              {/* Pills onder input */}
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                {/* Kanaal */}
+                <div className="flex items-center flex-wrap gap-2">
+                  <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
+                  {["Social Media", "E-mail"].map((t) => (
                     <button
-                      type="submit"
-                      aria-label="Verzenden"
-                      disabled={isTyping || !input.trim()}
-                      className={cx(
-                        "absolute right-2 inset-y-0 my-auto w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-                        (!input.trim() || isTyping)
-                          ? "opacity-60 cursor-not-allowed"
-                          : "hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-                      )}
-                      style={{ backgroundColor: "#2563eb" }}
+                      key={t}
+                      type="button"
+                      onClick={() => setMessageType(t)}
+                      className={cx(pillBase, messageType === t ? pillActive : pillInactive)}
+                      aria-pressed={messageType === t}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
-                        <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
-                      </svg>
+                      {t}
                     </button>
-                  </div>
-                </form>
+                  ))}
+                </div>
 
-                {/* Pills onder input */}
-                <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  {/* Kanaal */}
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
-                    {["Social Media", "E-mail"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setMessageType(t)}
-                        className={cx(pillBase, messageType === t ? pillActive : pillInactive)}
-                        aria-pressed={messageType === t}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Stijl */}
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
-                    {["Formeel", "Informeel"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setTone(t)}
-                        className={cx(pillBase, tone === t ? pillActive : pillInactive)}
-                        aria-pressed={tone === t}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+                {/* Stijl */}
+                <div className="flex items-center flex-wrap gap-2">
+                  <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
+                  {["Formeel", "Informeel"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTone(t)}
+                      className={cx(pillBase, tone === t ? pillActive : pillInactive)}
+                      aria-pressed={tone === t}
+                    >
+                      {t}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
-            {/* /Dock */}
           </div>
+          {/* /Dock */}
         </div>
         {/* /CARD */}
       </div>
