@@ -1,387 +1,194 @@
-import React, { useEffect, useRef, useState } from "react";
+// netlify/functions/generate-gemini.js
+const API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
-// Utility to merge class names
-function cx(...classes) {
-  return classes.filter(Boolean).join(" ");
+function withTimeout(promise, ms = 12000) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms)),
+  ]);
 }
 
-// Auto-resize helper for textarea
-function autoresizeTextarea(el) {
-  if (!el) return;
-  el.style.height = "0px";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+// Helper om temperature veilig te lezen en te begrenzen
+function clampTemp(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  // Begrens tussen 0.1 en 1.0
+  return Math.min(1.0, Math.max(0.1, n));
 }
 
-// Local storage helpers
-const STORAGE_KEY = "blueline-chatpilot:v1";
-function safeLoad() {
+export default async (request) => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data?.messages)) return null;
-    return {
-      messages: data.messages,
-      messageType: typeof data.messageType === "string" ? data.messageType : "Social Media",
-      tone: typeof data.tone === "string" ? data.tone : "Formeel",
-    };
-  } catch {
-    return null;
-  }
-}
-function safeSave(state) {
-  try {
-    const payload = {
-      messages: (state.messages || []).slice(-200),
-      messageType: state.messageType,
-      tone: state.tone,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch {}
-}
+    // Ping: GET /.netlify/functions/generate-gemini?ping=1
+    const url = new URL(request.url);
+    if (url.searchParams.get("ping")) {
+      return new Response(JSON.stringify({ ok: true, pong: true }), {
+        headers: JSON_HEADERS,
+      });
+    }
 
-// Extract a likely order number (e.g., 12345 or #12345) from user text
-function extractOrderNumber(text = "") {
-  if (!text) return null;
-  const patterns = [
-    /order\s*#?\s*(\d{4,})/i,
-    /ordernummer\s*#?\s*(\d{4,})/i,
-    /bestel(?:ling)?(?:nummer)?\s*#?\s*(\d{4,})/i,
-    /ticket\s*#?\s*(\d{4,})/i,
-    /#(\d{4,})\b/,
-  ];
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m && m[1]) return m[1];
-  }
-  return null;
-}
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Use POST" }), {
+        status: 405,
+        headers: JSON_HEADERS,
+      });
+    }
 
-// --- Reply generator (fallback) ---
-function generateAssistantReply(text, type, tone) {
-  const t = (tone || "").toLowerCase();
-  const isEmail = type === "E-mail";
-  const orderNo = extractOrderNumber(text);
+    // Body lezen (en robuust omgaan met lege/ongeldige JSON)
+    let payload = {};
+    try {
+      payload = await request.json();
+    } catch {
+      payload = {};
+    }
 
-  if (isEmail) {
-    const subject = orderNo ? `Vraag over order #${orderNo}` : `Vraag over je bestelling`;
+    const { userText, type, tone } = payload || {};
+    if (!userText || !type || !tone) {
+      return new Response(
+        JSON.stringify({ error: "Missing fields (userText, type, tone)" }),
+        { status: 400, headers: JSON_HEADERS }
+      );
+    }
 
-    if (t === "formeel") {
-      return `Onderwerp: ${subject}
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), {
+        status: 500,
+        headers: JSON_HEADERS,
+      });
+    }
+
+    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
+    // Temperature: alleen ENV of default 0.4 (client stuurt geen temperature meer)
+const envTemp =
+  typeof process !== "undefined" &&
+  process.env &&
+  process.env.GEMINI_TEMPERATURE
+    ? clampTemp(process.env.GEMINI_TEMPERATURE)
+    : null;
+
+const temperature = envTemp ?? 0.4;
+
+    // ---------- Aangescherpte instructies ----------
+    const systemDirectives = `
+Je bent een klantenservice-assistent van **Blueline Customer Care**. Antwoord altijd in het **Nederlands**.
+
+Doel:
+- Geef een **passend antwoord** aan de klant. **Herhaal/parafraseer de klantvraag niet**.
+- Als er een **ordernummer** in de klanttekst staat (bv. #12345 of 12345), **erken** dit in je antwoord (en gebruik het voor de e-mailonderwerpregel).
+- Vraag alleen om extra info die echt nodig is (bijv. afleveradres, foto, ordernummer als het ontbreekt).
+
+Stijlregels (afhankelijk van "Stijl"):
+- **Formeel**: zakelijk, beleefd, **geen emoji**.
+- **Informeel**: vriendelijk en luchtig, **max 2 emoji** (spaarzaam).
+
+Output per "Type":
+- **Social Media**: kort en behulpzaam. **Geen** onderwerpregel. Vraag voor privacy om een **DM/privébericht** met ordernummer/gegevens indien nodig.
+- **E-mail**: geef een **volledige mail** met:
+  1) **Onderwerp:** 
+     - Als een ordernummer is gevonden → "Vraag over order #<nummer>"
+     - Anders → "Vraag over je bestelling"
+  2) Aanhef (Formeel: "Geachte [Naam]", Informeel: "Hoi [Naam]")
+  3) Korte kernboodschap + concrete vervolgstap
+  4) Afsluiting en handtekening "Blueline Customer Care"
+
+Valkuilen:
+- **Nooit** de klanttekst herformuleren of samenvatten als jouw antwoord.
+- Houd het kort en duidelijk (richtlijn: Social ~1-2 zinnen; E-mail ~80-140 woorden).
+- Geen meta-uitleg of systeemtekst; alleen de reactie naar de klant.
+`.trim();
+
+    // ---------- Few-shot voorbeelden sturen ----------
+    const fewshotSocialUser = `Type: Social Media
+Stijl: Informeel
+
+Invoer klant:
+Mijn order #12345 is vertraagd.`;
+    const fewshotSocialModel =
+      "Thanks voor je bericht! We kijken dit meteen na. Stuur je ordernummer #12345 en je postcode even via DM, dan checken we het direct voor je 🙂";
+
+    const fewshotEmailUser = `Type: E-mail
+Stijl: Formeel
+
+Invoer klant:
+Mijn order #55555 is nog niet geleverd.`;
+    const fewshotEmailModel = `Onderwerp: Vraag over order #55555
 
 Geachte [Naam],
 
-Hartelijk dank voor uw bericht. Wij nemen dit direct in behandeling en komen binnen 1 werkdag bij u terug. Zou u (indien nog niet gedeeld) uw ordernummer en eventuele foto's/bijlagen kunnen toevoegen? Dan helpen wij u zo snel mogelijk verder.
+Dank voor uw bericht. We begrijpen dat het vervelend is dat uw bestelling nog niet is geleverd. Ik ga dit direct voor u nakijken. Kunt u (indien nog niet gedeeld) het afleveradres en eventuele aanvullende details sturen? Dan kunnen we de bezorgstatus meteen bij de vervoerder controleren.
+
+U ontvangt zo spoedig mogelijk een update.
 
 Met vriendelijke groet,
 Blueline Customer Care`;
-    }
-    if (t === "informeel") {
-      return `Onderwerp: ${subject} 🙌
 
-Hoi [Naam],
+    const userPrompt = `Type: ${type}
+Stijl: ${tone}
 
-Thanks voor je bericht! We gaan er meteen mee aan de slag en komen vandaag nog bij je terug. Kun je (als je dat nog niet deed) je ordernummer en eventueel een foto toevoegen? Dan fixen we het sneller.
+Invoer klant:
+${userText}`;
 
-Groet,
-Blueline Customer Care`;
-    }
-    return `Onderwerp: ${subject}
-
-Hi [Naam],
-
-Bedankt voor je bericht. We pakken dit direct op en laten je binnen 1 werkdag iets weten. Zou je je ordernummer en eventuele bijlagen willen delen? Dan helpen we je snel verder.
-
-Hartelijke groet,
-Blueline Customer Care`;
-  }
-
-  // Social Media — fixed templates; tone controls formality and emojis
-  if (t === "formeel") {
-    return `Dank voor uw bericht. We helpen u graag verder. Zou u uw ordernummer in een privébericht kunnen sturen? Dan zoeken wij het direct voor u uit.`;
-  }
-  if (t === "informeel") {
-    return `Thanks voor je bericht! We duiken er meteen in. Stuur je ordernummer even via DM, dan fixen we het voor je 🙂`;
-  }
-  return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Zou je je ordernummer via DM kunnen delen? Dan helpen we je snel verder.`;
-}
-
-// --- Lightweight dev self-tests ---
-const IS_DEV =
-  (typeof process !== "undefined" &&
-    process &&
-    process.env &&
-    process.env.NODE_ENV !== "production") ||
-  (typeof __DEV__ !== "undefined" && __DEV__ === true);
-
-function runSelfTests() {
-  try {
-    const baseCases = [
-      { type: "E-mail", tone: "Formeel", text: "Mijn order #12345 is niet geleverd" },
-      { type: "E-mail", tone: "Informeel", text: "Waar blijft m'n bestelling 98765?" },
-      { type: "E-mail", tone: "Formeel", text: "Vraag over retourneren zonder nummer" },
-      { type: "Social Media", tone: "Formeel", text: "Order 4567 niet ontvangen" },
-      { type: "Social Media", tone: "Informeel", text: "Bestelling kapot aangekomen #33333" },
-    ];
-
-    baseCases.forEach((c) => {
-      const out = generateAssistantReply(c.text, c.type, c.tone);
-      console.assert(typeof out === "string", `Output is not a string for ${c.type} / ${c.tone}`);
-      console.assert(out.length > 20, `Output too short for ${c.type} / ${c.tone}`);
-      if (c.type === "E-mail") {
-        console.assert(out.startsWith("Onderwerp:"), `Email missing subject line for tone ${c.tone}`);
-        if (/\d{4,}/.test(c.text)) {
-          const num = extractOrderNumber(c.text);
-          console.assert(new RegExp(`#${num}`).test(out), `Email subject missing extracted order #${num}`);
-        }
-        console.assert(/Blueline Customer Care/.test(out), `Email missing signature for tone ${c.tone}`);
-      } else {
-        console.assert(!out.startsWith("Onderwerp:"), `Social message should not start with 'Onderwerp:' for tone ${c.tone}`);
-        console.assert(/DM|privé/i.test(out), `Social message should request DM/privé for tone ${c.tone}`);
-      }
-    });
-
-    // eslint-disable-next-line no-console
-    console.log("[Blueline Chatpilot] Self-tests passed ✅");
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[Blueline Chatpilot] Self-tests failed ❌", err);
-  }
-}
-
-export default function BluelineChatpilot() {
-  const TONES = ["Formeel", "Informeel"];
-
-  // ---- Load initial state from localStorage if available
-  const loaded = typeof window !== "undefined" ? safeLoad() : null;
-
-  const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
-  const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
-  const [messages, setMessages] = useState(
-    loaded?.messages ?? [
-      {
-        role: "assistant",
-        text: "Welkom bij Blueline Chatpilot 👋 Hoe kan ik je vandaag helpen?",
-        meta: { type: "System", tone: "-" },
-      },
-    ]
-  );
-  const [input, setInput] = useState(""); // controlled input (zorgt dat de knop correct enabled/disabled is)
-  const [isTyping, setIsTyping] = useState(false);
-
-  const listRef = useRef(null);
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    if (IS_DEV) runSelfTests();
-  }, []);
-
-  // Auto-scroll to the latest message
-  useEffect(() => {
-    listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
-
-  // Initialize textarea height on mount
-  useEffect(() => {
-    if (inputRef.current) autoresizeTextarea(inputRef.current);
-  }, []);
-
-  // ---- Persist to localStorage on changes
-  useEffect(() => {
-    safeSave({ messages, messageType, tone });
-  }, [messages, messageType, tone]);
-
-  async function handleSend(e) {
-    e?.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed) return;
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: trimmed, meta: { type: messageType, tone } },
-    ]);
-    setInput("");
-    if (inputRef.current) autoresizeTextarea(inputRef.current); // reset hoogte na send
-
-    setIsTyping(true);
-    try {
-      const r = await fetch("/.netlify/functions/generate-gemini", {
+    const resp = await withTimeout(
+      fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
-      });
-      const data = await r.json();
-      const reply = r.ok && data?.text
-        ? data.text
-        : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone } },
-      ]);
-    } catch (err) {
-      const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone } },
-      ]);
-    } finally {
-      setIsTyping(false);
+        body: JSON.stringify({
+          contents: [
+            // Richtlijnen
+            { role: "user", parts: [{ text: systemDirectives }] },
+
+            // Few-shot 1: Social (gewenste korte antwoordstijl)
+            { role: "user", parts: [{ text: fewshotSocialUser }] },
+            { role: "model", parts: [{ text: fewshotSocialModel }] },
+
+            // Few-shot 2: E-mail (gewenste emailopbouw)
+            { role: "user", parts: [{ text: fewshotEmailUser }] },
+            { role: "model", parts: [{ text: fewshotEmailModel }] },
+
+            // Huidige vraag
+            { role: "user", parts: [{ text: userPrompt }] },
+          ],
+          generationConfig: { temperature, maxOutputTokens: 512 },
+        }),
+      }),
+      timeoutMs
+    );
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      return new Response(
+        JSON.stringify({
+          error: "Gemini error",
+          hint: "Controleer je invoer of probeer het zo nog eens.",
+          upstreamStatus: resp.status,
+          details: errText,
+        }),
+        { status: resp.status, headers: JSON_HEADERS }
+      );
     }
+
+    const data = await resp.json().catch(() => ({}));
+    const text =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Er is geen tekst gegenereerd.";
+
+    return new Response(JSON.stringify({ text }), { headers: JSON_HEADERS });
+  } catch (e) {
+    if (e && e.message === "Timeout") {
+      return new Response(
+        JSON.stringify({
+          error: "Timeout",
+          hint: "De AI deed er te lang over. Probeer het zo nog eens of versmal je vraag.",
+        }),
+        { status: 408, headers: JSON_HEADERS }
+      );
+    }
+    return new Response(
+      JSON.stringify({ error: e?.message || "Unknown error" }),
+      { status: 500, headers: JSON_HEADERS }
+    );
   }
-
-  const pillBase =
-    "inline-flex items-center justify-center rounded-full h-8 px-4 text-sm transition-colors select-none whitespace-nowrap";
-  const pillActive = "bg-[#2563eb] text-white border border-[#2563eb]";
-  const pillInactive =
-    "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700";
-
-  return (
-    <div className="min-h-screen bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100 flex flex-col">
-      {/* Blue gradient header "skin" */}
-      <header className="sticky top-0 z-20 border-b border-blue-600/20">
-        <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
-          <div className="mx-auto max-w-5xl px-4 py-4 flex items-center gap-3">
-            {/* Logo: wit rondje met blauw icoon */}
-            <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
-              <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
-                <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot</h1>
-              <p className="text-sm text-white/80 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Chat Window */}
-      <main className="flex-1">
-        <div className="mx-auto max-w-5xl px-4">
-          <section className="mt-6 mb-40 rounded-xl border border-transparent dark:border-gray-800 bg-white">
-            <div className="p-4 sm:p-6">
-              <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                {messages.map((m, idx) => {
-                  const isUser = m.role === "user";
-                  return (
-                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-                      <div
-                        className={cx(
-                          // Bubble styles per role (ref. mockup)
-                          "max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm leading-relaxed break-words",
-                          isUser
-                            ? "bg-white text-[#2563eb] border border-gray-300" // user: white with blue text + border
-                            : "bg-gray-100 text-gray-900 border border-gray-200" // assistant: light gray
-                        )}
-                      >
-                        <p className="whitespace-pre-wrap">{m.text}</p>
-                        {/* Meta-tekst onder bubbel is verwijderd op verzoek */}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {isTyping && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm bg-gray-100 text-gray-900 border border-gray-200">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="relative inline-block w-6 h-2 align-middle">
-                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
-                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
-                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
-                        </span>
-                        Typen…
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      {/* Dock: input boven, pills eronder */}
-      <div className="fixed bottom-0 inset-x-0 z-30 border-t border-gray-200 bg-white" style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
-        <div className="mx-auto max-w-5xl px-4 py-4">
-          {/* Input row */}
-          <form onSubmit={handleSend} aria-label="Bericht verzenden">
-            <div className="relative">
-              <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-              <textarea
-                id="message"
-                ref={inputRef}
-                rows={1}
-                className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden"
-                placeholder="Typ een bericht…"
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  autoresizeTextarea(e.target);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                aria-label="Bericht invoeren"
-                autoComplete="off"
-              />
-              {/* Send button */}
-              <button
-                type="submit"
-                aria-label="Verzenden"
-                disabled={isTyping || !input.trim()}
-                className={cx(
-                  "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                  (!input.trim() || isTyping) ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
-                )}
-                style={{ backgroundColor: "#2563eb" }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
-                  <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
-                </svg>
-              </button>
-            </div>
-          </form>
-
-          {/* Pills UNDER the input */}
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            {/* Kanaal (was: Berichttype) */}
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
-              {["Social Media", "E-mail"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setMessageType(t)}
-                  className={cx(pillBase, messageType === t ? pillActive : pillInactive)}
-                  aria-pressed={messageType === t}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {/* Stijl (Formeel / Informeel) */}
-            <div className="flex items-center flex-wrap gap-2">
-              <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
-              {["Formeel", "Informeel"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTone(t)}
-                  className={cx(pillBase, tone === t ? pillActive : pillInactive)}
-                  aria-pressed={tone === t}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+};
