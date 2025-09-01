@@ -231,8 +231,8 @@ export default function BluelineChatpilot() {
       {/* MAIN CONTENT */}
       <div className="flex-1">
         <div className="mx-auto max-w-[760px] px-3 pt-6">
-          {/* CARD / PANEL met vaste hoogte zodat header/dock sticky werken */}
-          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[80vh]">
+          {/* CARD / PANEL met grotere hoogte om witruimte te minimaliseren */}
+          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[86vh]">
             {/* Sticky header binnen de kaart */}
             <header className="sticky top-0 z-10 border-b border-blue-600/20">
               <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
@@ -376,8 +376,8 @@ export default function BluelineChatpilot() {
             {/* /Dock */}
           </div>
 
-          {/* Disclaimer direct onder de kaart, met kleine marge */}
-          <div className="mt-2 text-center text-[12px] text-gray-500">
+          {/* Disclaimer direct onder de kaart, met mini-marge */}
+          <div className="mt-1 text-center text-[12px] text-gray-500">
             Chatpilot kan fouten maken. Controleer belangrijke informatie.
           </div>
         </div>
