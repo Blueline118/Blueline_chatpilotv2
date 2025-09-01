@@ -298,19 +298,19 @@ function CopyButton({ id, text, onCopied, isCopied }) {
         if (ok) onCopied(id);
       }}
       className={cx(
-        "inline-flex items-center gap-1.5 text-[11px] rounded-full px-2 py-1 border transition-colors",
-        isCopied
-          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-          : "bg-white/80 border-white/60 text-gray-700 hover:bg-white"
+        "inline-flex items-center gap-1 text-[11px] transition-colors select-none",
+        isCopied ? "text-emerald-600" : "text-gray-500 hover:text-gray-700"
       )}
       aria-label={isCopied ? "Gekopieerd" : "Kopieer bericht"}
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
       {isCopied ? (
+        // check icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z" />
         </svg>
       ) : (
+        // copy icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z" />
         </svg>
