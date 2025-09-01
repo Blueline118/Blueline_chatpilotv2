@@ -5,6 +5,13 @@ function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
+// Auto-resize helper for textarea
+function autoresizeTextarea(el) {
+  if (!el) return;
+  el.style.height = "0px";
+  el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
+}
+
 // Extract a likely order number (e.g., 12345 or #12345) from user text
 function extractOrderNumber(text = "") {
   if (!text) return null;
@@ -125,7 +132,7 @@ export default function BluelineChatpilot() {
 
   const [messageType, setMessageType] = useState("Social Media");
   const [tone, setTone] = useState(TONES[0]); // default to Formeel
-  const [temperature, setTemperature] = useState(0.7); // NEW: creativiteit slider
+  const [temperature, setTemperature] = useState(0.7); // creativiteit slider
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
     {
@@ -147,6 +154,11 @@ export default function BluelineChatpilot() {
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  // Initialize textarea height on mount
+  useEffect(() => {
+    if (inputRef.current) autoresizeTextarea(inputRef.current);
+  }, []);
 
   async function handleSend(e) {
     e?.preventDefault();
@@ -320,19 +332,28 @@ export default function BluelineChatpilot() {
             </span>
           </div>
 
-          {/* Bottom row: input + send button */}
+          {/* Bottom row: textarea + send button */}
           <form onSubmit={handleSend} className="mt-3" aria-label="Bericht verzenden">
             <div className="relative">
               <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-              <input
+              <textarea
                 id="message"
                 ref={inputRef}
-                type="text"
-                className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500"
+                rows={1}
+                className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3"
                 placeholder="Typ een bericht…"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  autoresizeTextarea(e.target);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault(); // geen newline
+                    handleSend();       // verzenden
+                  }
+                  // Shift+Enter: newline toegestaan
+                }}
                 aria-label="Bericht invoeren"
                 autoComplete="off"
               />
