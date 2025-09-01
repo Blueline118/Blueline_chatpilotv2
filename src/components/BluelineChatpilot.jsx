@@ -12,7 +12,7 @@ function autoresizeTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
 }
 
-// Local storage helpers (we bewaren GEEN messages meer)
+// Local storage helpers (we bewaren GEEN messages meer, alleen voorkeuren)
 const STORAGE_KEY = "blueline-chatpilot:v1";
 function safeLoad() {
   try {
@@ -93,7 +93,7 @@ function saveGreetHist(hist) {
 function pickIndexAvoidingRecent(len, recent = []) {
   const all = Array.from({ length: len }, (_, i) => i);
   const candidates = all.filter((i) => !recent.includes(i));
-  const pool = candidates.length > 0 ? candidates : all; // fallback als bijna alle items recent zijn
+  const pool = candidates.length > 0 ? candidates : all; // fallback als (bijna) alle items recent
   const n = Math.floor(Math.random() * pool.length);
   return pool[n];
 }
@@ -230,6 +230,63 @@ function runSelfTests() {
   }
 }
 
+// --- Copy helpers ---
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  // Fallback
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function CopyButton({ id, text, onCopied, isCopied }) {
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const ok = await copyToClipboard(text || "");
+        if (ok) onCopied(id);
+      }}
+      className={cx(
+        "inline-flex items-center gap-1.5 text-[11px] rounded-full px-2 py-1 border transition-colors",
+        isCopied
+          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+          : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+      )}
+      aria-label={isCopied ? "Gekopieerd" : "Kopieer bericht"}
+      title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
+    >
+      {isCopied ? (
+        // check icon
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+          <path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z" />
+        </svg>
+      ) : (
+        // copy icon
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
+          <path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z" />
+        </svg>
+      )}
+      <span>{isCopied ? "Gekopieerd" : "Kopieer"}</span>
+    </button>
+  );
+}
+
 export default function BluelineChatpilot() {
   const TONES = ["Formeel", "Informeel"];
 
@@ -242,8 +299,9 @@ export default function BluelineChatpilot() {
     { role: "assistant", text: getGreeting(), meta: { type: "System", tone: "-" } },
   ]);
 
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  // Copy state
+  const [copiedId, setCopiedId] = useState(null);
+  const copiedTimer = useRef(null);
 
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -254,7 +312,7 @@ export default function BluelineChatpilot() {
 
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages]);
 
   useEffect(() => {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
@@ -264,6 +322,12 @@ export default function BluelineChatpilot() {
   useEffect(() => {
     safeSave({ messageType, tone });
   }, [messageType, tone]);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    };
+  }, []);
 
   async function handleSend(e) {
     e?.preventDefault();
@@ -277,7 +341,6 @@ export default function BluelineChatpilot() {
     setInput("");
     if (inputRef.current) autoresizeTextarea(inputRef.current);
 
-    setIsTyping(true);
     try {
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
@@ -298,8 +361,6 @@ export default function BluelineChatpilot() {
         ...prev,
         { role: "assistant", text: reply, meta: { type: messageType, tone } },
       ]);
-    } finally {
-      setIsTyping(false);
     }
   }
 
@@ -308,6 +369,12 @@ export default function BluelineChatpilot() {
   const pillActive = "bg-[#2563eb] text-white border border-[#2563eb] shadow-sm";
   const pillInactive =
     "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 active:bg-gray-100";
+
+  function handleCopied(id) {
+    setCopiedId(id);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopiedId(null), 1400);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
@@ -339,36 +406,35 @@ export default function BluelineChatpilot() {
                 <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                   {messages.map((m, idx) => {
                     const isUser = m.role === "user";
+                    const bubble = (
+                      <div
+                        className={cx(
+                          "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
+                          isUser
+                            ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                            : "bg-gray-100 text-gray-900 border border-gray-200"
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap">{m.text}</p>
+                      </div>
+                    );
+                    const toolbar = (
+                      <div className={cx("mt-1 flex", isUser ? "justify-end" : "justify-start")}>
+                        <CopyButton
+                          id={`msg-${idx}`}
+                          text={m.text}
+                          onCopied={handleCopied}
+                          isCopied={copiedId === `msg-${idx}`}
+                        />
+                      </div>
+                    );
                     return (
-                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cx(
-                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
-                            isUser
-                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
-                              : "bg-gray-100 text-gray-900 border border-gray-200"
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap">{m.text}</p>
-                        </div>
+                      <div key={idx} className={cx("flex flex-col", isUser ? "items-end" : "items-start")}>
+                        {bubble}
+                        {toolbar}
                       </div>
                     );
                   })}
-
-                  {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
-                        <span className="inline-flex items-center gap-2">
-                          <span className="relative inline-block w-6 h-2 align-middle">
-                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
-                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
-                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
-                          </span>
-                          Typen…
-                        </span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </main>
@@ -404,10 +470,10 @@ export default function BluelineChatpilot() {
                     <button
                       type="submit"
                       aria-label="Verzenden"
-                      disabled={isTyping || !input.trim()}
+                      disabled={!input.trim()}
                       className={cx(
                         "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-                        (!input.trim() || isTyping)
+                        (!input.trim())
                           ? "opacity-60 cursor-not-allowed"
                           : "hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
                       )}
