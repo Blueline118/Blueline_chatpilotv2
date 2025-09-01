@@ -40,6 +40,60 @@ function safeSave(state) {
   } catch {}
 }
 
+// --- Fase 2: begroetingen ---
+const gimmicks = [
+  "Tijd om samen de wachtrijen korter te maken.",
+  "Hoeveel tickets staan er nog open bij jou?",
+  "Klaar om vandaag je klanttevredenheid een boost te geven?",
+  "Welke klant maken we vandaag blij?",
+  "Zin om je eerste-responstijd te verbeteren?",
+  "Vandaag al een klant verrast met extra service?",
+  "Laten we de NPS-score omhoog krijgen.",
+  "Klaar om je SLA’s te rocken vandaag?",
+  "Tijd voor koffie én een goede klantcase.",
+  "Klaar voor een dag vol empathie en oplossingen?",
+];
+
+const energizers = [
+  "✨ Vandaag gewoon doen waar je zin in hebt (en klanten blij maken onderweg).",
+  "☕ Eerst koffie, dan magie voor je klanten.",
+  "😄 Eén glimlach van jou = twee terug van je klant.",
+  "🌞 Een beetje zon meegeven in elk bericht.",
+  "🌟 Blije klanten beginnen bij jouw positieve vibe.",
+  "💌 Jij bent het visitekaartje van de beleving.",
+  "🚀 Zelfs kleine dingen voelen groot als je ze met plezier doet.",
+  "🎉 Waarom gewoon goed zijn, als je ook leuk verrassend kan zijn?",
+  "🌈 Vergeet niet: service mag ook gewoon fun zijn.",
+  "💪 Service met kracht, energie en plezier!",
+];
+
+function getDaypartPrefix() {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 12) return "Goedemorgen";
+  if (h >= 12 && h < 18) return "Goedemiddag";
+  if (h >= 18 && h < 24) return "Goedenavond";
+  return "Hallo"; // nacht fallback
+}
+
+function getGreeting() {
+  // Teller ophalen & ophogen (persistente rotatie 1–2 gimmick, 3 energizer)
+  let count = Number(localStorage.getItem("greetingCount") || "0");
+  count += 1;
+  localStorage.setItem("greetingCount", String(count));
+
+  if (count % 3 === 0) {
+    // Energizer (zonder dagdeelprefix)
+    const idx = Math.floor(Math.random() * energizers.length);
+    return energizers[idx];
+    // NB: geen prefix!
+  } else {
+    // Gimmick (mét dagdeelprefix)
+    const prefix = getDaypartPrefix();
+    const idx = Math.floor(Math.random() * gimmicks.length);
+    return `${prefix}! ${gimmicks[idx]}`;
+  }
+}
+
 // Extract a likely order number (e.g., 12345 or #12345) from user text
 function extractOrderNumber(text = "") {
   if (!text) return null;
@@ -151,15 +205,20 @@ export default function BluelineChatpilot() {
   const loaded = typeof window !== "undefined" ? safeLoad() : null;
   const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
   const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
+
+  // Initial message: dynamische begroeting (alleen als er nog geen history is)
   const [messages, setMessages] = useState(
-    loaded?.messages ?? [
-      {
-        role: "assistant",
-        text: "Welkom bij Blueline Chatpilot 👋 Hoe kan ik je vandaag helpen?",
-        meta: { type: "System", tone: "-" },
-      },
-    ]
+    loaded?.messages && loaded.messages.length > 0
+      ? loaded.messages
+      : [
+          {
+            role: "assistant",
+            text: getGreeting(),
+            meta: { type: "System", tone: "-" },
+          },
+        ]
   );
+
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
@@ -231,7 +290,7 @@ export default function BluelineChatpilot() {
       {/* MAIN CONTENT */}
       <div className="flex-1">
         <div className="mx-auto max-w-[760px] px-3 pt-6">
-          {/* CARD / PANEL met grotere hoogte om witruimte te minimaliseren */}
+          {/* CARD / PANEL met GPT-achtige bodemruimte */}
           <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-1rem)]">
             {/* Sticky header binnen de kaart */}
             <header className="sticky top-0 z-10 border-b border-blue-600/20">
@@ -250,7 +309,7 @@ export default function BluelineChatpilot() {
               </div>
             </header>
 
-            {/* Scrollbare messages (alleen dit deel scrolt) */}
+            {/* Scrollbare messages (scrollbar verborgen) */}
             <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               <div className="px-5 py-5">
                 <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
@@ -376,8 +435,8 @@ export default function BluelineChatpilot() {
             {/* /Dock */}
           </div>
 
-          {/* Disclaimer direct onder de kaart, met mini-marge */}
-          <div className="mt-1 text-center text-[12px] text-gray-500">
+          {/* Disclaimer direct onder de kaart */}
+          <div className="mt-2 text-center text-[12px] text-gray-500">
             Chatpilot kan fouten maken. Controleer belangrijke informatie.
           </div>
         </div>
