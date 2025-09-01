@@ -128,22 +128,19 @@ function runSelfTests() {
       console.assert(typeof out === "string", `Output is not a string for ${c.type} / ${c.tone}`);
       console.assert(out.length > 20, `Output too short for ${c.type} / ${c.tone}`);
       if (c.type === "E-mail") {
-        console.assert(out.startsWith("Onderwerp:"), `Email missing subject line for tone ${c.tone}`);
+        console.assert(out.startsWith("Onderwerp:"), `Email missing subject line for ${c.tone}`);
         if (/\d{4,}/.test(c.text)) {
           const num = extractOrderNumber(c.text);
-          console.assert(new RegExp(`#${num}`).test(out), `Email subject missing extracted order #${num}`);
+          console.assert(new RegExp(`#${num}`).test(out), `Email subject missing #${num}`);
         }
-        console.assert(/Blueline Customer Care/.test(out), `Email missing signature for tone ${c.tone}`);
+        console.assert(/Blueline Customer Care/.test(out), `Email missing signature for ${c.tone}`);
       } else {
-        console.assert(!out.startsWith("Onderwerp:"), `Social message should not start with 'Onderwerp:' for tone ${c.tone}`);
-        console.assert(/DM|privé/i.test(out), `Social message should request DM/privé for tone ${c.tone}`);
+        console.assert(!out.startsWith("Onderwerp:"), `Social should not start with 'Onderwerp:' for ${c.tone}`);
+        console.assert(/DM|privé/i.test(out), `Social should request DM/privé for ${c.tone}`);
       }
     });
-
-    // eslint-disable-next-line no-console
     console.log("[Blueline Chatpilot] Self-tests passed ✅");
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error("[Blueline Chatpilot] Self-tests failed ❌", err);
   }
 }
@@ -217,7 +214,7 @@ export default function BluelineChatpilot() {
         ...prev,
         { role: "assistant", text: reply, meta: { type: messageType, tone } },
       ]);
-    } catch (err) {
+    } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
       setMessages((prev) => [
         ...prev,
@@ -236,16 +233,15 @@ export default function BluelineChatpilot() {
     "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 active:bg-gray-100";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
       {/* Page container */}
-      <div className="mx-auto max-w-[720px] px-3 py-6">
-        {/* CARD / PANEL */}
-        <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white overflow-hidden min-h-[70vh] max-h-[88vh]">
-          {/* Blue gradient header "skin" (binnen de kaart) */}
+      <div className="mx-auto max-w-[760px] px-3 py-6">
+        {/* CARD / PANEL (geen overflow-hidden → scroll blijft werken) */}
+        <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white min-h-[70vh]">
+          {/* Blauwe header bovenaan de kaart (zichtbaar) */}
           <header className="border-b border-blue-600/20">
             <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
               <div className="px-5 py-4 flex items-center gap-3">
-                {/* Logo: wit rondje met blauw icoon */}
                 <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
                   <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
                     <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
@@ -259,9 +255,9 @@ export default function BluelineChatpilot() {
             </div>
           </header>
 
-          {/* Chat area + dock in één kolom */}
+          {/* Chat area + dock */}
           <div className="flex-1 flex flex-col">
-            {/* Messages */}
+            {/* Messages: interne scroll wanneer nodig */}
             <main className="flex-1 overflow-y-auto">
               <div className="px-5 py-5">
                 <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
@@ -271,10 +267,10 @@ export default function BluelineChatpilot() {
                       <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
                         <div
                           className={cx(
-                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words transition-transform",
+                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words",
                             isUser
-                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white" // USER: blauw gradient + wit
-                              : "bg-gray-100 text-gray-900 border border-gray-200" // ASSISTENT: lichtgrijs
+                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                              : "bg-gray-100 text-gray-900 border border-gray-200"
                           )}
                         >
                           <p className="whitespace-pre-wrap">{m.text}</p>
@@ -301,7 +297,7 @@ export default function BluelineChatpilot() {
               </div>
             </main>
 
-            {/* Dock (onderdeel van de kaart) */}
+            {/* Dock: sticky binnen kaart */}
             <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
               <div className="px-5 py-3">
                 {/* Input row */}
@@ -328,13 +324,13 @@ export default function BluelineChatpilot() {
                       aria-label="Bericht invoeren"
                       autoComplete="off"
                     />
-                    {/* Send button */}
+                    {/* Send button: verticaal PERFECT gecentreerd */}
                     <button
                       type="submit"
                       aria-label="Verzenden"
                       disabled={isTyping || !input.trim()}
                       className={cx(
-                        "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+                        "absolute right-2 inset-y-0 my-auto w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
                         (!input.trim() || isTyping)
                           ? "opacity-60 cursor-not-allowed"
                           : "hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
@@ -348,7 +344,7 @@ export default function BluelineChatpilot() {
                   </div>
                 </form>
 
-                {/* Pills UNDER the input */}
+                {/* Pills onder input */}
                 <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   {/* Kanaal */}
                   <div className="flex items-center flex-wrap gap-2">
