@@ -12,35 +12,31 @@ function autoresizeTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
 }
 
-// Local storage helpers
+// Local storage helpers (we bewaren GEEN messages meer)
 const STORAGE_KEY = "blueline-chatpilot:v1";
 function safeLoad() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) return { messageType: "Social Media", tone: "Formeel" };
     const data = JSON.parse(raw);
-    if (!Array.isArray(data?.messages)) return null;
     return {
-      messages: data.messages,
-      messageType: typeof data.messageType === "string" ? data.messageType : "Social Media",
-      tone: typeof data.tone === "string" ? data.tone : "Formeel",
+      messageType: typeof data?.messageType === "string" ? data.messageType : "Social Media",
+      tone: typeof data?.tone === "string" ? data.tone : "Formeel",
     };
   } catch {
-    return null;
+    return { messageType: "Social Media", tone: "Formeel" };
   }
 }
-function safeSave(state) {
+function safeSave({ messageType, tone }) {
   try {
-    const payload = {
-      messages: (state.messages || []).slice(-200),
-      messageType: state.messageType,
-      tone: state.tone,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ messageType, tone }));
   } catch {}
 }
 
 // --- Fase 2: begroetingen ---
+const GREET_COUNT_KEY = "greetingCount";
+const GREET_HIST_KEY = "greetingHist:v1"; // per-type ringbuffer (laatste 2)
+
 const gimmicks = [
   "Tijd om samen de wachtrijen korter te maken.",
   "Hoeveel tickets staan er nog open bij jou?",
@@ -75,22 +71,57 @@ function getDaypartPrefix() {
   return "Hallo"; // nacht fallback
 }
 
+function loadGreetHist() {
+  try {
+    const raw = localStorage.getItem(GREET_HIST_KEY);
+    if (!raw) return { gimmicks: [], energizers: [] };
+    const j = JSON.parse(raw);
+    return {
+      gimmicks: Array.isArray(j?.gimmicks) ? j.gimmicks : [],
+      energizers: Array.isArray(j?.energizers) ? j.energizers : [],
+    };
+  } catch {
+    return { gimmicks: [], energizers: [] };
+  }
+}
+function saveGreetHist(hist) {
+  try {
+    localStorage.setItem(GREET_HIST_KEY, JSON.stringify(hist));
+  } catch {}
+}
+
+function pickIndexAvoidingRecent(len, recent = []) {
+  const all = Array.from({ length: len }, (_, i) => i);
+  const candidates = all.filter((i) => !recent.includes(i));
+  const pool = candidates.length > 0 ? candidates : all; // fallback als bijna alle items recent zijn
+  const n = Math.floor(Math.random() * pool.length);
+  return pool[n];
+}
+
 function getGreeting() {
   // Teller ophalen & ophogen (persistente rotatie 1–2 gimmick, 3 energizer)
-  let count = Number(localStorage.getItem("greetingCount") || "0");
+  let count = Number(localStorage.getItem(GREET_COUNT_KEY) || "0");
   count += 1;
-  localStorage.setItem("greetingCount", String(count));
+  localStorage.setItem(GREET_COUNT_KEY, String(count));
+
+  // Hist ophalen
+  const hist = loadGreetHist();
 
   if (count % 3 === 0) {
-    // Energizer (zonder dagdeelprefix)
-    const idx = Math.floor(Math.random() * energizers.length);
-    return energizers[idx];
-    // NB: geen prefix!
+    // Energizer (zonder dagdeelprefix) met anti-herhaling
+    const idx = pickIndexAvoidingRecent(energizers.length, hist.energizers);
+    const text = energizers[idx];
+    const next = [...hist.energizers, idx].slice(-2);
+    saveGreetHist({ ...hist, energizers: next });
+    return text;
   } else {
-    // Gimmick (mét dagdeelprefix)
+    // Gimmick (mét dagdeelprefix) met anti-herhaling
     const prefix = getDaypartPrefix();
-    const idx = Math.floor(Math.random() * gimmicks.length);
-    return `${prefix}! ${gimmicks[idx]}`;
+    const idx = pickIndexAvoidingRecent(gimmicks.length, hist.gimmicks);
+    const text = `${prefix}! ${gimmicks[idx]}`;
+    const next = [...hist.gimmicks, idx].slice(-2);
+    saveGreetHist({ ...hist, gimmicks: next });
+    return text;
   }
 }
 
@@ -206,18 +237,10 @@ export default function BluelineChatpilot() {
   const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
   const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
 
-  // Initial message: dynamische begroeting (alleen als er nog geen history is)
-  const [messages, setMessages] = useState(
-    loaded?.messages && loaded.messages.length > 0
-      ? loaded.messages
-      : [
-          {
-            role: "assistant",
-            text: getGreeting(),
-            meta: { type: "System", tone: "-" },
-          },
-        ]
-  );
+  // Altijd starten met 1 dynamische begroeting (géén history laden)
+  const [messages, setMessages] = useState([
+    { role: "assistant", text: getGreeting(), meta: { type: "System", tone: "-" } },
+  ]);
 
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -237,9 +260,10 @@ export default function BluelineChatpilot() {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
   }, []);
 
+  // Alleen messageType/tone bewaren (géén messages)
   useEffect(() => {
-    safeSave({ messages, messageType, tone });
-  }, [messages, messageType, tone]);
+    safeSave({ messageType, tone });
+  }, [messageType, tone]);
 
   async function handleSend(e) {
     e?.preventDefault();
