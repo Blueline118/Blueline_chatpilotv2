@@ -12,16 +12,48 @@ function autoresizeTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 200) + "px"; // cap op 200px
 }
 
+// Local storage helpers
+const STORAGE_KEY = "blueline-chatpilot:v1";
+function safeLoad() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // minimale schema-check
+    if (!Array.isArray(data?.messages)) return null;
+    return {
+      messages: data.messages,
+      messageType: typeof data.messageType === "string" ? data.messageType : "Social Media",
+      tone: typeof data.tone === "string" ? data.tone : "Formeel",
+      temperature: typeof data.temperature === "number" ? data.temperature : 0.7,
+    };
+  } catch {
+    return null;
+  }
+}
+function safeSave(state) {
+  try {
+    const payload = {
+      messages: (state.messages || []).slice(-200),
+      messageType: state.messageType,
+      tone: state.tone,
+      temperature: state.temperature,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore quota/serialization errors
+  }
+}
+
 // Extract a likely order number (e.g., 12345 or #12345) from user text
 function extractOrderNumber(text = "") {
   if (!text) return null;
-  // Common Dutch cues and generic patterns
   const patterns = [
     /order\s*#?\s*(\d{4,})/i,
     /ordernummer\s*#?\s*(\d{4,})/i,
     /bestel(?:ling)?(?:nummer)?\s*#?\s*(\d{4,})/i,
     /ticket\s*#?\s*(\d{4,})/i,
-    /#(\d{4,})\b/, // fallback hash number
+    /#(\d{4,})\b/,
   ];
   for (const re of patterns) {
     const m = text.match(re);
@@ -31,14 +63,12 @@ function extractOrderNumber(text = "") {
 }
 
 // --- Reply generator ---
-// Uses template literals for robust multiline strings.
 function generateAssistantReply(text, type, tone) {
   const t = (tone || "").toLowerCase();
   const isEmail = type === "E-mail";
   const orderNo = extractOrderNumber(text);
 
   if (isEmail) {
-    // Subject line is dynamic if we can find an order number
     const subject = orderNo ? `Vraag over order #${orderNo}` : `Vraag over je bestelling`;
 
     if (t === "formeel") {
@@ -61,7 +91,6 @@ Thanks voor je bericht! We gaan er meteen mee aan de slag en komen vandaag nog b
 Groet,
 Blueline Customer Care`;
     }
-    // default safety (shouldn't hit; UI beperkt de opties)
     return `Onderwerp: ${subject}
 
 Hi [Naam],
@@ -72,14 +101,13 @@ Hartelijke groet,
 Blueline Customer Care`;
   }
 
-  // Social Media — keep fixed templates; tone controls formality and emojis
+  // Social Media — fixed templates; tone controls formality and emojis
   if (t === "formeel") {
     return `Dank voor uw bericht. We helpen u graag verder. Zou u uw ordernummer in een privébericht kunnen sturen? Dan zoeken wij het direct voor u uit.`;
   }
   if (t === "informeel") {
     return `Thanks voor je bericht! We duiken er meteen in. Stuur je ordernummer even via DM, dan fixen we het voor je 🙂`;
   }
-  // default safety (shouldn't hit; UI beperkt de opties)
   return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Zou je je ordernummer via DM kunnen delen? Dan helpen we je snel verder.`;
 }
 
@@ -127,20 +155,23 @@ function runSelfTests() {
 }
 
 export default function BluelineChatpilot() {
-  // Tone options now limited to Formeel & Informeel (Vriendelijk verwijderd op verzoek)
   const TONES = ["Formeel", "Informeel"];
 
-  const [messageType, setMessageType] = useState("Social Media");
-  const [tone, setTone] = useState(TONES[0]); // default to Formeel
-  const [temperature, setTemperature] = useState(0.7); // creativiteit slider
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      text: "Welkom bij Blueline Chatpilot 👋 Hoe kan ik je vandaag helpen?",
-      meta: { type: "System", tone: "-" },
-    },
-  ]);
+  // ---- Load initial state from localStorage if available
+  const loaded = typeof window !== "undefined" ? safeLoad() : null;
+
+  const [messageType, setMessageType] = useState(loaded?.messageType ?? "Social Media");
+  const [tone, setTone] = useState(loaded?.tone ?? "Formeel");
+  const [temperature, setTemperature] = useState(loaded?.temperature ?? 0.7);
+  const [messages, setMessages] = useState(
+    loaded?.messages ?? [
+      {
+        role: "assistant",
+        text: "Welkom bij Blueline Chatpilot 👋 Hoe kan ik je vandaag helpen?",
+        meta: { type: "System", tone: "-" },
+      },
+    ]
+  );
   const [isTyping, setIsTyping] = useState(false);
 
   const listRef = useRef(null);
@@ -160,28 +191,37 @@ export default function BluelineChatpilot() {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
   }, []);
 
+  // ---- Persist to localStorage on changes
+  useEffect(() => {
+    safeSave({ messages, messageType, tone, temperature });
+  }, [messages, messageType, tone, temperature]);
+
   async function handleSend(e) {
     e?.preventDefault();
-    const trimmed = input.trim();
+    const trimmed = inputRef.current?.value?.trim() ?? "";
     if (!trimmed) return;
 
     setMessages((prev) => [
       ...prev,
       { role: "user", text: trimmed, meta: { type: messageType, tone } },
     ]);
-    setInput("");
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      // reset height after send
+      autoresizeTextarea(inputRef.current);
+    }
 
     setIsTyping(true);
     try {
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone, temperature }), // send temperature
+        body: JSON.stringify({ userText: trimmed, type: messageType, tone, temperature }),
       });
       const data = await r.json();
       const reply = r.ok && data?.text
         ? data.text
-        : generateAssistantReply(trimmed, messageType, tone); // fallback indien fout
+        : generateAssistantReply(trimmed, messageType, tone);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", text: reply, meta: { type: messageType, tone } },
@@ -337,34 +377,32 @@ export default function BluelineChatpilot() {
             <div className="relative">
               <label htmlFor="message" className="sr-only">Typ een bericht…</label>
               <textarea
-  id="message"
-  ref={inputRef}
-  rows={1}
-  className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3 overflow-hidden"
-  placeholder="Typ een bericht…"
-  value={input}
-  onChange={(e) => {
-    setInput(e.target.value);
-    autoresizeTextarea(e.target);
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault(); // geen newline
-      handleSend();       // verzenden
-    }
-    // Shift+Enter: newline toegestaan
-  }}
-  aria-label="Bericht invoeren"
-  autoComplete="off"
-/>
+                id="message"
+                ref={inputRef}
+                rows={1}
+                className="w-full bg-white dark:bg-gray-900 border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-sm border-[#e5e7eb] dark:border-gray-700 placeholder-gray-400 dark:placeholder-gray-500 resize-none leading-6 py-3 overflow-hidden"
+                placeholder="Typ een bericht…"
+                onChange={(e) => {
+                  // we lezen direct uit ref bij verzenden; state niet nodig
+                  autoresizeTextarea(e.target);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault(); // geen newline
+                    handleSend();       // verzenden
+                  }
+                }}
+                aria-label="Bericht invoeren"
+                autoComplete="off"
+              />
               {/* Send button inside the field (right aligned) */}
               <button
                 type="submit"
                 aria-label="Verzenden"
-                disabled={!input.trim() || isTyping}
+                disabled={isTyping || !(inputRef.current?.value?.trim())}
                 className={cx(
                   "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-colors",
-                  (!input.trim() || isTyping) ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
+                  (!(inputRef.current?.value?.trim()) || isTyping) ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"
                 )}
                 style={{ backgroundColor: "#2563eb" }}
               >
