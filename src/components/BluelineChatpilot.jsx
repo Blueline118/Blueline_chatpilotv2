@@ -125,6 +125,7 @@ export default function BluelineChatpilot() {
 
   const [messageType, setMessageType] = useState("Social Media");
   const [tone, setTone] = useState(TONES[0]); // default to Formeel
+  const [temperature, setTemperature] = useState(0.7); // NEW: creativiteit slider
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
     {
@@ -148,42 +149,41 @@ export default function BluelineChatpilot() {
   }, [messages, isTyping]);
 
   async function handleSend(e) {
-  e?.preventDefault();
-  const trimmed = input.trim();
-  if (!trimmed) return;
+    e?.preventDefault();
+    const trimmed = input.trim();
+    if (!trimmed) return;
 
-  setMessages((prev) => [
-    ...prev,
-    { role: "user", text: trimmed, meta: { type: messageType, tone } },
-  ]);
-  setInput("");
-
-  setIsTyping(true);
-  try {
-    const r = await fetch("/.netlify/functions/generate-gemini", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
-    });
-    const data = await r.json();
-    const reply = r.ok && data?.text
-      ? data.text
-      : generateAssistantReply(trimmed, messageType, tone); // fallback indien fout
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", text: reply, meta: { type: messageType, tone } },
+      { role: "user", text: trimmed, meta: { type: messageType, tone } },
     ]);
-  } catch (err) {
-    const reply = generateAssistantReply(trimmed, messageType, tone);
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", text: reply, meta: { type: messageType, tone } },
-    ]);
-  } finally {
-    setIsTyping(false);
+    setInput("");
+
+    setIsTyping(true);
+    try {
+      const r = await fetch("/.netlify/functions/generate-gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userText: trimmed, type: messageType, tone, temperature }), // send temperature
+      });
+      const data = await r.json();
+      const reply = r.ok && data?.text
+        ? data.text
+        : generateAssistantReply(trimmed, messageType, tone); // fallback indien fout
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: reply, meta: { type: messageType, tone } },
+      ]);
+    } catch (err) {
+      const reply = generateAssistantReply(trimmed, messageType, tone);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: reply, meta: { type: messageType, tone } },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   }
-}
-
 
   function onKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -299,6 +299,25 @@ export default function BluelineChatpilot() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Temperature slider */}
+          <div className="mt-3 flex items-center gap-3">
+            <label htmlFor="temp" className="text-xs font-medium text-gray-600 dark:text-gray-300">Creativiteit:</label>
+            <input
+              id="temp"
+              type="range"
+              min="0.1"
+              max="1.0"
+              step="0.1"
+              value={temperature}
+              onChange={(e) => setTemperature(Number(e.target.value))}
+              className="w-40 accent-[#2563eb]"
+              aria-label="Creativiteit (temperature)"
+            />
+            <span className="text-xs text-gray-600 dark:text-gray-300 w-10 tabular-nums text-right">
+              {temperature.toFixed(1)}
+            </span>
           </div>
 
           {/* Bottom row: input + send button */}
