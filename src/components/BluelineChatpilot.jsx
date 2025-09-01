@@ -265,7 +265,7 @@ export default function BluelineChatpilot() {
           </div>
           <div>
             <h1 className="text-lg font-semibold leading-tight">Blueline Chatpilot</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-300 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
           </div>
         </div>
       </header>
@@ -275,12 +275,12 @@ export default function BluelineChatpilot() {
         <div className="mx-auto max-w-5xl px-4">
           <section className="mt-6 mb-40 rounded-xl border border-transparent dark:border-gray-800" style={{ backgroundColor: "#f2f8ff" }}>
             <div className="p-4 sm:p-6">
-              <div className="flex flex-col gap-4" ref={listRef} role="log" aria-live="polite">
+              <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                 {messages.map((m, idx) => (
                   <div key={idx} className={cx("flex", m.role === "user" ? "justify-end" : "justify-start")}>
                     <div
                       className={cx(
-                        "max-w-[520px] rounded-2xl shadow-sm px-4 py-3 text-sm leading-relaxed break-words",
+                        "max-w-[480px] rounded-2xl shadow-sm px-5 py-4 text-sm leading-relaxed break-words",
                         m.role === "user"
                           ? "bg-[#2563eb] text-white"
                           : "bg-white text-gray-900 border border-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-800"
@@ -318,7 +318,7 @@ export default function BluelineChatpilot() {
 
       {/* Dock */}
       <div className="fixed bottom-0 inset-x-0 z-30 border-t border-gray-200 dark:border-gray-800" style={{ backgroundColor: "#f9fafb", paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
-        <div className="mx-auto max-w-5xl px-4 py-3">
+        <div className="mx-auto max-w-5xl px-4 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* Message type */}
             <div className="flex items-center flex-wrap gap-2">
