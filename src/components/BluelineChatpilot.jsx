@@ -232,7 +232,7 @@ export default function BluelineChatpilot() {
       <div className="flex-1">
         <div className="mx-auto max-w-[760px] px-3 pt-6">
           {/* CARD / PANEL met grotere hoogte om witruimte te minimaliseren */}
-          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-1rem)]">
+          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-2rem)]">
             {/* Sticky header binnen de kaart */}
             <header className="sticky top-0 z-10 border-b border-blue-600/20">
               <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
