@@ -593,11 +593,13 @@ function InnerChatpilot() {
             </div>
           </div>
 
-          {/* Verzendknop met fade-in/out */}
+          {/* Verzendknop met fade-in/out + delay bij fade-out */}
 <div
   className={cx(
-    "transition-opacity duration-150",
-    input.trim() ? "opacity-100" : "opacity-0 pointer-events-none"
+    "transition-opacity duration-200",
+    input.trim()
+      ? "opacity-100 delay-0"
+      : "opacity-0 pointer-events-none delay-200"
   )}
 >
   <button
