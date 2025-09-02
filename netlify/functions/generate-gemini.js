@@ -1,4 +1,5 @@
 // netlify/functions/generate-gemini.js
+
 const API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
@@ -40,7 +41,14 @@ export default async (request) => {
       payload = {};
     }
 
-    const { userText, type, tone } = payload || {};
+    // Lees velden uit de body (profileKey toegevoegd)
+    const {
+      userText,
+      type,
+      tone,
+      profileKey = "default", // "default" of "merrachi"
+    } = payload || {};
+
     if (!userText || !type || !tone) {
       return new Response(
         JSON.stringify({ error: "Missing fields (userText, type, tone)" }),
@@ -58,7 +66,7 @@ export default async (request) => {
 
     const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
 
-    // Temperature: alleen ENV of default 0.4
+    // Temperature: ENV of default 0.7
     const envTemp =
       typeof process !== "undefined" &&
       process.env &&
@@ -67,7 +75,8 @@ export default async (request) => {
         : null;
     const temperature = envTemp ?? 0.7;
 
-const systemDirectives = `
+    /* ---------- Minimalistische system prompt (niet knijpen) ---------- */
+    const systemDirectives = `
 Je bent een klantenservice-assistent voor **Blueline Customer Care**, actief in e-commerce en webshops (o.a. fashion en aanverwante niches).
 Schrijf altijd in het **Nederlands**.
 
@@ -81,35 +90,87 @@ Doel & stijl:
 - Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
 `.trim();
 
+    // User prompt blijft zoals bij jou
     const userPrompt = `Type: ${type}
 Stijl: ${tone}
 
 Invoer klant:
 ${userText}`;
 
+    /* ---------- Klantprofielen (lichte hints, niet knijpen) ---------- */
+    const PROFILES = {
+      default: {
+        display: "Standaard",
+        toneHints: ["vriendelijk-professioneel", "empathisch", "duidelijk"],
+        styleRules: ["korte zinnen", "geen jargon", "positief geformuleerd"],
+        lexicon: { prefer: ["bestelling", "retour", "bevestiging"], avoid: ["ticket", "case", "RMA"] },
+        knowledge: [
+          "Retourtermijn: 30 dagen (NL/BE).",
+          "Gratis retour bij schade of verkeerde levering.",
+        ],
+      },
+
+      // Klantprofiel 1 — Merrachi
+      merrachi: {
+        display: "Merrachi",
+        toneHints: ["inspirerend", "empowerend", "respectvol"],
+        styleRules: ["korte zinnen", "verfijnde toon", "duidelijk en inclusief"],
+        lexicon: {
+          prefer: ["collectie", "maat", "retourneren"],
+          avoid: ["RMA", "order-ID"],
+        },
+        knowledge: [
+          "Wereldwijde verzending binnen 2–5 dagen.",
+          "Retourneren toegestaan binnen 14 dagen.",
+          "Collecties geïnspireerd door cultuur en bescheidenheid.",
+          "Maten ontworpen voor comfort en zelfvertrouwen.",
+          "Gebruik maattabel bij pasvorm-vragen.",
+          "Veilige betaalmethoden wereldwijd beschikbaar.",
+          "Duurzame materialen zorgvuldig geselecteerd.",
+          "Speciale collecties tijdens Ramadan.",
+          "Klantenservice dagelijks bereikbaar.",
+          "Focus op elegantie en vrouwelijk zelfvertrouwen.",
+        ],
+      },
+    };
+
+    function buildProfileDirectives(key) {
+      const p = PROFILES[key] || PROFILES.default;
+      return [
+        `Profiel: ${p.display}`,
+        `Toon-hints: ${p.toneHints.join(", ")}`,
+        `Stijl: ${p.styleRules.join(", ")}`,
+        `Terminologie — verkies: ${p.lexicon.prefer.join(", ")}; vermijd: ${p.lexicon.avoid.join(", ")}`,
+        `Kennis (kort en alleen indien relevant):`,
+        ...p.knowledge.map((k) => `- ${k}`),
+      ].join("\n");
+    }
+
+    // Finale system prompt = basis + zachte profiel-hints
+    const finalSystem = [systemDirectives, buildProfileDirectives(profileKey)].join("\n\n");
+
+    /* ---------- API call ---------- */
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({
-  // Systeemregels (één keer, niet als user-bericht)
-  system_instruction: {
-    parts: [{ text: systemDirectives }],
-  },
+          // Systeemregels (één keer, niet als user-bericht)
+          system_instruction: {
+            parts: [{ text: finalSystem }],
+          },
 
-  // Alleen de echte klantinvoer
-  contents: [
-    { role: "user", parts: [{ text: userPrompt }] },
-  ],
+          // Alleen de echte klantinvoer
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
 
-  // Sampling voor variatie
-  generationConfig: {
-    temperature,   // bijv. 0.7 via ENV
-    topP: 0.9,
-    topK: 40,
-    maxOutputTokens: 512,
-  },
-}),
+          // Sampling voor variatie
+          generationConfig: {
+            temperature, // bijv. 0.7 via ENV
+            topP: 0.9,
+            topK: 40,
+            maxOutputTokens: 512,
+          },
+        }),
       }),
       timeoutMs
     );

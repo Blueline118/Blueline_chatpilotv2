@@ -30,7 +30,7 @@ class ErrorBoundary extends React.Component {
             </button>
             {this.state.showDetails && (
               <pre className="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-auto max-h-40">
-{this.state.errorMsg}
+                {this.state.errorMsg}
               </pre>
             )}
           </div>
@@ -66,28 +66,38 @@ function canUseStorage() {
 }
 function safeLoad() {
   try {
-    if (!canUseStorage()) return { messageType: "Social Media", tone: "Formeel" };
+    if (!canUseStorage())
+      return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { messageType: "Social Media", tone: "Formeel" };
+    if (!raw) return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
     const data = JSON.parse(raw);
     return {
       messageType: typeof data?.messageType === "string" ? data.messageType : "Social Media",
       tone: typeof data?.tone === "string" ? data.tone : "Formeel",
+      profileKey: typeof data?.profileKey === "string" ? data.profileKey : "default",
     };
   } catch {
-    return { messageType: "Social Media", tone: "Formeel" };
+    return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   }
 }
 function safeSave(pref) {
   try {
     if (!canUseStorage()) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ messageType: pref.messageType, tone: pref.tone }));
+    const prev = safeLoad();
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        messageType: pref.messageType ?? prev.messageType,
+        tone: pref.tone ?? prev.tone,
+        profileKey: pref.profileKey ?? prev.profileKey,
+      })
+    );
   } catch {}
 }
 
 /* ---------------- Fase 2: begroetingen + ringbuffer ---------------- */
 const GREET_COUNT_KEY = "greetingCount";
-const GREET_HIST_KEY  = "greetingHist:v1";
+const GREET_HIST_KEY = "greetingHist:v1";
 
 const gimmicks = [
   "Tijd om samen de wachtrijen korter te maken.",
@@ -322,11 +332,15 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 
 /* ---------------- Hoofdcomponent ---------------- */
 function InnerChatpilot() {
-  const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel" };
-  const [messageType, setMessageType] = useState(loaded.messageType);
-// Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
-const tone = "Automatisch";
+  const loaded =
+    typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
 
+  const [messageType, setMessageType] = useState(loaded.messageType);
+  // Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
+  const tone = "Automatisch";
+
+  // Nieuw: klantprofiel (Standaard of Merrachi)
+  const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
 
   // Altijd starten met 1 dynamische begroeting (géén history laden)
   const [messages, setMessages] = useState([
@@ -357,15 +371,18 @@ const tone = "Automatisch";
   }, []);
 
   useEffect(() => {
-    safeSave({ messageType, tone });
-  }, [messageType, tone]);
+    safeSave({ messageType, tone, profileKey });
+  }, [messageType, tone, profileKey]);
 
   async function handleSend(e) {
     e?.preventDefault();
     const trimmed = (input || "").trim();
     if (!trimmed) return;
 
-    setMessages((prev) => [...prev, { role: "user", text: trimmed, meta: { type: messageType, tone } }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: trimmed, meta: { type: messageType, tone, profileKey } },
+    ]);
     setInput("");
     if (inputRef.current) autoresizeTextarea(inputRef.current);
 
@@ -374,14 +391,21 @@ const tone = "Automatisch";
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone }),
+        body: JSON.stringify({ userText: trimmed, type: messageType, tone, profileKey }),
       });
       const data = await r.json();
-      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone } }]);
+      const reply =
+        r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } },
+      ]);
     } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone } }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -413,8 +437,8 @@ const tone = "Automatisch";
                     </svg>
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot</h1>
-                    <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact.</p>
+                    <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
+                    <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact</p>
                   </div>
                 </div>
               </div>
@@ -471,16 +495,19 @@ const tone = "Automatisch";
               </div>
             </main>
 
+            {/* Dock */}
             <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
               <div className="px-5 py-3">
                 <form onSubmit={handleSend} aria-label="Bericht verzenden">
                   <div className="relative">
-                    <label htmlFor="message" className="sr-only">Typ een bericht…</label>
+                    <label htmlFor="message" className="sr-only">
+                      Typ een bericht…
+                    </label>
                     <textarea
                       id="message"
                       ref={inputRef}
                       rows={1}
-                      className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25 focus:border-[#2563eb] px-4 pr-14 rounded-[12px] min-h-12 text-[15px] border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden transition-shadow"
+                      className="w-full bg-white border focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25 focus:border-[#2563eb] px-4 pr-36 rounded-[12px] min-h-12 text-[15px] border-[#e5e7eb] placeholder-gray-400 resize-none leading-6 py-3 overflow-hidden transition-shadow"
                       placeholder="Typ een bericht…"
                       value={input}
                       onChange={(e) => {
@@ -496,19 +523,41 @@ const tone = "Automatisch";
                       aria-label="Bericht invoeren"
                       autoComplete="off"
                     />
+
+                    {/* Profiel-dropdown (subtiel, in het invoerveld) */}
+                    <label className="sr-only" htmlFor="profile">
+                      Klantprofiel
+                    </label>
+                    <select
+                      id="profile"
+                      value={profileKey}
+                      onChange={(e) => setProfileKey(e.target.value)}
+                      className="absolute right-12 top-1/2 -translate-y-1/2 text-xs bg-transparent text-gray-500 border-0 pr-4 focus:outline-none focus:ring-0 cursor-pointer"
+                      title="Klantprofiel"
+                      aria-label="Klantprofiel"
+                    >
+                      <option value="default">Standaard</option>
+                      <option value="merrachi">Merrachi</option>
+                    </select>
+
                     <button
                       type="submit"
                       aria-label="Verzenden"
                       disabled={!input.trim()}
                       className={cx(
                         "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-                        (!input.trim())
+                        !input.trim()
                           ? "opacity-60 cursor-not-allowed"
                           : "hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
                       )}
                       style={{ backgroundColor: "#2563eb" }}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-5 h-5 text-white"
+                      >
                         <path d="M2.01 21l20-9L2.01 3 2 10l14 2-14 2z" />
                       </svg>
                     </button>
