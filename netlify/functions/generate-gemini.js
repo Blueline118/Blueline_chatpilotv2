@@ -20,8 +20,14 @@ function clampTemp(v) {
 // Hulpfunctie: onderwerpregel verwijderen als model toch eigenwijs is
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
-  // Verwijder regels die met “Onderwerp:” beginnen (case-insensitive, whitespace ok)
-  return s.replace(/^[ \t]*onderwerp\s*:.*$/gim, "").trim();
+  // Verwijder elke regel die begint met Onderwerp: of Subject: (case-insensitive, ook met non-breaking spaces)
+  const cleaned = s
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(onderwerp|subject)\s*:/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n") // overmatige lege regels terugbrengen
+    .trim();
+  return cleaned;
 }
 
 export default async (request) => {
@@ -78,17 +84,24 @@ export default async (request) => {
     // // const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     // // const temperature = envTemp ?? 0.7;
 
-    /* ---------- Systeemprompt (los, zonder onderwerpregel) ---------- */
-    const systemDirectives = `
+    /* ---------- Systeemprompt (geen onderwerpregel, juiste info-vraag) ---------- */
+const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
 Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
 
-Richtlijnen:
-- **Social Media**: kort (1–2 zinnen) en gevarieerd in formuleringen. Max. 1 emoji en alleen als passend.
-- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf NOOIT een onderwerpregel** en zet **NOOIT** een regel die begint met “Onderwerp:”.
-- Erken de situatie van de klant. Vraag alleen om gegevens als die relevant zijn (bijv. ordernummer, foto bij schade, adres voor leveringscheck).
-- Varieer natuurlijk in aanhef en afsluiting (vermijd herhaalde standaardzinnen).
-- Geen meta-uitleg of systeemtekst; schrijf uitsluitend het antwoord voor de klant.
+Algemene richtlijnen:
+- **Social Media**: 1–2 zinnen, varieer formuleringen, maximaal 1 passende emoji.
+- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf GEEN onderwerpregel** en **geen regel die begint met “Onderwerp:” of “Subject:”.**
+- Erken de situatie van de klant en geef, waar mogelijk, direct antwoord. Geen meta-uitleg.
+
+Vraag- & gegevenslogica:
+- **Beschikbaarheid / productinfo**: geef direct antwoord of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
+- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (en alleen als relevant).
+- **Schade / defect**: vraag **foto + ordernummer** (alleen indien nodig).
+- **Retour/ruil**: licht kort de procedure toe; vraag pas om gegevens als het écht nodig is.
+
+Stijl:
+- Varieer natuurlijk in aanhef en afsluiting; vermijd herhaalde standaardzinnen.
 - Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
 `.trim();
 
