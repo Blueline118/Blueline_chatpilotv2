@@ -593,7 +593,7 @@ function InnerChatpilot() {
             </div>
           </div>
 
-          {/* Verzendknop met fade-in/out, delay, scale en hover-rotatie */}
+          {/* Verzendknop met fade-in/out, delay en scale (mobile-safe sizing) */}
 <div
   className={cx(
     "transition-all duration-200",
@@ -605,14 +605,14 @@ function InnerChatpilot() {
   <button
     type="submit"
     aria-label="Verzenden"
-    className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.05] hover:rotate-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+    className="shrink-0 w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center leading-none p-0 bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
   >
     <svg
       viewBox="0 0 24 24"
-      className="w-4.5 h-4.5 md:w-5 md:h-5"
+      className="w-4 h-4 md:w-5 md:h-5"
       fill="none"
       stroke="white"
-      strokeWidth="2.2"
+      strokeWidth="2"   {/* iets dunner, helpt tegen clipping op small */}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
