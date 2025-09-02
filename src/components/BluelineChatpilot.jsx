@@ -510,7 +510,7 @@ function InnerChatpilot() {
               id="message"
               ref={inputRef}
               rows={1}
-              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-2.5"
+              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-3"
               placeholder="Typ een bericht…"
               value={input}
               onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
