@@ -500,88 +500,84 @@ function InnerChatpilot() {
 <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
   <div className="px-5 py-3">
     <form onSubmit={handleSend} aria-label="Bericht verzenden">
-      {/* Invoerbalk — hoger kader met input boven en kanaal + plus onder */}
-      <div className="relative flex flex-col bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+      {/* Groot afgerond kader met 2 rijen, uitlijning via grid */}
+      <div className="relative bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+        {/* Grid: [kolom1=breedte + icoon] [kolom2=tekst] [kolom3=send] */}
+        <div className="grid grid-cols-[2.5rem_1fr_2.75rem] gap-x-2">
+          {/* ── Rij 1: lege spacer in kolom1 zodat tekst exact boven + komt ── */}
+          <div className="h-0 col-start-1" aria-hidden="true" />
 
-        {/* Bovenste rij: textarea en verzendknop */}
-        <div className="flex items-center gap-2">
-          {/* Tekstveld met placeholder links tegen de rand */}
-          <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-          <textarea
-            id="message"
-            ref={inputRef}
-            rows={1}
-            className="flex-1 bg-transparent focus:outline-none pl-[2.5rem] resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px]"
+          {/* Tekstveld (kolom 2) */}
+          <div className="col-start-2">
+            <label htmlFor="message" className="sr-only">Typ een bericht…</label>
+            <textarea
+              id="message"
+              ref={inputRef}
+              rows={1}
+              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px]"
+              placeholder="Typ een bericht…"
+              value={input}
+              onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              aria-label="Bericht invoeren"
+              autoComplete="off"
+            />
+          </div>
 
-            value={input}
-            onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            aria-label="Bericht invoeren"
-            autoComplete="off"
-          />
-
-          {/* Verzendknop */}
-          <button
-            type="submit"
-            aria-label="Verzenden"
-            disabled={!input.trim()}
-            className={cx(
-              "flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-              !input.trim()
-                ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
-                : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-            )}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="w-5 h-5"
-              fill="none"
-              stroke="white"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 19V5" />
-              <path d="M6 11l6-6 6 6" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Onderste rij: plus-icoon linksonder en kanaal-toggle */}
-        <div className="flex items-center gap-3 mt-2">
-          {/* + icoon (profiel) linksonder */}
-          <div className="relative">
+          {/* Verzendknop (kolom 3) */}
+          <div className="col-start-3 flex items-start justify-end">
             <button
-              type="button"
-              onClick={() => setProfileMenuOpen((v) => !v)}
-              className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-              title="Klantprofiel kiezen"
-              aria-haspopup="menu"
-              aria-expanded={profileMenuOpen}
-              aria-label="Klantprofiel kiezen"
+              type="submit"
+              aria-label="Verzenden"
+              disabled={!input.trim()}
+              className={cx(
+                "w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+                !input.trim()
+                  ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
+                  : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+              )}
             >
               <svg
                 viewBox="0 0 24 24"
                 className="w-5 h-5"
                 fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
+                stroke="white"
+                strokeWidth="2.6"
                 strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
               >
+                <path d="M12 19V5" />
+                <path d="M6 11l6-6 6 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* ── Rij 2: + in kolom1, kanaal-toggle in kolom2, lege kolom3 ── */}
+          <div className="col-start-1 mt-2 relative">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen(v => !v)}
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              title="Klantprofiel kiezen"
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              aria-label="Klantprofiel kiezen"
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
             </button>
 
-            {/* Dropdownmenu profielen (opent omhoog) */}
+            {/* Profielmenu (opent omhoog) */}
             {profileMenuOpen && (
               <div
                 role="menu"
-                className="absolute z-20 bottom-full mb-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
+                className="absolute z-20 bottom-full mb-2 w-44 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
               >
                 <button
                   type="button"
-                  onClick={() => { setProfileKey("default"); setProfileMenuOpen(false); }}
+                  onClick={() => { setProfileKey('default'); setProfileMenuOpen(false); }}
                   className={cx(
                     "block w-full text-left px-3 py-2 text-sm transition-colors",
                     profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
@@ -592,7 +588,7 @@ function InnerChatpilot() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setProfileKey("merrachi"); setProfileMenuOpen(false); }}
+                  onClick={() => { setProfileKey('merrachi'); setProfileMenuOpen(false); }}
                   className={cx(
                     "block w-full text-left px-3 py-2 text-sm transition-colors",
                     profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
@@ -605,8 +601,7 @@ function InnerChatpilot() {
             )}
           </div>
 
-          {/* Kanaal-toggle */}
-          <div className="flex items-center gap-3">
+          <div className="col-start-2 mt-2 flex items-center gap-3">
             {["Social Media", "E-mail"].map((t) => {
               const selected = messageType === t;
               return (
@@ -626,6 +621,9 @@ function InnerChatpilot() {
               );
             })}
           </div>
+
+          {/* lege plek in kolom3 van rij2 zodat layout klopt */}
+          <div className="col-start-3 mt-2" aria-hidden="true" />
         </div>
       </div>
     </form>
