@@ -593,32 +593,32 @@ function InnerChatpilot() {
             </div>
           </div>
 
-          {/* Verzendknop met fade-in/out + delay bij fade-out */}
+          {/* Verzendknop met fade-in/out, delay, scale en hover-rotatie */}
 <div
   className={cx(
-    "transition-opacity duration-200",
+    "transition-all duration-200",
     input.trim()
-      ? "opacity-100 delay-0"
-      : "opacity-0 pointer-events-none delay-200"
+      ? "opacity-100 scale-100 delay-0"
+      : "opacity-0 scale-90 pointer-events-none delay-200"
   )}
 >
   <button
     type="submit"
     aria-label="Verzenden"
-    className="w-11 h-11 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+    className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.05] hover:rotate-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
   >
     <svg
       viewBox="0 0 24 24"
-      className="w-5 h-5"
+      className="w-4.5 h-4.5 md:w-5 md:h-5"
       fill="none"
       stroke="white"
-      strokeWidth="2.6"
+      strokeWidth="2.2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M12 19V5" />
-      <path d="M6 11l6-6 6 6" />
+      <path d="M22 2L11 13" />
+      <path d="M22 2L15 22L11 13L2 9L22 2Z" />
     </svg>
   </button>
 </div>
