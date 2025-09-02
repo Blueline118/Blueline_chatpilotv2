@@ -507,7 +507,18 @@ function InnerChatpilot() {
         <div className="flex items-center gap-2">
           {/* Tekstveld met placeholder links tegen de rand */}
           <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-          className="flex-1 bg-transparent focus:outline-none pl-[2.5rem] resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px]"
+          <textarea
+            id="message"
+            ref={inputRef}
+            rows={1}
+            className="flex-1 bg-transparent focus:outline-none pl-[2.5rem] resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px]"
+
+            value={input}
+            onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            aria-label="Bericht invoeren"
+            autoComplete="off"
+          />
 
           {/* Verzendknop */}
           <button
