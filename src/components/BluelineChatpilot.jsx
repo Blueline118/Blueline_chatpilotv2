@@ -500,9 +500,8 @@ function InnerChatpilot() {
 <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
   <div className="px-5 py-3">
     <form onSubmit={handleSend} aria-label="Bericht verzenden">
-      {/* Groot afgerond kader: 2 rijen onder elkaar, dezelfde linker padding */}
       <div className="relative bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
-        {/* RĲ 1 — Tekstveld links, verzendknop rechts */}
+        {/* Rij 1 — invoerveld + verzendknop */}
         <div className="flex items-start gap-2">
           <div className="flex-1">
             <label htmlFor="message" className="sr-only">Typ een bericht…</label>
@@ -510,7 +509,7 @@ function InnerChatpilot() {
               id="message"
               ref={inputRef}
               rows={1}
-              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-3"
+              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-[11px]"
               placeholder="Typ een bericht…"
               value={input}
               onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
@@ -548,14 +547,14 @@ function InnerChatpilot() {
           </button>
         </div>
 
-        {/* RĲ 2 — + icoon exact onder de tekst-start, daarna kanaal-knoppen */}
+        {/* Rij 2 — + icoon en kanaalkeuze */}
         <div className="mt-2 flex items-center gap-3">
-          {/* + icoon (linksonder, zelfde x als tekst door dezelfde container padding) */}
+          {/* + icoon */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setProfileMenuOpen(v => !v)}
-              className="ml-[3px] w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
               title="Klantprofiel kiezen"
               aria-haspopup="menu"
               aria-expanded={profileMenuOpen}
@@ -598,7 +597,7 @@ function InnerChatpilot() {
             )}
           </div>
 
-          {/* Kanaal-knoppen */}
+          {/* Kanaal-opties */}
           <div className="flex items-center gap-3">
             {["Social Media", "E-mail"].map((t) => {
               const selected = messageType === t;
