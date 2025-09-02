@@ -315,12 +315,10 @@ function CopyButton({ id, text, onCopied, isCopied }) {
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
       {isCopied ? (
-        // check icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z" />
         </svg>
       ) : (
-        // copy icon
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true">
           <path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z" />
         </svg>
@@ -333,17 +331,18 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 /* ---------------- Hoofdcomponent ---------------- */
 function InnerChatpilot() {
   const loaded =
-    typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+    typeof window !== "undefined"
+      ? safeLoad()
+      : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
 
   const [messageType, setMessageType] = useState(loaded.messageType);
   // Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
   const tone = "Automatisch";
 
-const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-
-
   // Nieuw: klantprofiel (Standaard of Merrachi)
   const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
+  // Voor het open/dicht klappen van het mini-profielmenu
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   // Altijd starten met 1 dynamische begroeting (géén history laden)
   const [messages, setMessages] = useState([
@@ -414,12 +413,6 @@ const [profileMenuOpen, setProfileMenuOpen] = useState(false);
     }
   }
 
-  const pillBase =
-    "inline-flex items-center justify-center rounded-full h-8 px-4 text-sm transition-colors duration-200 select-none whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40";
-  const pillActive = "bg-[#2563eb] text-white border border-[#2563eb] shadow-sm";
-  const pillInactive =
-    "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 active:bg-gray-100";
-
   function handleCopied(id) {
     setCopiedId(id);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
@@ -434,14 +427,19 @@ const [profileMenuOpen, setProfileMenuOpen] = useState(false);
             <header className="sticky top-0 z-10 border-b border-blue-600/20">
               <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
                 <div className="px-5 py-4 flex items-center gap-3">
-                  <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+                  <div
+                    aria-hidden
+                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
+                  >
                     <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
                       <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
                     </svg>
                   </div>
                   <div>
                     <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
-                    <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact</p>
+                    <p className="text-[13px] text-white/85 -mt-0.5">
+                      Jouw 24/7 assistent voor klantcontact
+                    </p>
                   </div>
                 </div>
               </div>
@@ -503,127 +501,144 @@ const [profileMenuOpen, setProfileMenuOpen] = useState(false);
               <div className="px-5 py-3">
                 <form onSubmit={handleSend} aria-label="Bericht verzenden">
                   {/* Invoerbalk — alles binnen één afgeronde kader */}
-<div className="relative flex items-center gap-2 bg-white border border-[#e5e7eb] rounded-[16px] px-2 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+                  <div className="relative flex items-center gap-2 bg-white border border-[#e5e7eb] rounded-[16px] px-2 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+                    {/* + icoon (profiel) links — opent klein menu */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setProfileMenuOpen((v) => !v)}
+                        className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Klantprofiel kiezen"
+                        aria-haspopup="menu"
+                        aria-expanded={profileMenuOpen}
+                        aria-label="Klantprofiel kiezen"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                        >
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
 
-  {/* + icoon (profiel) links — opent klein menu */}
-  <div className="relative">
-    <button
-      type="button"
-      onClick={() => setProfileMenuOpen((v) => !v)}
-      className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-      title="Klantprofiel kiezen"
-      aria-haspopup="menu"
-      aria-expanded={profileMenuOpen}
-      aria-label="Klantprofiel kiezen"
-    >
-      {/* plus */}
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-    </button>
+                      {/* Klein dropdownmenu (Standaard / Merrachi) */}
+                      {profileMenuOpen && (
+                        <div
+                          role="menu"
+                          className="absolute z-20 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileKey("default");
+                              setProfileMenuOpen(false);
+                            }}
+                            className={cx(
+                              "block w-full text-left px-3 py-2 text-sm transition-colors",
+                              profileKey === "default"
+                                ? "bg-gray-100 text-gray-900"
+                                : "text-gray-700 hover:bg-gray-50"
+                            )}
+                            role="menuitem"
+                          >
+                            Standaard
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileKey("merrachi");
+                              setProfileMenuOpen(false);
+                            }}
+                            className={cx(
+                              "block w-full text-left px-3 py-2 text-sm transition-colors",
+                              profileKey === "merrachi"
+                                ? "bg-gray-100 text-gray-900"
+                                : "text-gray-700 hover:bg-gray-50"
+                            )}
+                            role="menuitem"
+                          >
+                            Merrachi
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
-    {/* Klein dropdownmenu (Standaard / Merrachi) */}
-    {profileMenuOpen && (
-      <div
-        role="menu"
-        className="absolute z-20 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
-      >
-        <button
-          type="button"
-          onClick={() => { setProfileKey("default"); setProfileMenuOpen(false); }}
-          className={cx(
-            "block w-full text-left px-3 py-2 text-sm transition-colors",
-            profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
-          )}
-          role="menuitem"
-        >
-          Standaard
-        </button>
-        <button
-          type="button"
-          onClick={() => { setProfileKey("merrachi"); setProfileMenuOpen(false); }}
-          className={cx(
-            "block w-full text-left px-3 py-2 text-sm transition-colors",
-            profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
-          )}
-          role="menuitem"
-        >
-          Merrachi
-        </button>
-      </div>
-    )}
-  </div>
+                    {/* Tekstveld */}
+                    <label htmlFor="message" className="sr-only">
+                      Typ een bericht…
+                    </label>
+                    <textarea
+                      id="message"
+                      ref={inputRef}
+                      rows={1}
+                      className="flex-1 bg-transparent focus:outline-none px-2 resize-none min-h-[40px] text-[15px] leading-6 placeholder-gray-400"
+                      placeholder="Typ een bericht…"
+                      value={input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        autoresizeTextarea(e.target);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      aria-label="Bericht invoeren"
+                      autoComplete="off"
+                    />
 
-  {/* Tekstveld */}
-  <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-  <textarea
-    id="message"
-    ref={inputRef}
-    rows={1}
-    className="flex-1 bg-transparent focus:outline-none px-2 resize-none min-h-[40px] text-[15px] leading-6 placeholder-gray-400"
-    placeholder="Typ een bericht…"
-    value={input}
-    onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
-    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-    aria-label="Bericht invoeren"
-    autoComplete="off"
-  />
+                    {/* Kanaal-toggle: platte tekst met lichte hover, binnen de balk */}
+                    <div className="flex items-center gap-3 pr-1">
+                      {["Social Media", "E-mail"].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setMessageType(t)}
+                          className={cx(
+                            "text-sm rounded-md px-2 py-1 transition-colors",
+                            messageType === t
+                              ? "text-gray-900 bg-gray-100"
+                              : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
 
-  {/* Kanaal-toggle: platte tekst met lichte hover, binnen de balk */}
-  <div className="flex items-center gap-3 pr-1">
-    {["Social Media", "E-mail"].map((t) => (
-      <button
-        key={t}
-        type="button"
-        onClick={() => setMessageType(t)}
-        className={cx(
-          "text-sm rounded-md px-2 py-1 transition-colors",
-          messageType === t ? "text-gray-900 bg-gray-100" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-        )}
-      >
-        {t}
-      </button>
-    ))}
-  </div>
-
-  {/* Verzendknop — ronde blauwe knop met dikkere ↑ */}
-  <button
-    type="submit"
-    aria-label="Verzenden"
-    disabled={!input.trim()}
-    className={cx(
-      "flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-      !input.trim()
-        ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
-        : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-    )}
-  >
-    {/* dikke pijl omhoog (zoals ChatGPT/Notion) */}
-    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 19V5" />
-      <path d="M6 11l6-6 6 6" />
-    </svg>
-  </button>
-</div>
-
-
-  {/* Verzendknop met ↑ */}
-  <button
-    type="submit"
-    aria-label="Verzenden"
-    disabled={!input.trim()}
-    className={cx(
-      "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-      !input.trim()
-        ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
-        : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-    )}
-  >
-    <span className="text-white text-lg leading-none">↑</span>
-  </button>
-</div>
+                    {/* Verzendknop — ronde blauwe knop met dikkere ↑ */}
+                    <button
+                      type="submit"
+                      aria-label="Verzenden"
+                      disabled={!input.trim()}
+                      className={cx(
+                        "flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+                        !input.trim()
+                          ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
+                          : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+                      )}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="white"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 19V5" />
+                        <path d="M6 11l6-6 6 6" />
+                      </svg>
+                    </button>
+                  </div>
                 </form>
-
               </div>
             </div>
             {/* /Dock */}
