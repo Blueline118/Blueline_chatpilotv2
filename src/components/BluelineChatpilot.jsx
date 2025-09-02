@@ -324,7 +324,9 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 function InnerChatpilot() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel" };
   const [messageType, setMessageType] = useState(loaded.messageType);
-  const [tone, setTone] = useState(loaded.tone);
+// Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
+const tone = "Automatisch";
+
 
   // Altijd starten met 1 dynamische begroeting (géén history laden)
   const [messages, setMessages] = useState([
@@ -529,20 +531,7 @@ function InnerChatpilot() {
                     ))}
                   </div>
 
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Stijl:</span>
-                    {["Formeel", "Informeel"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setTone(t)}
-                        className={cx(pillBase, tone === t ? pillActive : pillInactive)}
-                        aria-pressed={tone === t}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Stijl-pills tijdelijk uitgeschakeld; toon = "Automatisch" via code */}
                 </div>
               </div>
             </div>
