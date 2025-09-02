@@ -555,7 +555,7 @@ function InnerChatpilot() {
             <button
               type="button"
               onClick={() => setProfileMenuOpen(v => !v)}
-              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+              className="ml-[3px] w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
               title="Klantprofiel kiezen"
               aria-haspopup="menu"
               aria-expanded={profileMenuOpen}
