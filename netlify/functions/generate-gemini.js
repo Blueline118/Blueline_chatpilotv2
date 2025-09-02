@@ -66,28 +66,24 @@ export default async (request) => {
 
     const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
 
-    // Temperature: ENV of default 0.7
-    const envTemp =
-      typeof process !== "undefined" &&
-      process.env &&
-      process.env.GEMINI_TEMPERATURE
-        ? clampTemp(process.env.GEMINI_TEMPERATURE)
-        : null;
-    const temperature = envTemp ?? 0.7;
+    // Temperature: tijdelijk hard op 0.7 zetten (ENV omzeild)
+const temperature = 0.7;
+// // Wil je later weer ENV gebruiken? Zet dan terug naar:
+// // const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
+// // const temperature = envTemp ?? 0.7;
 
-    /* ---------- Minimalistische system prompt (niet knijpen) ---------- */
-    const systemDirectives = `
-Je bent een klantenservice-assistent voor **Blueline Customer Care**, actief in e-commerce en webshops (o.a. fashion en aanverwante niches).
-Schrijf altijd in het **Nederlands**.
+    /* ---------- Lossere systeemprompt, zonder onderwerpregel ---------- */
+const systemDirectives = `
+Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
+Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
 
-Doel & stijl:
-- Antwoord vriendelijk-professioneel: menselijk, empathisch, behulpzaam.
-- Reageer kort en duidelijk op **Social Media** (1–2 zinnen).
-- Reageer iets uitgebreider bij **E-mail** (2–3 alinea’s, ~80–140 woorden).
-- **Geen onderwerpregel** (het ticketsysteem levert die al).
-- Vraag alleen om ordernummer of aanvullende gegevens als dat nodig is (bijv. retour, schade, levertijd).
-- **Varieer** natuurlijk in aanhef, kernboodschap en afsluiting; vermijd herhaalde standaardzinnen.
-- Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
+Richtlijnen:
+- **Social Media**: kort (1–2 zinnen) en gevarieerd in formuleringen. Max. 1 emoji en alleen als passend.
+- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf NOOIT een onderwerpregel** en zet **NOOIT** een regel die begint met “Onderwerp:”.
+- Erken de situatie van de klant. Vraag alleen om gegevens als die relevant zijn.
+- Varieer natuurlijk in aanhef en afsluiting (geen herhaling van standaardzinnen).
+- Geen meta-uitleg; schrijf uitsluitend het antwoord voor de klant.
+- Reageer alsof je al in een DM zit (dus niet vragen om “stuur ons een DM”).
 `.trim();
 
     // User prompt blijft zoals bij jou
@@ -155,24 +151,25 @@ ${userText}`;
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-  // 1) Systeemprompt op de juiste plek
+  // Systeemprompt op de juiste plek
   system_instruction: {
     parts: [{ text: systemDirectives }],
   },
 
-  // 2) Alleen de echte klantinvoer (we gebruiken juist géén fewshots nu)
+  // Alleen de echte klantinvoer (geen fewshots)
   contents: [
     { role: "user", parts: [{ text: userPrompt }] },
   ],
 
-  // 3) Sampling ruim genoeg voor variatie
+  // Sampling: voldoende variatie, maar niet wild
   generationConfig: {
-    temperature,   // blijft uit ENV of default
+    temperature,     // 0.7 (hard gezet hierboven)
     topP: 0.95,
     topK: 50,
     maxOutputTokens: 512,
   },
 }),
+
       }),
       timeoutMs
     );
