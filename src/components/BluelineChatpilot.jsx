@@ -528,9 +528,9 @@ function InnerChatpilot() {
                       {/* Klein dropdownmenu (Standaard / Merrachi) */}
                       {profileMenuOpen && (
                         <div
-                          role="menu"
-                          className="absolute z-20 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
-                        >
+  role="menu"
+  className="absolute z-20 bottom-full mb-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
+>
                           <button
                             type="button"
                             onClick={() => {
@@ -594,23 +594,27 @@ function InnerChatpilot() {
 
                     {/* Kanaal-toggle: platte tekst met lichte hover, binnen de balk */}
                     <div className="flex items-center gap-3 pr-1">
-                      {["Social Media", "E-mail"].map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setMessageType(t)}
-                          className={cx(
-                            "text-sm rounded-md px-2 py-1 transition-colors",
-                            messageType === t
-                              ? "text-gray-900 bg-gray-100"
-                              : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                          )}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-
+  {["Social Media", "E-mail"].map((t) => {
+    const selected = messageType === t;
+    return (
+      <button
+        key={t}
+        type="button"
+        onClick={() => setMessageType(t)}
+        className={cx(
+          // basis: alleen tekst
+          "text-sm px-2 py-1 rounded-full transition-colors",
+          // geselecteerd: donkerder + vet, géén achtergrond
+          selected ? "text-gray-900 font-medium"
+                   // niet geselecteerd: grijs; bij hover lichte grijze ballon
+                   : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+        )}
+      >
+        {t}
+      </button>
+    );
+  })}
+</div>
                     {/* Verzendknop — ronde blauwe knop met dikkere ↑ */}
                     <button
                       type="submit"
