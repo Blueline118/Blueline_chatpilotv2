@@ -174,6 +174,12 @@ ${userText}`;
       timeoutMs
     );
 
+function stripSubjectLine(s) {
+  if (typeof s !== "string") return s;
+  // Verwijder regels die met “Onderwerp:” beginnen (case-insensitive)
+  return s.replace(/^[ \\t]*onderwerp\\s*:.*$/gim, "").trim();
+}
+
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
       return new Response(JSON.stringify({ text, meta: { source: "model", temperature, topP: 0.95, topK: 50 } }), {
@@ -183,11 +189,16 @@ ${userText}`;
     }
 
     const data = await resp.json().catch(() => ({}));
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Er is geen tekst gegenereerd.";
+    const rawText =
+  data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+  "Er is geen tekst gegenereerd.";
 
-    return new Response(JSON.stringify({ text }), { headers: JSON_HEADERS });
+const text = stripSubjectLine(rawText);
+
+return new Response(JSON.stringify({ text, meta: { source: "model", temperature, topP: 0.95, topK: 50 } }), {
+  headers: JSON_HEADERS,
+});
+
   } catch (e) {
     if (e && e.message === "Timeout") {
       return new Response(
