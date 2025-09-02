@@ -65,7 +65,7 @@ export default async (request) => {
       process.env.GEMINI_TEMPERATURE
         ? clampTemp(process.env.GEMINI_TEMPERATURE)
         : null;
-    const temperature = envTemp ?? 0.4;
+    const temperature = envTemp ?? 0.7;
 
    const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care**. 
