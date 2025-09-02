@@ -500,21 +500,17 @@ function InnerChatpilot() {
 <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
   <div className="px-5 py-3">
     <form onSubmit={handleSend} aria-label="Bericht verzenden">
-      {/* Groot afgerond kader met 2 rijen (grid) */}
+      {/* Groot afgerond kader: 2 rijen onder elkaar, dezelfde linker padding */}
       <div className="relative bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
-        {/* Kolommen: [ruimte voor +] [tekstveld] [send] */}
-        <div className="grid grid-cols-[2.25rem_1fr_2.75rem] gap-x-2">
-          {/* ── RIJ 1 ───────────────────────────────────────────── */}
-          {/* Lege spacer in kolom 1 zodat tekst exact boven + start */}
-          <div className="col-start-1 h-0" aria-hidden="true" />
-          {/* Tekstveld (kolom 2) */}
-          <div className="col-start-2">
+        {/* RĲ 1 — Tekstveld links, verzendknop rechts */}
+        <div className="flex items-start gap-2">
+          <div className="flex-1">
             <label htmlFor="message" className="sr-only">Typ een bericht…</label>
             <textarea
               id="message"
               ref={inputRef}
               rows={1}
-              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px]"
+              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-0"
               placeholder="Typ een bericht…"
               value={input}
               onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
@@ -523,29 +519,39 @@ function InnerChatpilot() {
               autoComplete="off"
             />
           </div>
-          {/* Send-knop (kolom 3) */}
-          <div className="col-start-3 flex items-start justify-end">
-            <button
-              type="submit"
-              aria-label="Verzenden"
-              disabled={!input.trim()}
-              className={cx(
-                "w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
-                !input.trim()
-                  ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
-                  : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-              )}
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 19V5" />
-                <path d="M6 11l6-6 6 6" />
-              </svg>
-            </button>
-          </div>
 
-          {/* ── RIJ 2 ───────────────────────────────────────────── */}
-          {/* + icoon linksonder (kolom 1) */}
-          <div className="col-start-1 mt-2 relative">
+          {/* Verzendknop */}
+          <button
+            type="submit"
+            aria-label="Verzenden"
+            disabled={!input.trim()}
+            className={cx(
+              "w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+              !input.trim()
+                ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
+                : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+            )}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="w-5 h-5"
+              fill="none"
+              stroke="white"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 19V5" />
+              <path d="M6 11l6-6 6 6" />
+            </svg>
+          </button>
+        </div>
+
+        {/* RĲ 2 — + icoon exact onder de tekst-start, daarna kanaal-knoppen */}
+        <div className="mt-2 flex items-center gap-3">
+          {/* + icoon (linksonder, zelfde x als tekst door dezelfde container padding) */}
+          <div className="relative">
             <button
               type="button"
               onClick={() => setProfileMenuOpen(v => !v)}
@@ -569,8 +575,10 @@ function InnerChatpilot() {
                 <button
                   type="button"
                   onClick={() => { setProfileKey('default'); setProfileMenuOpen(false); }}
-                  className={cx("block w-full text-left px-3 py-2 text-sm transition-colors",
-                    profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50")}
+                  className={cx(
+                    "block w-full text-left px-3 py-2 text-sm transition-colors",
+                    profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                  )}
                   role="menuitem"
                 >
                   Standaard
@@ -578,8 +586,10 @@ function InnerChatpilot() {
                 <button
                   type="button"
                   onClick={() => { setProfileKey('merrachi'); setProfileMenuOpen(false); }}
-                  className={cx("block w-full text-left px-3 py-2 text-sm transition-colors",
-                    profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50")}
+                  className={cx(
+                    "block w-full text-left px-3 py-2 text-sm transition-colors",
+                    profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                  )}
                   role="menuitem"
                 >
                   Merrachi
@@ -588,8 +598,8 @@ function InnerChatpilot() {
             )}
           </div>
 
-          {/* Kanaal-toggle (kolom 2) */}
-          <div className="col-start-2 mt-2 flex items-center gap-3">
+          {/* Kanaal-knoppen */}
+          <div className="flex items-center gap-3">
             {["Social Media", "E-mail"].map((t) => {
               const selected = messageType === t;
               return (
@@ -609,9 +619,6 @@ function InnerChatpilot() {
               );
             })}
           </div>
-
-          {/* Lege kolom 3 in rij 2 voor symmetrie */}
-          <div className="col-start-3 mt-2" aria-hidden="true" />
         </div>
       </div>
     </form>
