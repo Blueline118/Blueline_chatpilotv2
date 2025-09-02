@@ -124,21 +124,56 @@ Stijl: ${tone}
 Invoer klant:
 ${userText}`;
 
+const fewshotSocialUser = `Type: Social Media
+Stijl: Informeel
+
+Invoer klant:
+Mijn order #12345 is vertraagd.`;
+const fewshotSocialModel =
+  "Thanks voor je bericht! Ik check dit direct. Wil je je postcode en huisnummer delen? Dan kijk ik meteen de status van order #12345 na 🙂";
+
+const fewshotEmailUser = `Type: E-mail
+Stijl: Formeel
+
+Invoer klant:
+Mijn order #55555 is nog niet geleverd.`;
+const fewshotEmailModel = `Onderwerp: Vraag over order #55555
+
+Geachte [Naam],
+
+Dank voor uw bericht. Ik begrijp dat het vervelend is dat uw bestelling nog niet is geleverd. Ik ga dit direct voor u nakijken. Kunt u, indien nog niet gedeeld, het afleveradres en eventuele aanvullende details sturen? Dan controleren wij de bezorgstatus meteen bij de vervoerder en koppelen wij terug met een update.
+
+Met vriendelijke groet,
+Blueline Customer Care`;
+
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: systemDirectives }] },
-            { role: "user", parts: [{ text: fewshotSocialUser }] },
-            { role: "model", parts: [{ text: fewshotSocialModel }] },
-            { role: "user", parts: [{ text: fewshotEmailUser }] },
-            { role: "model", parts: [{ text: fewshotEmailModel }] },
-            { role: "user", parts: [{ text: userPrompt }] },
-          ],
-          generationConfig: { temperature, maxOutputTokens: 512 },
-        }),
+  // Zet de systeemregels hier — NIET als user-bericht
+  system_instruction: {
+    parts: [{ text: systemDirectives }],
+  },
+
+  // Je few-shots + de échte klantinvoer blijven zoals je had
+  contents: [
+    { role: "user",  parts: [{ text: fewshotSocialUser }] },
+    { role: "model", parts: [{ text: fewshotSocialModel }] },
+    { role: "user",  parts: [{ text: fewshotEmailUser }] },
+    { role: "model", parts: [{ text: fewshotEmailModel }] },
+    { role: "user",  parts: [{ text: userPrompt }] },
+  ],
+
+  // Iets meer variatie, alsnog betrouwbaar
+  generationConfig: {
+    temperature,       // blijft uit je env (bijv. 0.6)
+    topP: 0.9,
+    topK: 40,
+    maxOutputTokens: 512,
+  },
+}),
+
       }),
       timeoutMs
     );
