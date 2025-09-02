@@ -593,28 +593,34 @@ function InnerChatpilot() {
             </div>
           </div>
 
-          {/* Verzendknop: alleen zichtbaar als er tekst is */}
-          {input.trim() && (
-            <button
-              type="submit"
-              aria-label="Verzenden"
-              className="w-11 h-11 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="w-5 h-5"
-                fill="none"
-                stroke="white"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 19V5" />
-                <path d="M6 11l6-6 6 6" />
-              </svg>
-            </button>
-          )}
+          {/* Verzendknop met fade-in/out */}
+<div
+  className={cx(
+    "transition-opacity duration-150",
+    input.trim() ? "opacity-100" : "opacity-0 pointer-events-none"
+  )}
+>
+  <button
+    type="submit"
+    aria-label="Verzenden"
+    className="w-11 h-11 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      fill="none"
+      stroke="white"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 19V5" />
+      <path d="M6 11l6-6 6 6" />
+    </svg>
+  </button>
+</div>
+
         </div>
       </div>
     </form>
