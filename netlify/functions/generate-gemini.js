@@ -80,7 +80,7 @@ Stijlregels (afhankelijk van "Stijl"):
 - **Informeel**: vriendelijk en luchtig, **max 2 emoji** (spaarzaam).
 
 Output per "Type":
-- **Social Media**: kort en behulpzaam. **Geen** onderwerpregel. Vraag voor privacy om een **DM/privébericht** met ordernummer/gegevens indien nodig.
+- **Social Media**: kort en behulpzaam. **Geen** onderwerpregel. Vraag om het ordernummer/gegevens indien nodig.
 - **E-mail**: geef een **volledige mail** met:
   1) **Onderwerp:** 
      - Als een ordernummer is gevonden → "Vraag over order #<nummer>"
@@ -101,7 +101,7 @@ Stijl: Informeel
 Invoer klant:
 Mijn order #12345 is vertraagd.`;
     const fewshotSocialModel =
-      "Thanks voor je bericht! We kijken dit meteen na. Stuur je ordernummer #12345 en je postcode even via DM, dan checken we het direct voor je 🙂";
+      "Thanks voor je bericht! We kijken dit meteen na. Mag ik alvast je ordernummer en postcode en huisnummer dan controleer ik dat direct 🙂";
 
     const fewshotEmailUser = `Type: E-mail
 Stijl: Formeel
