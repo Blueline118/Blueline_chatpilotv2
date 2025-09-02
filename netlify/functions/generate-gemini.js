@@ -155,37 +155,34 @@ ${userText}`;
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          // Systeemregels (één keer, niet als user-bericht)
-          system_instruction: {
-            parts: [{ text: finalSystem }],
-          },
+  // 1) Systeemprompt op de juiste plek
+  system_instruction: {
+    parts: [{ text: systemDirectives }],
+  },
 
-          // Alleen de echte klantinvoer
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+  // 2) Alleen de echte klantinvoer (we gebruiken juist géén fewshots nu)
+  contents: [
+    { role: "user", parts: [{ text: userPrompt }] },
+  ],
 
-          // Sampling voor variatie
-          generationConfig: {
-            temperature, // bijv. 0.7 via ENV
-            topP: 0.9,
-            topK: 40,
-            maxOutputTokens: 512,
-          },
-        }),
+  // 3) Sampling ruim genoeg voor variatie
+  generationConfig: {
+    temperature,   // blijft uit ENV of default
+    topP: 0.95,
+    topK: 50,
+    maxOutputTokens: 512,
+  },
+}),
       }),
       timeoutMs
     );
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
-      return new Response(
-        JSON.stringify({
-          error: "Gemini error",
-          hint: "Controleer je invoer of probeer het zo nog eens.",
-          upstreamStatus: resp.status,
-          details: errText,
-        }),
-        { status: resp.status, headers: JSON_HEADERS }
-      );
+      return new Response(JSON.stringify({ text, meta: { source: "model", temperature, topP: 0.95, topK: 50 } }), {
+  headers: JSON_HEADERS,
+});
+
     }
 
     const data = await resp.json().catch(() => ({}));
