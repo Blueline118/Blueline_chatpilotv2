@@ -339,6 +339,9 @@ function InnerChatpilot() {
   // Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
   const tone = "Automatisch";
 
+const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+
+
   // Nieuw: klantprofiel (Standaard of Merrachi)
   const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
 
@@ -499,58 +502,110 @@ function InnerChatpilot() {
             <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
               <div className="px-5 py-3">
                 <form onSubmit={handleSend} aria-label="Bericht verzenden">
-                  <div className="relative flex items-center bg-white border border-[#e5e7eb] rounded-[12px] px-2 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
-  {/* Profiel-selectie als + icoon links */}
-  <button
-    type="button"
-    onClick={() => setProfileKey(profileKey === "default" ? "merrachi" : "default")}
-    className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-    title="Klantprofiel wisselen"
-    aria-label="Klantprofiel wisselen"
-  >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-      <path d="M12 5v14m7-7H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  </button>
+                  {/* Invoerbalk — alles binnen één afgeronde kader */}
+<div className="relative flex items-center gap-2 bg-white border border-[#e5e7eb] rounded-[16px] px-2 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+
+  {/* + icoon (profiel) links — opent klein menu */}
+  <div className="relative">
+    <button
+      type="button"
+      onClick={() => setProfileMenuOpen((v) => !v)}
+      className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+      title="Klantprofiel kiezen"
+      aria-haspopup="menu"
+      aria-expanded={profileMenuOpen}
+      aria-label="Klantprofiel kiezen"
+    >
+      {/* plus */}
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
+
+    {/* Klein dropdownmenu (Standaard / Merrachi) */}
+    {profileMenuOpen && (
+      <div
+        role="menu"
+        className="absolute z-20 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
+      >
+        <button
+          type="button"
+          onClick={() => { setProfileKey("default"); setProfileMenuOpen(false); }}
+          className={cx(
+            "block w-full text-left px-3 py-2 text-sm transition-colors",
+            profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+          )}
+          role="menuitem"
+        >
+          Standaard
+        </button>
+        <button
+          type="button"
+          onClick={() => { setProfileKey("merrachi"); setProfileMenuOpen(false); }}
+          className={cx(
+            "block w-full text-left px-3 py-2 text-sm transition-colors",
+            profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+          )}
+          role="menuitem"
+        >
+          Merrachi
+        </button>
+      </div>
+    )}
+  </div>
 
   {/* Tekstveld */}
+  <label htmlFor="message" className="sr-only">Typ een bericht…</label>
   <textarea
     id="message"
     ref={inputRef}
     rows={1}
-    className="flex-1 bg-transparent focus:outline-none px-3 resize-none min-h-[40px] text-[15px] leading-6 placeholder-gray-400"
+    className="flex-1 bg-transparent focus:outline-none px-2 resize-none min-h-[40px] text-[15px] leading-6 placeholder-gray-400"
     placeholder="Typ een bericht…"
     value={input}
-    onChange={(e) => {
-      setInput(e.target.value);
-      autoresizeTextarea(e.target);
-    }}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    }}
+    onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
+    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
     aria-label="Bericht invoeren"
     autoComplete="off"
   />
 
-  {/* Kanaal-toggle als platte tekst */}
-  <div className="flex gap-3 pr-3">
+  {/* Kanaal-toggle: platte tekst met lichte hover, binnen de balk */}
+  <div className="flex items-center gap-3 pr-1">
     {["Social Media", "E-mail"].map((t) => (
       <button
         key={t}
         type="button"
         onClick={() => setMessageType(t)}
         className={cx(
-          "text-sm transition-colors",
-          messageType === t ? "text-gray-900 font-medium" : "text-gray-400 hover:text-gray-600"
+          "text-sm rounded-md px-2 py-1 transition-colors",
+          messageType === t ? "text-gray-900 bg-gray-100" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
         )}
       >
         {t}
       </button>
     ))}
   </div>
+
+  {/* Verzendknop — ronde blauwe knop met dikkere ↑ */}
+  <button
+    type="submit"
+    aria-label="Verzenden"
+    disabled={!input.trim()}
+    className={cx(
+      "flex-shrink-0 w-11 h-11 rounded-full flex items-center justify-center shadow-sm transition-all duration-200",
+      !input.trim()
+        ? "opacity-60 cursor-not-allowed bg-[#2563eb]"
+        : "bg-[#2563eb] hover:brightness-110 hover:scale-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+    )}
+  >
+    {/* dikke pijl omhoog (zoals ChatGPT/Notion) */}
+    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="white" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 19V5" />
+      <path d="M6 11l6-6 6 6" />
+    </svg>
+  </button>
+</div>
+
 
   {/* Verzendknop met ↑ */}
   <button
@@ -569,24 +624,6 @@ function InnerChatpilot() {
 </div>
                 </form>
 
-                <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="text-xs font-medium text-gray-700 mr-1 sm:mr-2">Kanaal:</span>
-                    {["Social Media", "E-mail"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setMessageType(t)}
-                        className={cx(pillBase, messageType === t ? pillActive : pillInactive)}
-                        aria-pressed={messageType === t}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Stijl-pills tijdelijk uitgeschakeld; toon = "Automatisch" via code */}
-                </div>
               </div>
             </div>
             {/* /Dock */}
