@@ -500,7 +500,6 @@ function InnerChatpilot() {
             <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
               <div className="px-5 py-3">
                 <form onSubmit={handleSend} aria-label="Bericht verzenden">
-                  {/* Invoerbalk — alles binnen één afgeronde kader */}
                   {/* Invoerbalk — groter kader met invoerveld boven en kanaal-toggle onder */}
 <div className="relative flex flex-col bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
 
@@ -636,6 +635,7 @@ function InnerChatpilot() {
     })}
   </div>
 </div>
+
                     {/* Verzendknop — ronde blauwe knop met dikkere ↑ */}
                     <button
                       type="submit"
