@@ -2,7 +2,7 @@
 const API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
-function withTimeout(promise, ms = 12000) {
+function withTimeout(promise, ms = 20000) {
   return Promise.race([
     promise,
     new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms)),
@@ -17,17 +17,18 @@ function clampTemp(v) {
   return Math.min(1.0, Math.max(0.1, n));
 }
 
-// Hulpfunctie: onderwerpregel verwijderen als model toch eigenwijs is
+/** Verwijder “Onderwerp:” / “Subject:” regels in allerlei varianten (ook **Onderwerp:**, en/dash, bullets, NBSP, markdown) */
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
-  // Verwijder elke regel die begint met Onderwerp: of Subject: (case-insensitive, ook met non-breaking spaces)
-  const cleaned = s
-    .split(/\r?\n/)
-    .filter((line) => !/^\s*(onderwerp|subject)\s*:/i.test(line))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n") // overmatige lege regels terugbrengen
-    .trim();
-  return cleaned;
+  const lines = s.split(/\r?\n/);
+  const filtered = lines.filter((line) => {
+    const l = line
+      .replace(/\u00A0/g, " ") // NBSP -> spatie
+      .replace(/[*_~`>•\-–—]+/g, (m) => m); // laat opmaak staan maar we checken startwoord
+    // Match: start met Onderwerp/Subject (case-insensitive), gevolgd door optionele spaties en (:|–|—|-)
+    return !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(l);
+  });
+  return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export default async (request) => {
@@ -47,18 +48,13 @@ export default async (request) => {
     }
 
     let payload = {};
-    try {
-      payload = await request.json();
-    } catch {
-      payload = {};
-    }
+    try { payload = await request.json(); } catch { payload = {}; }
 
-    // Bodyvelden (profileKey is optioneel)
     const {
       userText,
       type,
       tone,
-      profileKey = "default", // "default" | "merrachi" | ...
+      profileKey = "default",
     } = payload || {};
 
     if (!userText || !type || !tone) {
@@ -71,21 +67,18 @@ export default async (request) => {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
       return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), {
-        status: 500,
-        headers: JSON_HEADERS,
+        status: 500, headers: JSON_HEADERS,
       });
     }
 
-    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
-
-    // Temperature: tijdelijk hard op 0.7 (ENV omzeild om zeker te zijn)
+    // Forceer tijdelijk 0.7 zodat ENV niet knijpt
     const temperature = 0.7;
-    // // Wil je later ENV gebruiken?:
+    // // Later weer via ENV?
     // // const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     // // const temperature = envTemp ?? 0.7;
 
-    /* ---------- Systeemprompt (geen onderwerpregel, juiste info-vraag) ---------- */
-const systemDirectives = `
+    /** Lossere systeemprompt (geen onderwerp), plus logica voor welke gegevens je wél/niet vraagt */
+    const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
 Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
 
@@ -95,8 +88,8 @@ Algemene richtlijnen:
 - Erken de situatie van de klant en geef, waar mogelijk, direct antwoord. Geen meta-uitleg.
 
 Vraag- & gegevenslogica:
-- **Beschikbaarheid / productinfo**: geef direct antwoord of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
-- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (en alleen als relevant).
+- **Beschikbaarheid / productinfo**: geef direct info of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
+- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (alleen indien nodig).
 - **Schade / defect**: vraag **foto + ordernummer** (alleen indien nodig).
 - **Retour/ruil**: licht kort de procedure toe; vraag pas om gegevens als het écht nodig is.
 
@@ -105,7 +98,7 @@ Stijl:
 - Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
 `.trim();
 
-    /* ---------- Klantprofielen: zachte hints ---------- */
+    /** Klantprofielen: zachte hints (niet knijpen) */
     const PROFILES = {
       default: {
         display: "Standaard",
@@ -149,40 +142,31 @@ Stijl:
       ].join("\n");
     }
 
-    // Finale systeemprompt = basis + profielhints
     const finalSystem = [systemDirectives, buildProfileDirectives(profileKey)].join("\n\n");
 
-    // User prompt (zoals jij al hanteert)
     const userPrompt = `Type: ${type}
 Stijl: ${tone}
 
 Invoer klant:
 ${userText}`;
 
-    /* ---------- API call ---------- */
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: JSON_HEADERS,
+        // cache no-store om hergebruik/spraakverwarring te voorkomen
         body: JSON.stringify({
-          // Systeemprompt op de juiste plek (MET profielhints)
-          system_instruction: {
-            parts: [{ text: finalSystem }],
-          },
-
-          // Géén fewshots — alleen de echte klantinvoer
+          system_instruction: { parts: [{ text: finalSystem }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-
-          // Sampling voor variatie (maar beheerst)
           generationConfig: {
-            temperature,         // 0.7
+            temperature,
             topP: 0.95,
             topK: 50,
             maxOutputTokens: 512,
           },
         }),
       }),
-      timeoutMs
+      20000
     );
 
     if (!resp.ok) {
@@ -192,6 +176,7 @@ ${userText}`;
           error: "Gemini error",
           upstreamStatus: resp.status,
           details: errText,
+          meta: { source: "error" },
         }),
         { status: resp.status, headers: JSON_HEADERS }
       );
@@ -217,12 +202,13 @@ ${userText}`;
         JSON.stringify({
           error: "Timeout",
           hint: "De AI deed er te lang over. Probeer het zo nog eens of versmal je vraag.",
+          meta: { source: "timeout" },
         }),
         { status: 408, headers: JSON_HEADERS }
       );
     }
     return new Response(
-      JSON.stringify({ error: e?.message || "Unknown error" }),
+      JSON.stringify({ error: e?.message || "Unknown error", meta: { source: "exception" } }),
       { status: 500, headers: JSON_HEADERS }
     );
   }
