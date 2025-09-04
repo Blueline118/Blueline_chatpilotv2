@@ -52,6 +52,8 @@ function autoresizeTextarea(el) {
 }
 
 /* ---------------- Veilige opslag helpers (géén messages bewaren) ---------------- */
+const cx = (...args) => args.filter(Boolean).join(" ");
+
 const STORAGE_KEY = "blueline-chatpilot:v1";
 function canUseStorage() {
   try {
@@ -422,79 +424,99 @@ function InnerChatpilot() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
       <div className="flex-1">
-        <div className="mx-auto max-w-[760px] px-3 pt-6">
-          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-1rem)]">
-            <header className="sticky top-0 z-10 border-b border-blue-600/20">
-              <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
-                <div className="px-5 py-4 flex items-center gap-3">
-                  <div
-                    aria-hidden
-                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
-                      <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
-                    </svg>
+        <div className="mx-auto max-w-[1120px] px-3 pt-6">
+          <div className="h-[calc(100vh-1rem)] flex gap-4">
+  {/* Sidebar links */}
+  <SidebarSkeleton />
+
+ {/* Chatkolom rechts */}
+<div className="flex-1 flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white">
+
+  {/* Header */}
+  <header className="sticky top-0 z-10 border-b border-blue-600/20">
+    <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
+      <div className="px-5 py-4 flex items-center gap-3">
+        <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
+            <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
+          <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  {/* Messages */}
+  <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+    <div className="px-5 py-5">
+      <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
+        {messages.map((m, idx) => {
+          const isUser = m.role === "user";
+          return (
+            <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+              <div
+                className={cx(
+                  "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words relative",
+                  isUser
+                    ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                    : "bg-gray-100 text-gray-900 border border-gray-200"
+                )}
+              >
+                <p className="whitespace-pre-wrap">{m.text}</p>
+                {!isUser && (
+                  <div className="mt-2 flex justify-end">
+                    <CopyButton
+                      id={`msg-${idx}`}
+                      text={m.text}
+                      onCopied={handleCopied}
+                      isCopied={copiedId === `msg-${idx}`}
+                    />
                   </div>
-                  <div>
-                    <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
-                    <p className="text-[13px] text-white/85 -mt-0.5">
-                      Jouw 24/7 assistent voor klantcontact
-                    </p>
-                  </div>
-                </div>
+                )}
               </div>
-            </header>
+            </div>
+          );
+        })}
 
-            <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              <div className="px-5 py-5">
-                <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                  {messages.map((m, idx) => {
-                    const isUser = m.role === "user";
-                    return (
-                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cx(
-                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words relative",
-                            isUser
-                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
-                              : "bg-gray-100 text-gray-900 border border-gray-200"
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap">{m.text}</p>
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
+              <span className="inline-flex items-center gap-2">
+                <span className="relative inline-block w-6 h-2 align-middle">
+                  <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
+                  <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
+                  <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
+                </span>
+                Typen…
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </main>
 
-                          {/* Copy alleen voor assistent en BINNEN de bubbel, onderin rechts */}
-                          {!isUser && (
-                            <div className="mt-2 flex justify-end">
-                              <CopyButton
-                                id={`msg-${idx}`}
-                                text={m.text}
-                                onCopied={handleCopied}
-                                isCopied={copiedId === `msg-${idx}`}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+  {/* Dock + disclaimer (binnen de chatkolom, ná </main>) */}
+  <div className="border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <div className="px-5 py-3">
+      <form onSubmit={handleSend} aria-label="Bericht verzenden">
+        {/* ... jouw bestaande Dock-inhoud (textarea, +, kanaal, send) ... */}
+      </form>
+    </div>
+    <div className="px-4 py-2 text-center text-[12px] text-gray-500">
+      Chatpilot kan fouten maken. Controleer belangrijke informatie.
+    </div>
+  </div>
 
-                  {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
-                        <span className="inline-flex items-center gap-2">
-                          <span className="relative inline-block w-6 h-2 align-middle">
-                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
-                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
-                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
-                          </span>
-                          Typen…
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </main>
+</div> {/* einde chatkolom rechts */}
+
+/* HIERNA komt pas de sluiting van de 2-koloms wrapper in je parent:
+</div>   <-- einde 2-koloms wrapper met Sidebar + Chat
+*/
+
 
             {/* Dock */}
 <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -648,5 +670,35 @@ export default function BluelineChatpilot() {
     <ErrorBoundary>
       <InnerChatpilot />
     </ErrorBoundary>
+  );
+}
+// --- Sidebar (links) — design-skelet ---
+function SidebarSkeleton() {
+  // Dummy items — alleen voor design; later vervangen door echte feed
+  const items = [
+    { title: "Customer Care trend: AI hand-offs", source: "CX Today", date: "2025-08-31", summary: "Korte duiding waarom dit relevant is voor supportteams. 2–3 regels." },
+    { title: "Retourbeleid optimaliseren", source: "E-commerce NL", date: "2025-08-29", summary: "Best practices rond retouren en klanttevredenheid, kort samengevat." },
+    { title: "Bezorging & transparency", source: "Logistiek Pro", date: "2025-08-27", summary: "Heldere updates verminderen druk op support." },
+  ];
+
+  return (
+    // Sidebar links (alleen desktop zichtbaar)
+    <aside className="hidden md:flex w-64 shrink-0 border-r border-gray-200 bg-white rounded-2xl md:rounded-none flex-col overflow-hidden">
+      <div className="p-3 border-b">
+        <h2 className="text-sm font-semibold text-gray-800">📢 Nieuwsfeed</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Wekelijks 1–3 items</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {items.map((it, i) => (
+          <div key={i} className="rounded-lg border border-gray-200 p-3 hover:bg-gray-50 transition-colors">
+            <div className="text-sm font-medium text-[#2563eb] line-clamp-2">{it.title}</div>
+            <p className="text-sm text-gray-600 mt-1 line-clamp-3">{it.summary}</p>
+            <p className="text-[11px] text-gray-400 mt-2">
+              {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+            </p>
+          </div>
+        ))}
+      </div>
+    </aside>
   );
 }
