@@ -502,36 +502,28 @@ function InnerChatpilot() {
 <SidebarSkeleton open={feedOpen} />
 
 {/* Chatkolom rechts */}
-<div className="flex-1 flex flex-col ...
-              {/* Header */}
-              <header className="sticky top-0 z-10 border-b border-blue-600/20">
-                <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
-                  <div className="px-5 py-4 flex items-center gap-3">
-                    <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
-                      <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
-                        <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
-                      <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact</p>
-                    </div>
-                    {/* Info (ⓘ) alleen mobiel: opent drawer */}
-                    <button
-                      type="button"
-                      onClick={() => setInfoOpen(true)}
-                      className="md:hidden w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white"
-                      aria-label="Nieuwsfeed openen"
-                    >
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M12 8h.01M11 12h2v4h-2z" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </header>
-
+<div className="flex-1 flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white">
+  {/* Header */}
+  <header className="sticky top-0 z-10 border-b border-blue-600/20">
+    <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
+      <div className="px-5 py-4 flex items-center gap-3">
+        <div
+          aria-hidden
+          className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
+            <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
+          <p className="text-[13px] text-white/85 -mt-0.5">
+            Jouw 24/7 assistent voor klantcontact
+          </p>
+        </div>
+      </div>
+    </div>
+  </header>
               {/* Messages */}
               <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <div className="px-5 py-5">
