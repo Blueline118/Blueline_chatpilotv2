@@ -18,7 +18,7 @@ async function copyToClipboard(text) {
   }
 }
 
-const LS_KEY = "blueline.chatpilot.state.v3";
+const LS_KEY = "blueline.chatpilot.state.v4";
 function safeLoad() {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -33,8 +33,15 @@ function safeSave(obj) {
   } catch {}
 }
 
-/* Tijd-gevoelige + roterende begroetingen */
+/* Dagdeel + roterende subteksten */
 const SUB_ROTATIONS = [
+  // aangeleverd (rouleren)
+  "Wist je dat 70% van klanten service belangrijker vindt dan prijs?",
+  "Klantcontact + koffie = 2x snellere antwoorden (volgens ons eigen onderzoek).",
+  "1 op de 3 klanten stelt een vraag over levering – herkenbaar?",
+  "Chats krijgen gemiddeld 12x sneller een reactie dan e-mails.",
+  "Bedrijven met sterke klantenservice groeien 60% harder dan hun concurrenten.",
+  // bestaande aanvullingen voor variatie
   "Ik help je met snelle, klantvriendelijke antwoorden.",
   "Samen lossen we cases sneller op.",
   "Direct duidelijk, altijd menselijk.",
@@ -43,6 +50,7 @@ const SUB_ROTATIONS = [
 ];
 function timeWord() {
   const h = new Date().getHours();
+  if (h >= 22 || h < 6) return "Hallo"; // nacht → neutraal
   if (h < 12) return "Goedemorgen";
   if (h < 18) return "Goedemiddag";
   return "Goedenavond";
@@ -57,7 +65,9 @@ function extractOrderNumber(s) {
 /* Fallback reply als de server niet kan antwoorden */
 function generateAssistantReply(text, type, tone) {
   const lc = (text || "").toLowerCase();
-  const neg = ["boos","slecht","belachelijk","klacht","niet ontvangen","vertraagd","kapot","beschadigd","annuleren","terugbetalen","refund"].some(w=>lc.includes(w));
+  const neg = [
+    "boos","slecht","belachelijk","klacht","niet ontvangen","vertraagd","kapot","beschadigd","annuleren","terugbetalen","refund",
+  ].some(w=>lc.includes(w));
   const urg = ["dringend","met spoed","urgent","nu","direct","zo snel mogelijk"].some(w=>lc.includes(w));
   const autoTone = tone === "Automatisch" ? (neg || urg ? "Formeel" : "Informeel") : tone;
   const isEmail = type === "E-mail";
@@ -123,12 +133,19 @@ function AppSidebar({ open, onToggleFeed, feedOpen }) {
           onClick={onToggleFeed}
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-blue-50 text-gray-700"
         >
-          <span>📢 Nieuwsfeed</span>
+          {/* Outline megaphone i.p.v. illustratie */}
+          <span className="inline-flex items-center gap-2">
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 10l12-5v14L3 14z"/>
+              <path d="M15 5l6-2v18l-6-2"/>
+            </svg>
+            <span>Nieuwsfeed</span>
+          </span>
           <span className="text-gray-500">{feedOpen ? "▾" : "▸"}</span>
         </button>
         {feedOpen && (
           <div className="ml-2 mt-2 space-y-2">
-            {items.slice(0, 3).map((it, i) => (
+            {items.slice(0,3).map((it, i) => (
               <article key={i} className="rounded-lg border border-blue-100 bg-white p-3 hover:bg-blue-50/40 transition-colors">
                 <div className="text-sm font-medium text-[#2563eb]">{it.title}</div>
                 <p className="text-xs text-gray-600 mt-1">{it.summary}</p>
@@ -166,8 +183,8 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
 
   // Layout state
-  const [sidebarOpen, setSidebarOpen] = useState(true); // desktop: hele rail in/uit
-  const [feedOpen, setFeedOpen] = useState(false); // desktop: collapsible items
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState("chat"); // "chat" | "newsfeed"
 
@@ -178,7 +195,7 @@ function BluelineChatpilotInner() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const [messages, setMessages] = useState([]);
-  const [heroTitle, setHeroTitle] = useState(`${timeWord()}, Samir`);
+  const [heroTitle, setHeroTitle] = useState(timeWord()); // dagdeel, zónder naam
   const [heroSub, setHeroSub] = useState(SUB_ROTATIONS[0]);
 
   const [input, setInput] = useState("");
@@ -197,7 +214,7 @@ function BluelineChatpilotInner() {
   useEffect(() => {
     setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
     const i = setInterval(() => {
-      setHeroTitle(`${timeWord()}, Samir`);
+      setHeroTitle(timeWord());
       setHeroSub(SUB_ROTATIONS[Math.floor(Math.random() * SUB_ROTATIONS.length)]);
     }, 7000);
     return () => clearInterval(i);
@@ -244,18 +261,16 @@ function BluelineChatpilotInner() {
   const openNewsfeedMobile = () => { setMobileView("newsfeed"); setMobileMenuOpen(false); };
   const backToChatMobile = () => setMobileView("chat");
 
-  const hasUserMessage = messages.some((m) => m.role === "user");
-
   return (
     <div className="fixed inset-0 bg-white text-gray-900">
       {/* Desktop sidebar */}
       <AppSidebar open={sidebarOpen} onToggleFeed={() => setFeedOpen((v) => !v)} feedOpen={feedOpen} />
 
-      {/* Main column (volledige breedte) met padding links als sidebar open is */}
+      {/* Main column (volledige breedte) met padding links wanneer sidebar open is */}
       <div className={cx("h-full flex flex-col transition-[padding] duration-300", sidebarOpen ? "md:pl-64" : "md:pl-0")}> 
         {/* Header */}
         <header className="h-14 border-b border-gray-200 flex items-center px-4 md:px-5 bg-white sticky top-0 z-10">
-          {/* Desktop: toggle sidebar knop links (chevron) */}
+          {/* Desktop: toggle sidebar */}
           <button
             type="button"
             className="hidden md:inline-flex -ml-1 mr-2 h-9 w-9 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100"
@@ -283,7 +298,7 @@ function BluelineChatpilotInner() {
           <p className="hidden sm:block ml-3 text-sm text-gray-500">Jouw 24/7 assistent voor klantcontact</p>
         </header>
 
-        {/* Mobile drawer attach hier zodat header erover blijft */}
+        {/* Mobile drawer attach */}
         <MobileDrawer
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
@@ -314,7 +329,7 @@ function BluelineChatpilotInner() {
         {/* Scrollable chat viewport */}
         <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
-            {/* Hero greeting als er nog geen user message is */}
+            {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
               <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
                 <div className="text-3xl md:text-4xl font-semibold text-[#2563eb]">{heroTitle}</div>
@@ -405,8 +420,8 @@ function BluelineChatpilotInner() {
                 {/* Rechts */}
                 <div className="ml-auto pr-3 flex items-center gap-2">
                   {/* Mic (dummy) */}
-                  <button type="button" className="hidden sm:inline-flex w-9 h-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Spraak">
-                    <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Spraak">
+                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z"/>
                       <path d="M19 10v2a7 7 0 01-14 0v-2"/>
                       <path d="M12 19v3"/>
@@ -415,10 +430,10 @@ function BluelineChatpilotInner() {
 
                   {/* Send (fade + delay) */}
                   {showSendDelayed && (
-                    <button type="submit" className={cx("w-9 h-9 rounded-full flex items-center justify-center bg-[#2563eb] text-white shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
-                      <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 2L11 13"/>
-                        <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+                    <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#2563eb] text-white shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 2L11 13" />
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
                       </svg>
                     </button>
                   )}
@@ -433,7 +448,7 @@ function BluelineChatpilotInner() {
       </div>
 
       {/* Mobile drawer lives outside padding so it overlays full */}
-      <MobileDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSelect={(v)=> (v === 'newsfeed' ? openNewsfeedMobile() : setMobileView('chat'))} />
+      <MobileDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSelect={(v)=> (v === 'newsfeed' ? setMobileView('newsfeed') : setMobileView('chat'))} />
     </div>
   );
 }
