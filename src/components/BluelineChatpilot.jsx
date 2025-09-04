@@ -18,9 +18,7 @@ class ErrorBoundary extends React.Component {
         <div className="min-h-screen flex items-center justify-center bg-white text-gray-800 px-4">
           <div className="max-w-md w-full border rounded-xl p-5 shadow-sm">
             <h2 className="text-lg font-semibold mb-2">Er ging iets mis</h2>
-            <p className="text-sm text-gray-600">
-              De interface kon niet geladen worden. Probeer de pagina te verversen.
-            </p>
+            <p className="text-sm text-gray-600">De interface kon niet geladen worden. Probeer de pagina te verversen.</p>
             <button
               type="button"
               onClick={() => this.setState({ showDetails: !this.state.showDetails })}
@@ -29,9 +27,7 @@ class ErrorBoundary extends React.Component {
               {this.state.showDetails ? "Verberg details" : "Toon details"}
             </button>
             {this.state.showDetails && (
-              <pre className="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-auto max-h-40">
-                {this.state.errorMsg}
-              </pre>
+              <pre className="mt-2 text-xs bg-gray-50 p-2 rounded border overflow-auto max-h-40">{this.state.errorMsg}</pre>
             )}
           </div>
         </div>
@@ -42,9 +38,7 @@ class ErrorBoundary extends React.Component {
 }
 
 /* ---------------- Utility ---------------- */
-function cx(...classes) {
-  return classes.filter(Boolean).join(" ");
-}
+const cx = (...args) => args.filter(Boolean).join(" ");
 function autoresizeTextarea(el) {
   if (!el) return;
   el.style.height = "0px";
@@ -66,8 +60,7 @@ function canUseStorage() {
 }
 function safeLoad() {
   try {
-    if (!canUseStorage())
-      return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+    if (!canUseStorage()) return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
     const data = JSON.parse(raw);
@@ -98,7 +91,6 @@ function safeSave(pref) {
 /* ---------------- Fase 2: begroetingen + ringbuffer ---------------- */
 const GREET_COUNT_KEY = "greetingCount";
 const GREET_HIST_KEY = "greetingHist:v1";
-
 const gimmicks = [
   "Tijd om samen de wachtrijen korter te maken.",
   "Hoeveel tickets staan er nog open bij jou?",
@@ -123,7 +115,6 @@ const energizers = [
   "🌈 Vergeet niet: service mag ook gewoon fun zijn.",
   "💪 Service met kracht, energie en plezier!",
 ];
-
 function getDaypartPrefix() {
   try {
     const h = new Date().getHours();
@@ -214,33 +205,12 @@ function generateAssistantReply(text, type, tone) {
     const subject = orderNo ? `Vraag over order #${orderNo}` : `Vraag over je bestelling`;
 
     if (t === "formeel") {
-      return `Onderwerp: ${subject}
-
-Geachte [Naam],
-
-Hartelijk dank voor uw bericht. Wij nemen dit direct in behandeling en komen binnen 1 werkdag bij u terug. Zou u (indien nog niet gedeeld) uw ordernummer en eventuele foto's/bijlagen kunnen toevoegen? Dan helpen wij u zo snel mogelijk verder.
-
-Met vriendelijke groet,
-Blueline Customer Care`;
+      return `Onderwerp: ${subject}\n\n\nGeachte [Naam],\n\n\nHartelijk dank voor uw bericht. Wij nemen dit direct in behandeling en komen binnen 1 werkdag bij u terug. Zou u (indien nog niet gedeeld) uw ordernummer en eventuele foto's/bijlagen kunnen toevoegen? Dan helpen wij u zo snel mogelijk verder.\n\n\nMet vriendelijke groet,\nBlueline Customer Care`;
     }
     if (t === "informeel") {
-      return `Onderwerp: ${subject} 🙌
-
-Hoi [Naam],
-
-Thanks voor je bericht! We gaan er meteen mee aan de slag en komen vandaag nog bij je terug. Kun je (als je dat nog niet deed) je ordernummer en eventueel een foto toevoegen? Dan fixen we het sneller.
-
-Groet,
-Blueline Customer Care`;
+      return `Onderwerp: ${subject} 🙌\n\n\nHoi [Naam],\n\n\nThanks voor je bericht! We gaan er meteen mee aan de slag en komen vandaag nog bij je terug. Kun je (als je dat nog niet deed) je ordernummer en eventueel een foto toevoegen? Dan fixen we het sneller.\n\n\nGroet,\nBlueline Customer Care`;
     }
-    return `Onderwerp: ${subject}
-
-Hi [Naam],
-
-Bedankt voor je bericht. We pakken dit direct op en laten je binnen 1 werkdag iets weten. Zou je je ordernummer en eventuele bijlagen willen delen? Dan helpen we je snel verder.
-
-Hartelijke groet,
-Blueline Customer Care`;
+    return `Onderwerp: ${subject}\n\n\nHi [Naam],\n\n\nBedankt voor je bericht. We pakken dit direct op en laten je binnen 1 werkdag iets weten. Zou je je ordernummer en eventuele bijlagen willen delen? Dan helpen we je snel verder.\n\n\nHartelijke groet,\nBlueline Customer Care`;
   }
 
   if (t === "formeel") {
@@ -250,31 +220,6 @@ Blueline Customer Care`;
     return `Thanks voor je bericht! We checken het gelijk. Stuur je ordernummer en je postcode even mee? Dan geven we je snel een update 🙂`;
   }
   return `Dankjewel voor je bericht! Ik kijk dit meteen voor je na. Als je je ordernummer en postcode deelt, sturen we je snel een update.`;
-}
-
-/* ---------------- Dev self-tests (veilig in prod) ---------------- */
-const IS_DEV =
-  (typeof process !== "undefined" &&
-    process &&
-    process.env &&
-    process.env.NODE_ENV !== "production") ||
-  (typeof __DEV__ !== "undefined" && __DEV__ === true);
-
-function runSelfTests() {
-  try {
-    const baseCases = [
-      { type: "E-mail", tone: "Formeel", text: "Mijn order #12345 is niet geleverd" },
-      { type: "E-mail", tone: "Informeel", text: "Waar blijft m'n bestelling 98765?" },
-      { type: "E-mail", tone: "Formeel", text: "Vraag over retourneren zonder nummer" },
-      { type: "Social Media", tone: "Formeel", text: "Order 4567 niet ontvangen" },
-      { type: "Social Media", tone: "Informeel", text: "Bestelling kapot aangekomen #33333" },
-    ];
-    baseCases.forEach((c) => {
-      const out = generateAssistantReply(c.text, c.type, c.tone);
-      console.assert(typeof out === "string" && out.length > 20, "Invalid output");
-      if (c.type === "E-mail") console.assert(out.startsWith("Onderwerp:"), "Email needs subject");
-    });
-  } catch {}
 }
 
 /* ---------------- Copy helpers ---------------- */
@@ -328,23 +273,104 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
+/* ---------------- Sidebar (desktop) + items helper ---------------- */
+function getSidebarItems() {
+  return [
+    { title: "Customer Care trend: AI hand-offs", source: "CX Today", date: "2025-08-31", summary: "Korte duiding waarom dit relevant is voor supportteams. 2–3 regels." },
+    { title: "Retourbeleid optimaliseren", source: "E-commerce NL", date: "2025-08-29", summary: "Best practices rond retouren en klanttevredenheid, kort samengevat." },
+    { title: "Bezorging & transparency", source: "Logistiek Pro", date: "2025-08-27", summary: "Heldere updates verminderen druk op support." },
+  ];
+}
+function SidebarSkeleton() {
+  const items = getSidebarItems();
+  return (
+    <aside className="hidden md:flex w-64 shrink-0 border-r border-gray-200 bg-white rounded-2xl md:rounded-none flex-col overflow-hidden">
+      <div className="p-3 border-b">
+        <h2 className="text-sm font-semibold text-gray-800">📢 Nieuwsfeed</h2>
+        <p className="text-xs text-gray-500 mt-0.5">Wekelijks 1–3 items</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {items.map((it, i) => (
+          <div key={i} className="rounded-lg border border-gray-200 p-3 hover:bg-gray-50 transition-colors">
+            <div className="text-sm font-medium text-[#2563eb] line-clamp-2">{it.title}</div>
+            <p className="text-sm text-gray-600 mt-1 line-clamp-3">{it.summary}</p>
+            <p className="text-[11px] text-gray-400 mt-2">
+              {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+            </p>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+/* ---------------- Mobile ⓘ Drawer (slide-in) ---------------- */
+function InfoDrawer({ open, onClose }) {
+  const items = getSidebarItems();
+  return (
+    <div className={cx(
+      "md:hidden fixed inset-0 z-50 transition-opacity",
+      open ? "opacity-100" : "pointer-events-none opacity-0"
+    )}>
+      {/* Scrim */}
+      <div
+        className={cx("absolute inset-0 bg-black/30 transition-opacity", open ? "opacity-100" : "opacity-0")}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Panel */}
+      <div
+        className={cx(
+          "absolute left-0 top-0 h-full w-[82%] max-w-[360px] bg-white shadow-xl border-r border-gray-200",
+          "transition-transform duration-300",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Nieuwsfeed"
+      >
+        <div className="p-3 border-b flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">📢 Nieuwsfeed</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Wekelijks 1–3 items</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700"
+            aria-label="Sluiten"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+        <div className="h-[calc(100%-56px)] overflow-y-auto p-3 space-y-3">
+          {items.map((it, i) => (
+            <div key={i} className="rounded-lg border border-gray-200 p-3">
+              <div className="text-sm font-medium text-[#2563eb]">{it.title}</div>
+              <p className="text-sm text-gray-600 mt-1">{it.summary}</p>
+              <p className="text-[11px] text-gray-400 mt-2">
+                {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Hoofdcomponent ---------------- */
 function InnerChatpilot() {
-  const loaded =
-    typeof window !== "undefined"
-      ? safeLoad()
-      : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+  const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
 
   const [messageType, setMessageType] = useState(loaded.messageType);
-  // Tijdelijk: UI heeft geen toonkeuze; altijd Automatisch
-  const tone = "Automatisch";
-
-  // Nieuw: klantprofiel (Standaard of Merrachi)
+  const tone = "Automatisch"; // tijdelijk: UI heeft geen toonkeuze
   const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
-  // Voor het open/dicht klappen van het mini-profielmenu
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false); // mobiele drawer
 
-  // Altijd starten met 1 dynamische begroeting (géén history laden)
   const [messages, setMessages] = useState([
     { role: "assistant", text: getGreeting(), meta: { type: "System", tone: "-" } },
   ]);
@@ -357,8 +383,14 @@ function InnerChatpilot() {
   const listRef = useRef(null);
   const inputRef = useRef(null);
 
+  const IS_DEV = (typeof process !== "undefined" && process?.env?.NODE_ENV !== "production") || false;
   useEffect(() => {
-    if (IS_DEV) runSelfTests();
+    // beperkte self-test
+    try {
+      if (!IS_DEV) return;
+      const out = generateAssistantReply("Mijn order #12345 is vertraagd", "E-mail", "Formeel");
+      if (typeof out !== "string" || out.length < 20) console.warn("Self-test failed");
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -367,9 +399,7 @@ function InnerChatpilot() {
 
   useEffect(() => {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
-    return () => {
-      if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    };
+    return () => copiedTimer.current && clearTimeout(copiedTimer.current);
   }, []);
 
   useEffect(() => {
@@ -381,10 +411,7 @@ function InnerChatpilot() {
     const trimmed = (input || "").trim();
     if (!trimmed) return;
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: trimmed, meta: { type: messageType, tone, profileKey } },
-    ]);
+    setMessages((prev) => [...prev, { role: "user", text: trimmed, meta: { type: messageType, tone, profileKey } }]);
     setInput("");
     if (inputRef.current) autoresizeTextarea(inputRef.current);
 
@@ -396,18 +423,11 @@ function InnerChatpilot() {
         body: JSON.stringify({ userText: trimmed, type: messageType, tone, profileKey }),
       });
       const data = await r.json();
-      const reply =
-        r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } },
-      ]);
+      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
+      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
     } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } },
-      ]);
+      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
     } finally {
       setIsTyping(false);
     }
@@ -422,222 +442,208 @@ function InnerChatpilot() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
       <div className="flex-1">
-        <div className="mx-auto max-w-[760px] px-3 pt-6">
-          <div className="flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white h-[calc(100vh-1rem)]">
-            <header className="sticky top-0 z-10 border-b border-blue-600/20">
-              <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
-                <div className="px-5 py-4 flex items-center gap-3">
-                  <div
-                    aria-hidden
-                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
-                      <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
-                    <p className="text-[13px] text-white/85 -mt-0.5">
-                      Jouw 24/7 assistent voor klantcontact
-                    </p>
+        <div className="mx-auto max-w-[1120px] px-3 pt-6">
+          <div className="h-[calc(100vh-1rem)] flex gap-4">
+            {/* Sidebar links (desktop) */}
+            <SidebarSkeleton />
+
+            {/* Chatkolom rechts */}
+            <div className="flex-1 flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white">
+              {/* Header */}
+              <header className="sticky top-0 z-10 border-b border-blue-600/20">
+                <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
+                  <div className="px-5 py-4 flex items-center gap-3">
+                    <div aria-hidden className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 text-[#2563eb]" fill="currentColor">
+                        <path d="M3 12a9 9 0 1118 0 9 9 0 01-18 0zm7.5-3.75a.75.75 0 011.5 0V12c0 .199-.079.39-.22.53l-2.75 2.75a.75.75 0 11-1.06-1.06l2.53-2.53V8.25z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h1 className="text-lg font-semibold leading-tight text-white">Blueline Chatpilot+</h1>
+                      <p className="text-[13px] text-white/85 -mt-0.5">Jouw 24/7 assistent voor klantcontact</p>
+                    </div>
+                    {/* Info (ⓘ) alleen mobiel: opent drawer */}
+                    <button
+                      type="button"
+                      onClick={() => setInfoOpen(true)}
+                      className="md:hidden w-9 h-9 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white"
+                      aria-label="Nieuwsfeed openen"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 8h.01M11 12h2v4h-2z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
-              </div>
-            </header>
+              </header>
 
-            <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-              <div className="px-5 py-5">
-                <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                  {messages.map((m, idx) => {
-                    const isUser = m.role === "user";
-                    return (
-                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
-                        <div
-                          className={cx(
-                            "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words relative",
-                            isUser
-                              ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
-                              : "bg-gray-100 text-gray-900 border border-gray-200"
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap">{m.text}</p>
+              {/* Messages */}
+              <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div className="px-5 py-5">
+                  <div className="flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
+                    {messages.map((m, idx) => {
+                      const isUser = m.role === "user";
+                      return (
+                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+                          <div
+                            className={cx(
+                              "max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 break-words relative",
+                              isUser
+                                ? "bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white"
+                                : "bg-gray-100 text-gray-900 border border-gray-200"
+                            )}
+                          >
+                            <p className="whitespace-pre-wrap">{m.text}</p>
+                            {!isUser && (
+                              <div className="mt-2 flex justify-end">
+                                <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
 
-                          {/* Copy alleen voor assistent en BINNEN de bubbel, onderin rechts */}
-                          {!isUser && (
-                            <div className="mt-2 flex justify-end">
-                              <CopyButton
-                                id={`msg-${idx}`}
-                                text={m.text}
-                                onCopied={handleCopied}
-                                isCopied={copiedId === `msg-${idx}`}
-                              />
-                            </div>
-                          )}
+                    {isTyping && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="relative inline-block w-6 h-2 align-middle">
+                              <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
+                              <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
+                              <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
+                            </span>
+                            Typen…
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                </div>
+              </main>
 
-                  {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[560px] rounded-2xl shadow-sm px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
-                        <span className="inline-flex items-center gap-2">
-                          <span className="relative inline-block w-6 h-2 align-middle">
-                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"></span>
-                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0s]"></span>
-                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"></span>
-                          </span>
-                          Typen…
-                        </span>
+              {/* Dock + disclaimer */}
+              <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+                <div className="px-5 py-3">
+                  <form onSubmit={handleSend} aria-label="Bericht verzenden">
+                    <div className="relative bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
+                      {/* RĲ 1 — invoerveld */}
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <label htmlFor="message" className="sr-only">Typ een bericht…</label>
+                          <textarea
+                            id="message"
+                            ref={inputRef}
+                            rows={1}
+                            className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-[11px]"
+                            placeholder="Typ een bericht…"
+                            value={input}
+                            onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                            aria-label="Bericht invoeren"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </div>
+
+                      {/* RĲ 2 — + icoon, kanaal-opties links — verzendknop rechts (alleen met tekst) */}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {/* + icoon + profielmenu (opent omhoog) */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setProfileMenuOpen(v => !v)}
+                              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                              title="Klantprofiel kiezen"
+                              aria-haspopup="menu"
+                              aria-expanded={profileMenuOpen}
+                              aria-label="Klantprofiel kiezen"
+                            >
+                              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                                <path d="M12 5v14M5 12h14" />
+                              </svg>
+                            </button>
+
+                            {profileMenuOpen && (
+                              <div
+                                role="menu"
+                                className="absolute z-20 bottom-full mb-2 w-44 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => { setProfileKey('default'); setProfileMenuOpen(false); }}
+                                  className={cx(
+                                    "block w-full text-left px-3 py-2 text-sm transition-colors",
+                                    profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                                  )}
+                                  role="menuitem"
+                                >
+                                  Standaard
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setProfileKey('merrachi'); setProfileMenuOpen(false); }}
+                                  className={cx(
+                                    "block w-full text-left px-3 py-2 text-sm transition-colors",
+                                    profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                                  )}
+                                  role="menuitem"
+                                >
+                                  Merrachi
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Kanaal-opties (tekst-only met hover-balloon) */}
+                          <div className="flex items-center gap-3">
+                            {["Social Media", "E-mail"].map((t) => {
+                              const selected = messageType === t;
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onClick={() => setMessageType(t)}
+                                  className={cx(
+                                    "text-sm px-2 py-1 rounded-full transition-colors",
+                                    selected ? "text-gray-900 font-medium" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                                  )}
+                                >
+                                  {t}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Verzendknop met fade-in/out + delay */}
+                        <div className={cx("transition-all duration-200", input.trim() ? "opacity-100 scale-100 delay-0" : "opacity-0 scale-90 pointer-events-none delay-200")}> 
+                          <button
+                            type="submit"
+                            aria-label="Verzenden"
+                            className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
+                          >
+                            <svg viewBox="0 0 24 24" className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M22 2L11 13" />
+                              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  )}
+                  </form>
                 </div>
+                <div className="px-4 py-2 text-center text-[12px] text-gray-500">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
               </div>
-            </main>
-
-            {/* Dock */}
-<div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-  <div className="px-5 py-3">
-    <form onSubmit={handleSend} aria-label="Bericht verzenden">
-      <div className="relative bg-white border border-[#e5e7eb] rounded-[16px] px-3 py-2 focus-within:ring-2 focus-within:ring-[#2563eb]/25">
-        {/* RĲ 1 — invoerveld */}
-        <div className="flex items-start gap-2">
-          <div className="flex-1">
-            <label htmlFor="message" className="sr-only">Typ een bericht…</label>
-            <textarea
-              id="message"
-              ref={inputRef}
-              rows={1}
-              className="w-full bg-transparent focus:outline-none resize-none min-h-[52px] text-[16px] md:text-[17px] leading-[1.45] placeholder:text-gray-400 placeholder:text-[16px] md:placeholder:text-[17px] pl-[11px]"
-              placeholder="Typ een bericht…"
-              value={input}
-              onChange={(e) => { setInput(e.target.value); autoresizeTextarea(e.target); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              aria-label="Bericht invoeren"
-              autoComplete="off"
-            />
-          </div>
-        </div>
-
-        {/* RĲ 2 — + icoon, kanaal-opties links — verzendknop rechts (alleen met tekst) */}
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* + icoon + profielmenu (opent omhoog) */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setProfileMenuOpen(v => !v)}
-                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
-                title="Klantprofiel kiezen"
-                aria-haspopup="menu"
-                aria-expanded={profileMenuOpen}
-                aria-label="Klantprofiel kiezen"
-              >
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
-
-              {profileMenuOpen && (
-                <div
-                  role="menu"
-                  className="absolute z-20 bottom-full mb-2 w-44 rounded-lg border border-gray-200 bg-white shadow-md overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => { setProfileKey('default'); setProfileMenuOpen(false); }}
-                    className={cx(
-                      "block w-full text-left px-3 py-2 text-sm transition-colors",
-                      profileKey === "default" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                    )}
-                    role="menuitem"
-                  >
-                    Standaard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setProfileKey('merrachi'); setProfileMenuOpen(false); }}
-                    className={cx(
-                      "block w-full text-left px-3 py-2 text-sm transition-colors",
-                      profileKey === "merrachi" ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                    )}
-                    role="menuitem"
-                  >
-                    Merrachi
-                  </button>
-                </div>
-              )}
             </div>
-
-            {/* Kanaal-opties (tekst-only met hover-balloon) */}
-            <div className="flex items-center gap-3">
-              {["Social Media", "E-mail"].map((t) => {
-                const selected = messageType === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setMessageType(t)}
-                    className={cx(
-                      "text-sm px-2 py-1 rounded-full transition-colors",
-                      selected
-                        ? "text-gray-900 font-medium"
-                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-                    )}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Verzendknop met fade-in/out, delay, scale en hover-rotatie */}
-<div
-  className={cx(
-    "transition-all duration-200",
-    input.trim()
-      ? "opacity-100 scale-100 delay-0"
-      : "opacity-0 scale-90 pointer-events-none delay-200"
-  )}
->
-  <button
-    type="submit"
-    aria-label="Verzenden"
-   className="w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-[#2563eb] shadow-sm transition-all duration-200 hover:brightness-110 hover:scale-[1.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb]/40"
-  >
-    <svg
-  viewBox="0 0 24 24"
-  className="w-4 h-4 md:w-5 md:h-5"
-  fill="none"
-  stroke="white"
-  /* iets dunner, helpt tegen clipping op small */
-  strokeWidth={2}
-  strokeLinecap="round"
-  strokeLinejoin="round"
-  aria-hidden="true"
->
-      <path d="M22 2L11 13" />
-      <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-    </svg>
-  </button>
-</div>
-
-        </div>
-      </div>
-    </form>
-  </div>
-</div>
-{/* /Dock */}
-
-          </div>
-
-          <div className="mt-2 text-center text-[12px] text-gray-500">
-            Chatpilot kan fouten maken. Controleer belangrijke informatie.
           </div>
         </div>
       </div>
+
+      {/* Mobile ⓘ Drawer */}
+      <InfoDrawer open={infoOpen} onClose={() => setInfoOpen(false)} />
     </div>
   );
 }
