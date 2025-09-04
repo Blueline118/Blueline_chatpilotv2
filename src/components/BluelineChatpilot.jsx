@@ -35,7 +35,7 @@ function safeSave(obj) {
 
 /* Dagdeel + roterende subteksten */
 const SUB_ROTATIONS = [
-   // bestaande aanvullingen voor variatie
+  // bestaande aanvullingen voor variatie
   "Ik help je met snelle, klantvriendelijke antwoorden.",
   "Samen lossen we cases sneller op.",
   "Direct duidelijk, altijd menselijk.",
@@ -92,7 +92,10 @@ function CopyButton({ id, text, onCopied, isCopied }) {
     <button
       type="button"
       onClick={async () => { const ok = await copyToClipboard(text || ""); if (ok) onCopied?.(id); }}
-      className={cx("inline-flex items-center gap-1 text-[11px] transition-colors select-none", isCopied ? "text-emerald-600" : "text-gray-500 hover:text-gray-700")}
+      className={cx(
+        "inline-flex items-center gap-1 text-[11px] transition-colors select-none",
+        isCopied ? "text-emerald-600" : "text-[#65676a] hover:text-[#194297]"
+      )}
       aria-label={isCopied ? "Gekopieerd" : "Kopieer bericht"}
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
@@ -112,20 +115,24 @@ function AppSidebar({ open, onToggleFeed, feedOpen }) {
   return (
     <aside
       className={cx(
-        "hidden md:flex fixed left-0 top-0 bottom-0 z-30 w-64 border-r border-blue-100",
-        "bg-gradient-to-b from-[#eaf2ff] to-transparent backdrop-blur-[1px] flex-col transition-transform duration-300",
+        "hidden md:flex fixed left-0 top-0 bottom-0 z-30 w-64 border-r",
+        // Accentlijn rechts in turquoise-blauw
+        "border-[#04a0de]",
+        // Blueline gradient: donker (#194297) → licht (#f2f8ff)
+        "bg-gradient-to-b from-[#194297] to-[#f2f8ff]",
+        "backdrop-blur-[1px] flex-col transition-transform duration-300",
         open ? "translate-x-0" : "-translate-x-full"
       )}
     >
-      <div className="px-4 py-3 border-b border-blue-100">
-        <div className="text-sm font-semibold text-[#2563eb]">Blueline Chatpilot</div>
-        <p className="text-xs text-[#194297]">Jouw 24/7 assistent voor klantcontact</p>
+      <div className="px-4 py-3 border-b border-white/20">
+        <div className="text-sm font-semibold text-white">Blueline Chatpilot</div>
+        <p className="text-xs text-white/80">Jouw 24/7 assistent voor klantcontact</p>
       </div>
       <nav className="p-3 flex-1 overflow-y-auto space-y-2">
         <button
           type="button"
           onClick={onToggleFeed}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-blue-50 text-gray-700"
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[#65676a] hover:text-[#2563eb] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)] bg-white/60 hover:bg-white/80 transition"
         >
           {/* Outline megaphone i.p.v. illustratie */}
           <span className="inline-flex items-center gap-2">
@@ -135,15 +142,15 @@ function AppSidebar({ open, onToggleFeed, feedOpen }) {
             </svg>
             <span>Nieuwsfeed</span>
           </span>
-          <span className="text-gray-500">{feedOpen ? "▾" : "▸"}</span>
+          <span className="text-[#04a0de]">{feedOpen ? "▾" : "▸"}</span>
         </button>
         {feedOpen && (
           <div className="ml-2 mt-2 space-y-2">
             {items.slice(0,3).map((it, i) => (
-              <article key={i} className="rounded-lg border border-blue-100 bg-white p-3 hover:bg-blue-50/40 transition-colors">
-                <div className="text-sm font-medium text-[#2563eb]">{it.title}</div>
-                <p className="text-xs text-gray-600 mt-1">{it.summary}</p>
-                <p className="text-[11px] text-gray-400 mt-1">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
+              <article key={i} className="rounded-lg border border-white/60 bg-white p-3 hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)] transition-shadow">
+                <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
+                <p className="text-xs text-[#66676b] mt-1">{it.summary}</p>
+                <p className="text-[11px] text-[#04a0de] mt-1">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
               </article>
             ))}
           </div>
@@ -160,13 +167,13 @@ function MobileDrawer({ open, onClose, onSelect }) {
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
       <div className={cx("absolute left-0 top-0 h-full w-[82%] max-w-[360px] bg-white shadow-xl border-r border-gray-200 p-4", open ? "translate-x-0" : "-translate-x-full", "transition-transform duration-300")}> 
         <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold">Menu</div>
+          <div className="text-sm font-semibold text-[#194297]">Menu</div>
           <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={onClose} aria-label="Sluiten">
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100" onClick={() => { onSelect("newsfeed"); onClose(); }}>📢 Nieuwsfeed</button>
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100" onClick={() => { onSelect("chat"); onClose(); }}>💬 Chat</button>
+        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("newsfeed"); onClose(); }}>📢 Nieuwsfeed</button>
+        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("chat"); onClose(); }}>💬 Chat</button>
       </div>
     </div>
   );
@@ -256,7 +263,7 @@ function BluelineChatpilotInner() {
   const backToChatMobile = () => setMobileView("chat");
 
   return (
-    <div className="fixed inset-0 bg-white text-gray-900">
+    <div className="fixed inset-0 bg-white text-[#65676a]">
       {/* Desktop sidebar */}
       <AppSidebar open={sidebarOpen} onToggleFeed={() => setFeedOpen((v) => !v)} feedOpen={feedOpen} />
 
@@ -267,7 +274,7 @@ function BluelineChatpilotInner() {
           {/* Desktop: toggle sidebar */}
           <button
             type="button"
-            className="hidden md:inline-flex -ml-1 mr-2 h-9 w-9 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100"
+            className="hidden md:inline-flex -ml-1 mr-2 h-9 w-9 items-center justify-center rounded-lg text-[#65676a] hover:bg-gray-100"
             aria-label={sidebarOpen ? "Zijbalk verbergen" : "Zijbalk tonen"}
             onClick={() => setSidebarOpen((v) => !v)}
           >
@@ -281,15 +288,15 @@ function BluelineChatpilotInner() {
           {/* Mobile hamburger */}
           <button
             type="button"
-            className="md:hidden -ml-1 mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-700 hover:bg-gray-100"
+            className="md:hidden -ml-1 mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#65676a] hover:bg-gray-100"
             aria-label="Menu"
             onClick={() => setMobileMenuOpen(true)}
           >
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           </button>
 
-          <h1 className="text-[15px] md:text-base font-semibold text-[#2563eb]">Blueline Chatpilot</h1>
-          <p className="hidden sm:block ml-3 text-sm text-gray-500">Jouw 24/7 assistent voor klantcontact</p>
+          <h1 className="text-[15px] md:text-base font-semibold text-[#194297]">Blueline Chatpilot</h1>
+          <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
         </header>
 
         {/* Mobile drawer attach */}
@@ -306,14 +313,14 @@ function BluelineChatpilotInner() {
               <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={backToChatMobile} aria-label="Terug">
                 <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
-              <div className="text-sm font-semibold">Nieuwsfeed</div>
+              <div className="text-sm font-semibold text-[#194297]">Nieuwsfeed</div>
             </div>
             <div className="p-3 space-y-3 overflow-y-auto h-[calc(100vh-56px)]">
               {getSidebarItems().map((it, i) => (
                 <article key={i} className="rounded-lg border border-gray-200 p-3">
-                  <div className="text-sm font-medium text-[#2563eb]">{it.title}</div>
-                  <p className="text-sm text-gray-600 mt-1">{it.summary}</p>
-                  <p className="text-[11px] text-gray-400 mt-2">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
+                  <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
+                  <p className="text-sm text-[#66676b] mt-1">{it.summary}</p>
+                  <p className="text-[11px] text-[#04a0de] mt-2">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
                 </article>
               ))}
             </div>
@@ -326,8 +333,8 @@ function BluelineChatpilotInner() {
             {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
               <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-                <div className="text-3xl md:text-4xl font-semibold text-[#2563eb]">{heroTitle}</div>
-                <div className="mt-2 text-sm text-gray-500">{heroSub}</div>
+                <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
+                <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
               </div>
             ) : (
               <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
@@ -335,7 +342,12 @@ function BluelineChatpilotInner() {
                   const isUser = m.role === "user";
                   return (
                     <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                      <div className={cx("max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words", isUser ? "bg-[#2563eb] text-white" : "bg-gray-100 text-gray-900 border border-gray-200")}>{m.text}</div>
+                      <div className={cx(
+                        "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                        isUser
+                          ? "bg-[#2563eb] text-white"
+                          : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                      )}>{m.text}</div>
                       {!isUser && (
                         <div className="-mt-1 ml-2 self-end"> 
                           <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
@@ -346,11 +358,11 @@ function BluelineChatpilotInner() {
                 })}
                 {isTyping && (
                   <div className="flex justify-start">
-                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-gray-100 text-gray-900 border border-gray-200">
+                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
                       <span className="relative inline-block w-6 h-2 align-middle">
-                        <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]"/>
-                        <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce"/>
-                        <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]"/>
+                        <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
+                        <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
+                        <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
                       </span>
                       <span className="ml-2">Typen…</span>
                     </div>
@@ -373,7 +385,7 @@ function BluelineChatpilotInner() {
                   value={input}
                   onChange={onInputChange}
                   placeholder="Typ een bericht..."
-                  className="w-full resize-none outline-none placeholder:text-gray-400 placeholder:text-[15px] text-[15px] leading-6"
+                  className="w-full resize-none outline-none placeholder:text-[#66676b] placeholder:text-[15px] text-[15px] leading-6"
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 />
               </div>
@@ -383,7 +395,7 @@ function BluelineChatpilotInner() {
                 {/* Links */}
                 <div className="pl-4 flex items-center gap-3 relative">
                   {/* plus */}
-                  <button type="button" className="w-5 h-5 text-gray-400 hover:text-gray-600" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
+                  <button type="button" className="w-5 h-5 text-[#65676a] hover:text-[#194297]" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
                     <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
                   </button>
 
@@ -395,7 +407,7 @@ function BluelineChatpilotInner() {
                           key={p.key}
                           type="button"
                           onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
-                          className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-gray-100", profileKey === p.key && "font-semibold text-gray-900")}
+                          className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
                         >
                           {p.label}
                         </button>
@@ -406,7 +418,7 @@ function BluelineChatpilotInner() {
                   {/* Type toggles */}
                   <div className="flex items-center gap-4 text-[14px]">
                     {["Social Media","E-mail"].map((t) => (
-                      <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-gray-900 font-semibold" : "text-gray-500 hover:bg-gray-100")}>{t}</button>
+                      <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
                     ))}
                   </div>
                 </div>
@@ -414,7 +426,7 @@ function BluelineChatpilotInner() {
                 {/* Rechts */}
                 <div className="ml-auto pr-3 flex items-center gap-2">
                   {/* Mic (dummy) */}
-                  <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Spraak">
+                  <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-[#65676a] hover:bg-[#f2f8ff]" aria-label="Spraak">
                     <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z"/>
                       <path d="M19 10v2a7 7 0 01-14 0v-2"/>
@@ -424,8 +436,8 @@ function BluelineChatpilotInner() {
 
                   {/* Send (fade + delay) */}
                   {showSendDelayed && (
-                    <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#2563eb] text-white shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
-                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f8ff] text-[#194297] shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 2L11 13" />
                         <path d="M22 2L15 22L11 13L2 9L22 2Z" />
                       </svg>
@@ -437,7 +449,7 @@ function BluelineChatpilotInner() {
           </form>
 
           {/* Disclaimer */}
-          <div className="text-center text-[12px] text-gray-500 pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
+          <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
         </div>
       </div>
 
@@ -456,8 +468,8 @@ class ErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen flex items-center justify-center p-6 text-center">
           <div className="max-w-md">
-            <h2 className="text-lg font-semibold mb-2">Er ging iets mis</h2>
-            <p className="text-gray-600">Ververs de pagina en probeer het opnieuw.</p>
+            <h2 className="text-lg font-semibold mb-2 text-[#194297]">Er ging iets mis</h2>
+            <p className="text-[#66676b]">Ververs de pagina en probeer het opnieuw.</p>
           </div>
         </div>
       );
