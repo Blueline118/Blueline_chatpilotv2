@@ -1,5 +1,51 @@
 import React, { useEffect, useRef, useState } from "react";
 
+// --- Linker menurail (desktop) ---
+function LeftRail({ feedOpen, onToggleFeed }) {
+  const IconBtn = ({ label, children, active, onClick }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={cx(
+        "w-10 h-10 rounded-xl flex items-center justify-center",
+        "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
+        active ? "bg-gray-100 text-gray-800" : ""
+      )}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <nav className="hidden md:flex w-14 shrink-0 rounded-2xl border border-gray-200 bg-white shadow-sm p-2 flex-col items-center gap-2">
+      {/* Home (placeholder) */}
+      <IconBtn label="Home">
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M3 11l9-7 9 7" />
+          <path d="M9 22V12h6v10" />
+        </svg>
+      </IconBtn>
+
+      {/* Nieuwsfeed toggle */}
+      <IconBtn label="Nieuwsfeed" active={feedOpen} onClick={onToggleFeed}>
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M4 6h16M4 12h10M4 18h16" />
+        </svg>
+      </IconBtn>
+
+      {/* Instellingen (placeholder) */}
+      <IconBtn label="Instellingen">
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.12a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.12a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06A2 2 0 016.07 2.3l.06.06c.47.47 1.14.62 1.82.33H8a1.65 1.65 0 001-1.51V1a2 2 0 014 0v.12c0 .67.39 1.28 1 1.51.68.29 1.35.14 1.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06c-.47.47-.62 1.14-.33 1.82.23.61.84 1 1.51 1H21a2 2 0 010 4h-.12c-.67 0-1.28.39-1.51 1z" />
+        </svg>
+      </IconBtn>
+    </nav>
+  );
+}
+
 /* ---------------- Error Boundary (voorkomt wit scherm) ---------------- */
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -281,10 +327,14 @@ function getSidebarItems() {
     { title: "Bezorging & transparency", source: "Logistiek Pro", date: "2025-08-27", summary: "Heldere updates verminderen druk op support." },
   ];
 }
-function SidebarSkeleton() {
+function SidebarSkeleton({ open = true }) {
   const items = getSidebarItems();
+  if (!open) {
+    // smalle spacer zodat chat visueel niet “plakt” tegen de rail
+    return <div className="hidden md:block w-2" aria-hidden />;
+  }
   return (
-    <aside className="hidden md:flex w-64 shrink-0 border-r border-gray-200 bg-white rounded-2xl md:rounded-none flex-col overflow-hidden">
+    <aside className="hidden md:flex w-64 shrink-0 border border-gray-200 bg-white rounded-2xl flex-col overflow-hidden shadow-sm">
       <div className="p-3 border-b">
         <h2 className="text-sm font-semibold text-gray-800">📢 Nieuwsfeed</h2>
         <p className="text-xs text-gray-500 mt-0.5">Wekelijks 1–3 items</p>
@@ -369,6 +419,7 @@ function InnerChatpilot() {
   const tone = "Automatisch"; // tijdelijk: UI heeft geen toonkeuze
   const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(true);
   const [infoOpen, setInfoOpen] = useState(false); // mobiele drawer
 
   const [messages, setMessages] = useState([
@@ -442,13 +493,16 @@ function InnerChatpilot() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#f6f7fb] to-white text-gray-900">
       <div className="flex-1">
-        <div className="mx-auto max-w-[1120px] px-3 pt-6">
-          <div className="h-[calc(100vh-1rem)] flex gap-4">
-            {/* Sidebar links (desktop) */}
-            <SidebarSkeleton />
+        <div className="mx-auto max-w-[1280px] px-3 pt-6">
+          <div className="h-[calc(100vh-1rem)] flex gap-6">
+            {/* Linker menurail (desktop) */}
+<LeftRail feedOpen={feedOpen} onToggleFeed={() => setFeedOpen(v => !v)} />
 
-            {/* Chatkolom rechts */}
-            <div className="flex-1 flex flex-col rounded-2xl border border-gray-200 shadow-lg bg-white">
+{/* Nieuwsfeed (desktop) */}
+<SidebarSkeleton open={feedOpen} />
+
+{/* Chatkolom rechts */}
+<div className="flex-1 flex flex-col ...
               {/* Header */}
               <header className="sticky top-0 z-10 border-b border-blue-600/20">
                 <div className="bg-gradient-to-r from-[#2563eb] to-[#1e40af]">
