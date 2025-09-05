@@ -158,7 +158,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           <span className="font-medium">Nieuwe chat</span>
         </button>
 
-        {/* Nieuwsfeed */}
+        {/* Insights */}
         <button
           type="button"
           onClick={onToggleFeed}
@@ -169,7 +169,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
             </svg>
-            Nieuwsfeed
+            Insights
           </span>
           <span className="text-[#04a0de] text-sm">{feedOpen ? "open" : "dicht"}</span>
         </button>
@@ -213,7 +213,7 @@ function MobileDrawer({ open, onClose, onSelect }) {
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </div>
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("newsfeed"); onClose(); }}>📢 Nieuwsfeed</button>
+        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("newsfeed"); onClose(); }}>📢 Insights</button>
         <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("chat"); onClose(); }}>💬 Chat</button>
       </div>
     </div>
@@ -365,7 +365,7 @@ function BluelineChatpilotInner() {
               <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={backToChatMobile} aria-label="Terug">
                 <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
-              <div className="text-sm font-semibold text-[#194297]">Nieuwsfeed</div>
+              <div className="text-sm font-semibold text-[#194297]">Insights</div>
             </div>
             <div className="p-3 space-y-3 overflow-y-auto h-[calc(100vh-56px)]">
               {getSidebarItems().map((it, i) => (
