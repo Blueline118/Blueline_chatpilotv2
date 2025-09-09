@@ -108,28 +108,99 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
-function BluelineChatpilotInner() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  const [feedOpen, setFeedOpen] = useState(false);
+/******************** Sidebar (desktop) ********************/
+function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+  // Breedtes: 256 open, 56 dicht (alleen iconen)
+  const sidebarWidth = expanded ? 256 : 56;
 
-  // zelfde breedtes als in AppSidebar
-  const sidebarWidth = sidebarExpanded ? 256 : 56;
+  const items = [
+    { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
+    { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
+    { title: "Bezorging & transparency", summary: "Heldere updates verminderen druk.", source: "Logistiek Pro", date: "2025-08-27" },
+  ];
 
   return (
-    <div className="fixed inset-0 bg-white text-[#65676a] flex">
-      <AppSidebar
-        expanded={sidebarExpanded}
-        onToggleSidebar={() => setSidebarExpanded(v => !v)}
-        onToggleFeed={() => setFeedOpen(v => !v)}
-        feedOpen={feedOpen}
-        onNewChat={() => { /* focus input etc. */ }}
-      />
-
-      {/* LET OP: margin-left nu via inline style, NIET via Tailwind ml-klassen */}
-      <div className="flex-1 flex flex-col transition-[margin] duration-300" style={{ marginLeft: sidebarWidth }}>
-        {/* ... jouw header / main / dock ongewijzigd ... */}
+    <aside
+      className={cx(
+        "hidden md:flex fixed inset-y-0 left-0 z-30",
+        "bg-[#f9fafb] border-r border-gray-200 shadow-sm",
+        "flex-col transition-[width] duration-300 ease-out"
+      )}
+      style={{ width: sidebarWidth }}
+      aria-expanded={expanded}
+    >
+      {/* Toggle bovenin (subtiel, modern) */}
+      <div className="h-14 flex items-center justify-end px-2">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="h-7 w-7 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
+          aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+          title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+        >
+          {/* Split-pane icoon (GPT-achtig) */}
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="12" y1="4" x2="12" y2="20" />
+          </svg>
+        </button>
       </div>
-    </div>
+
+      {/* Acties – géén borders, wel hover */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-3 space-y-1">
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#194297] hover:bg-gray-100"
+        >
+          {/* Pen/pad icoon */}
+          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+          </svg>
+          {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleFeed}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#65676a] hover:bg-gray-100"
+        >
+          {/* Insights icoon (outline) */}
+          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+          </svg>
+          {expanded && <span className="whitespace-nowrap">Insights</span>}
+        </button>
+
+        {/* Feed items alleen tonen als open én expanded */}
+        {feedOpen && expanded && (
+          <div className="ml-1 mt-2 space-y-2">
+            {items.map((it, i) => (
+              <article key={i} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
+                <p className="text-xs text-[#66676b] mt-1">{it.summary}</p>
+                <p className="text-[11px] text-[#04a0de] mt-1">
+                  {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </nav>
+
+      {/* Profiel onderaan alleen in expanded */}
+      {expanded && (
+        <div className="mt-auto p-3 border-t border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
+            <div>
+              <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
+              <div className="text-[11px] text-[#66676b]">Profiel actief</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
 
