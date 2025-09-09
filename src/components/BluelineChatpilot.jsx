@@ -109,21 +109,19 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+// NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
+function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+  const expanded = !!open;
   // Breedtes: 256 open, 56 dicht (alleen iconen)
   const sidebarWidth = expanded ? 256 : 56;
 
-  const items = [
-    { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
-    { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
-    { title: "Bezorging & transparency", summary: "Heldere updates verminderen druk.", source: "Logistiek Pro", date: "2025-08-27" },
-  ];
+  const items = getSidebarItems();
 
   return (
     <aside
       className={cx(
         "hidden md:flex fixed inset-y-0 left-0 z-30",
-        "bg-[#f9fafb] border-r border-gray-200 shadow-sm",
+        "bg-[#f7f8fa] border-r border-gray-200 shadow-sm",
         "flex-col transition-[width] duration-300 ease-out"
       )}
       style={{ width: sidebarWidth }}
@@ -151,10 +149,10 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         <button
           type="button"
           onClick={onNewChat}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#194297] hover:bg-gray-100"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#194297] hover:bg-gray-100"
         >
           {/* Pen/pad icoon */}
-          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
           </svg>
           {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
@@ -163,10 +161,10 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         <button
           type="button"
           onClick={onToggleFeed}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-[#65676a] hover:bg-gray-100"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#65676a] hover:bg-gray-100"
         >
           {/* Insights icoon (outline) */}
-          <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
           </svg>
           {expanded && <span className="whitespace-nowrap">Insights</span>}
@@ -342,7 +340,7 @@ function BluelineChatpilotInner() {
       {/* Main column met linker marge wanneer sidebar (gedeeltelijk) zichtbaar is */}
       <div className={cx(
         "h-full flex flex-col transition-[margin] duration-300",
-        sidebarOpen ? "md:ml-64" : "md:ml-12"
+        sidebarOpen ? "md:ml-64" : "md:ml-14"
       )}>
         {/* Header */}
         <header className="h-14 border-b border-gray-200 flex items-center px-4 md:px-5 bg-white sticky top-0 z-10">
