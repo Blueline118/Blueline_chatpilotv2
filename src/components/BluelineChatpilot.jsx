@@ -138,15 +138,6 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
     <line x1="12" y1="4" x2="12" y2="20" />
   </svg>
 </button>
-
-          {/* “Sidebar” toggle-icoon (à la GPT) */}
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            {/* linker paneel */}
-            <rect x="3" y="4" width="7" height="16" rx="2"></rect>
-            {/* hoofdcontent */}
-            <rect x="11" y="4" width="10" height="16" rx="2"></rect>
-          </svg>
-        </button>
       </div>
 
       {/* Content verbergen/tonen afhankelijk van expanded */}
