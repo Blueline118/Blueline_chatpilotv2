@@ -35,13 +35,11 @@ function safeSave(obj) {
 
 /* Dagdeel + roterende subteksten (geen naam) */
 const SUB_ROTATIONS = [
-  "Wist je dat 70% van klanten service belangrijker vindt dan prijs?",
-  "Klantcontact + koffie = 2x snellere antwoorden (volgens ons eigen onderzoek).",
-  "1 op de 3 klanten stelt een vraag over levering – herkenbaar?",
-  "Chats krijgen gemiddeld 12x sneller een reactie dan e-mails.",
-  "Bedrijven met sterke klantenservice groeien 60% harder dan hun concurrenten.",
-  "Direct duidelijk, altijd menselijk.",
+  "Ik help je met snelle, klantvriendelijke antwoorden.",
   "Samen lossen we cases sneller op.",
+  "Direct duidelijk, altijd menselijk.",
+  "Klaar voor empathische support?",
+  "Even sparren over je antwoord?",
 ];
 function timeWord() {
   const h = new Date().getHours();
