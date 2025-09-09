@@ -557,3 +557,7 @@ export default function BluelineChatpilot(){
     </ErrorBoundary>
   );
 }
+<script
+src='//eu.fw-cdn.com/12945358/902902.js'
+chat='true' widgetId='84fae154-7962-4fd7-97c3-a1c89dcb2aa1'>
+</script>
