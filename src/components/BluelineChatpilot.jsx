@@ -109,7 +109,17 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+function AppSidebar({
+  open,            // <- bestaande prop in jouw app
+  expanded,        // <- nieuwe naam die soms gebruikt werd
+  onToggleSidebar,
+  onToggleFeed,
+  feedOpen,
+  onNewChat,
+}) {
+  // Backward compatible: gebruik 'expanded' als die is gezet, anders 'open'
+  const isOpen = typeof expanded === "boolean" ? expanded : !!open;
+
   const items = [
     { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
     { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
@@ -120,21 +130,21 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
     <aside
       className={cx(
         "hidden md:flex fixed left-0 top-0 bottom-0 z-30 border-r border-[#04a0de]/30",
-        // zachter off-white paneel met subtiele diepte; geen afzonderlijke 'header-lijn'
+        // zacht off-white paneel
         "bg-gradient-to-b from-[#fbfcff] via-[#f8faff] to-[#f6f8ff]",
         "flex-col transition-all duration-300 shadow-[0_1px_0_rgba(25,66,151,0.04)]",
-        expanded ? "w-64" : "w-12"
+        isOpen ? "w-64" : "w-12"
       )}
     >
-      {/* Toggle bovenin (klein, embedded) */}
+      {/* Klein, embedded toggle bovenin */}
       <div className="h-14 flex items-center justify-end px-2">
         <button
           type="button"
           onClick={onToggleSidebar}
           className="h-7 w-7 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
-          aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+          aria-label={isOpen ? "Zijbalk verbergen" : "Zijbalk tonen"}
         >
-          {/* modern split-pane icoon (GPT-achtig) */}
+          {/* GPT-achtig split-pane icoon */}
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="4" width="18" height="16" rx="2" />
             <line x1="12" y1="4" x2="12" y2="20" />
@@ -142,15 +152,14 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         </button>
       </div>
 
-      {/* Acties (iets kleiner lettertype en compacter) */}
+      {/* Acties — alleen zichtbaar als open */}
       <nav
         className={cx(
-          "flex-1 overflow-y-auto px-2 pb-3 space-y-2",
-          expanded ? "opacity-100" : "opacity-0 pointer-events-none",
-          "transition-opacity duration-200"
+          "flex-1 overflow-y-auto px-2 pb-3 space-y-2 transition-opacity duration-200",
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
       >
-        {/* Nieuwe chat */}
+        {/* Nieuwe chat (iets kleinere tekst/padding) */}
         <button
           type="button"
           onClick={onNewChat}
@@ -175,7 +184,7 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         </button>
 
         {/* Feed-cards */}
-        {feedOpen && expanded && (
+        {feedOpen && isOpen && (
           <div className="ml-1 mt-2 space-y-2">
             {items.map((it, i) => (
               <article key={i} className="rounded-lg border border-gray-200 bg-white p-3 hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
@@ -190,8 +199,8 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         )}
       </nav>
 
-      {/* Profiel onderaan (ongewijzigd) */}
-      {expanded && (
+      {/* Profiel onderaan — alleen als open */}
+      {isOpen && (
         <div className="mt-auto p-3 border-t border-gray-200">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
