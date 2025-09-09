@@ -35,15 +35,17 @@ function safeSave(obj) {
 
 /* Dagdeel + roterende subteksten (geen naam) */
 const SUB_ROTATIONS = [
-  "Ik help je met snelle, klantvriendelijke antwoorden.",
-  "Samen lossen we cases sneller op.",
+  "Wist je dat 70% van klanten service belangrijker vindt dan prijs?",
+  "Klantcontact + koffie = 2x snellere antwoorden (volgens ons eigen onderzoek).",
+  "1 op de 3 klanten stelt een vraag over levering – herkenbaar?",
+  "Chats krijgen gemiddeld 12x sneller een reactie dan e-mails.",
+  "Bedrijven met sterke klantenservice groeien 60% harder dan hun concurrenten.",
   "Direct duidelijk, altijd menselijk.",
-  "Klaar voor empathische support?",
-  "Even sparren over je antwoord?",
+  "Samen lossen we cases sneller op.",
 ];
 function timeWord() {
   const h = new Date().getHours();
-  if (h >= 23 || h < 6) return "Hallo"; // nacht → neutraal
+  if (h >= 22 || h < 6) return "Hallo"; // nacht → neutraal
   if (h < 12) return "Goedemorgen";
   if (h < 18) return "Goedemiddag";
   return "Goedenavond";
@@ -109,38 +111,35 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const items = getSidebarItems();
-
   return (
     <aside
-  className={cx(
-    "hidden md:flex fixed left-0 top-0 bottom-0 z-50 w-64 border-r-2 border-[#04a0de]/30",
-    "bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
-    "flex-col transition-transform duration-300 will-change-transform shadow-sm"
-  )}
-  style={{
-    transform: open ? "translateX(0)" : "translateX(calc(-100% + 3rem))"
-  }}
->
-      {/* Top toggle (modern 'panel' icoon) */}
-      <div className="h-14 flex items-center justify-end px-2">
-        <button
-  type="button"
-  onClick={onToggleSidebar}
-  className="absolute top-3 -right-3 h-7 w-7 rounded-full shadow-sm bg-white text-[#66676b] hover:text-[#194297] border border-gray-200 flex items-center justify-center"
-  aria-label={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
->
-  {/* modern split-pane icon */}
-  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <line x1="12" y1="4" x2="12" y2="20" />
-  </svg>
-</button>
-      </div>
+      className={cx(
+        "hidden md:flex fixed left-0 top-0 bottom-0 z-40 w-64 border-r-2 border-[#04a0de]/30",
+        "bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
+        "flex-col will-change-transform shadow-sm"
+      )}
+      style={{
+        transform: open ? "translateX(0)" : "translateX(calc(-100% + 3rem))",
+        transition: "transform 300ms"
+      }}
+    >
+      {/* Top toggle (modern split-pane icoon) */}
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        className="absolute top-3 -right-3 h-7 w-7 rounded-full shadow-sm bg-white text-[#66676b] hover:text-[#194297] border border-gray-200 grid place-items-center"
+        aria-label={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
+      >
+        <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </svg>
+      </button>
 
-      {/* Content verbergen/tonen afhankelijk van expanded */}
-      <nav className={cx("flex-1 overflow-y-auto px-3 pb-3 space-y-3", expanded ? "opacity-100" : "opacity-0 pointer-events-none", "transition-opacity duration-200")}>
+      {/* Acties */}
+      <nav className="p-3 flex-1 overflow-y-auto space-y-3">
         {/* Nieuwe chat */}
         <button
           type="button"
@@ -153,19 +152,16 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
           <span className="font-medium">Nieuwe chat</span>
         </button>
 
-        {/* Insights (zonder 'open/dicht' tekst) */}
+        {/* Insights (zonder open/dicht label) */}
         <button
           type="button"
           onClick={onToggleFeed}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#65676a] hover:text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#65676a] hover:text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
         >
-          <span className="inline-flex items-center gap-2">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-            </svg>
-            Insights
-          </span>
-          {/* geen open/dicht label meer */}
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+          </svg>
+          Insights
         </button>
 
         {feedOpen && (
@@ -181,8 +177,8 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
         )}
       </nav>
 
-      {/* Profiel onderaan (alleen tonen wanneer expanded) */}
-      <div className={cx("mt-auto p-3 border-t border-gray-200 transition-opacity duration-200", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
+      {/* Profiel onderaan */}
+      <div className="mt-auto p-3 border-t border-gray-200">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
           <div>
@@ -301,7 +297,6 @@ function BluelineChatpilotInner() {
     setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
     setInput("");
     setIsTyping(false);
-    // focus meteen in het invoerveld
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
@@ -331,13 +326,11 @@ function BluelineChatpilotInner() {
         </button>
       )}
 
-      {/* Main column met padding links wanneer sidebar open is */}
-      <div
-  className={cx(
-    "h-full flex flex-col transition-[margin] duration-300",
-    sidebarOpen ? "md:ml-64" : "md:ml-12"
-  )}
->
+      {/* Main column met linker marge wanneer sidebar (gedeeltelijk) zichtbaar is */}
+      <div className={cx(
+        "h-full flex flex-col transition-[margin] duration-300",
+        sidebarOpen ? "md:ml-64" : "md:ml-12"
+      )}>
         {/* Header */}
         <header className="h-14 border-b border-gray-200 flex items-center px-4 md:px-5 bg-white sticky top-0 z-10">
           {/* Mobile hamburger */}
@@ -354,7 +347,7 @@ function BluelineChatpilotInner() {
           <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
         </header>
 
-        {/* Mobile drawer attach */}
+        {/* Mobile drawer */}
         <MobileDrawer
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
@@ -428,8 +421,8 @@ function BluelineChatpilotInner() {
           </div>
         </main>
 
-        {/* Dock (alleen input-blok) */}
-        <div className="border-t border-gray-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+        {/* Dock (alleen input-blok) — GEEN extra scheidingslijn meer erboven */}
+        <div className="bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
           <form onSubmit={handleSend} className="mx-auto max-w-[760px] px-4 md:px-5 py-3">
             <div className="relative rounded-2xl border border-gray-200 bg-white">
               {/* textarea */}
