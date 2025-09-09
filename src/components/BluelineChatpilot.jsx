@@ -114,24 +114,31 @@ function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewCh
 
   return (
     <aside
-      className={cx(
-        "hidden md:flex fixed left-0 top-0 bottom-0 z-30",
-        // breedtes: expanded 256px, compact 56px
-        expanded ? "w-64" : "w-14",
-        "border-r-2 border-[#04a0de]/30",
-        "bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
-        "flex-col transition-[width] duration-300 ease-out"
-      )}
-    >
+  className={cx(
+    "hidden md:flex fixed left-0 top-0 bottom-0 z-50 w-64 border-r-2 border-[#04a0de]/30",
+    "bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
+    "flex-col transition-transform duration-300 will-change-transform shadow-sm"
+  )}
+  style={{
+    transform: open ? "translateX(0)" : "translateX(calc(-100% + 3rem))"
+  }}
+>
+
       {/* Top toggle (modern 'panel' icoon) */}
       <div className="h-14 flex items-center justify-end px-2">
         <button
-          type="button"
-          onClick={onToggleSidebar}
-          className="h-8 w-8 rounded-lg grid place-items-center text-[#66676b] hover:text-[#194297] hover:bg-white/70"
-          aria-label={expanded ? "Zijbalk inklappen" : "Zijbalk uitklappen"}
-          title={expanded ? "Zijbalk inklappen" : "Zijbalk uitklappen"}
-        >
+  type="button"
+  onClick={onToggleSidebar}
+  className="absolute top-3 -right-3 h-7 w-7 rounded-full shadow-sm bg-white text-[#66676b] hover:text-[#194297] border border-gray-200 flex items-center justify-center"
+  aria-label={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
+>
+  {/* modern split-pane icon */}
+  <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <line x1="12" y1="4" x2="12" y2="20" />
+  </svg>
+</button>
+
           {/* “Sidebar” toggle-icoon (à la GPT) */}
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             {/* linker paneel */}
