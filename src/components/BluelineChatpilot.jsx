@@ -109,13 +109,7 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-function AppSidebar({
-  open,              // ← boolean: true = expanded, false = collapsed
-  onToggleSidebar,   // ← functie: toggelt open/close
-  onToggleFeed,      // ← functie: toggelt insights-lijst
-  feedOpen,          // ← boolean: insights open/close
-  onNewChat,         // ← functie: start nieuwe chat
-}) {
+function AppSidebar({ expanded, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const items = [
     { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
     { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
@@ -125,120 +119,89 @@ function AppSidebar({
   return (
     <aside
       className={cx(
-        "hidden md:flex fixed left-0 top-0 bottom-0 z-30",
-        "border-r border-gray-200 bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
-        "transition-all duration-300 ease-out shadow-sm",
-        open ? "w-64" : "w-12"                                   // ← 256px vs 48px
+        "hidden md:flex fixed left-0 top-0 bottom-0 z-30 border-r border-[#04a0de]/30",
+        // zachter off-white paneel met subtiele diepte; geen afzonderlijke 'header-lijn'
+        "bg-gradient-to-b from-[#fbfcff] via-[#f8faff] to-[#f6f8ff]",
+        "flex-col transition-all duration-300 shadow-[0_1px_0_rgba(25,66,151,0.04)]",
+        expanded ? "w-64" : "w-12"
       )}
-      aria-label="Zijbalk"
     >
-      {/* Header + embedded toggle */}
-      <div className="w-full">
-        <div className="h-14 flex items-center justify-end px-2 border-b border-gray-200">
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="h-7 w-7 rounded-md text-[#66676b] hover:text-[#194297] inline-flex items-center justify-center"
-            aria-label={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
-            title={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
-          >
-            {/* modern split-pane icoon (GPT-achtig) */}
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <line x1="12" y1="4" x2="12" y2="20" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Content */}
-        {open ? (
-          /* Uitgeklapt: volledige knoppen en lijst */
-          <nav className="px-2 pt-3 pb-3 space-y-3 overflow-y-auto">
-            {/* Nieuwe chat */}
-            <button
-              type="button"
-              onClick={onNewChat}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-            >
-              {/* pen/pad icoon */}
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
-              </svg>
-              <span className="font-medium">Nieuwe chat</span>
-            </button>
-
-            {/* Insights (geen “open/dicht” label meer) */}
-            <button
-              type="button"
-              onClick={onToggleFeed}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#65676a] hover:text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-              </svg>
-              Insights
-            </button>
-
-            {feedOpen && (
-              <div className="ml-1 mt-2 space-y-2">
-                {items.slice(0, 3).map((it, i) => (
-                  <article key={i} className="rounded-lg border border-gray-200 bg-white p-3 hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                    <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
-                    <p className="text-xs text-[#66676b] mt-1">{it.summary}</p>
-                    <p className="text-[11px] text-[#04a0de] mt-1">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </nav>
-        ) : (
-          /* Ingeklapt: alleen icoon-rail */
-          <nav className="pt-3 pb-3 flex flex-col items-center gap-3 overflow-y-auto">
-            <button
-              type="button"
-              onClick={onNewChat}
-              className="h-9 w-9 grid place-items-center rounded-lg hover:bg-gray-100 text-[#66676b] hover:text-[#194297]"
-              aria-label="Nieuwe chat"
-              title="Nieuwe chat"
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={onToggleFeed}
-              className="h-9 w-9 grid place-items-center rounded-lg hover:bg-gray-100 text-[#66676b] hover:text-[#194297]"
-              aria-label="Insights"
-              title="Insights"
-            >
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-              </svg>
-            </button>
-          </nav>
-        )}
-
-        {/* Profiel onderaan */}
-        <div className="absolute left-0 right-0 bottom-0 border-t border-gray-200">
-          {open ? (
-            <div className="p-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
-                <div>
-                  <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
-                  <div className="text-[11px] text-[#66676b]">Profiel actief</div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="h-12 flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] text-[11px] font-semibold">SB</div>
-            </div>
-          )}
-        </div>
+      {/* Toggle bovenin (klein, embedded) */}
+      <div className="h-14 flex items-center justify-end px-2">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="h-7 w-7 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
+          aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+        >
+          {/* modern split-pane icoon (GPT-achtig) */}
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="12" y1="4" x2="12" y2="20" />
+          </svg>
+        </button>
       </div>
+
+      {/* Acties (iets kleiner lettertype en compacter) */}
+      <nav
+        className={cx(
+          "flex-1 overflow-y-auto px-2 pb-3 space-y-2",
+          expanded ? "opacity-100" : "opacity-0 pointer-events-none",
+          "transition-opacity duration-200"
+        )}
+      >
+        {/* Nieuwe chat */}
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+          </svg>
+          <span className="text-[13.5px] font-medium">Nieuwe chat</span>
+        </button>
+
+        {/* Insights */}
+        <button
+          type="button"
+          onClick={onToggleFeed}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white text-[#65676a] hover:text-[#194297] hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+          </svg>
+          <span className="text-[13.5px]">Insights</span>
+        </button>
+
+        {/* Feed-cards */}
+        {feedOpen && expanded && (
+          <div className="ml-1 mt-2 space-y-2">
+            {items.map((it, i) => (
+              <article key={i} className="rounded-lg border border-gray-200 bg-white p-3 hover:shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
+                <p className="text-xs text-[#66676b] mt-1">{it.summary}</p>
+                <p className="text-[11px] text-[#04a0de] mt-1">
+                  {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+      </nav>
+
+      {/* Profiel onderaan (ongewijzigd) */}
+      {expanded && (
+        <div className="mt-auto p-3 border-t border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
+            <div>
+              <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
+              <div className="text-[11px] text-[#66676b]">Profiel actief</div>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
