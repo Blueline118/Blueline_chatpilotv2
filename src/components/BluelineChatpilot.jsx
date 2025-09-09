@@ -116,35 +116,32 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
       className={cx(
         "hidden md:flex fixed left-0 top-0 bottom-0 z-30 w-64 border-r-2",
         "border-[#04a0de]/30",
-        // Off‑white paneel met subtiele verloop
+        // Offwhite paneel met subtiele verloop
         "bg-gradient-to-b from-[#fafbff] via-[#f7f9ff] to-white",
         "flex-col transition-transform duration-300",
         open ? "translate-x-0" : "-translate-x-full"
       )}
     >
-      {/* Paneel-handle (alleen desktop) */}
+      {/* Paneel-handle (alleen desktop) — modern grip, BOVENIN */}
       <button
         type="button"
         onClick={onToggleSidebar}
-        className="absolute top-1/2 -right-3 translate-y-[-50%] h-8 w-8 rounded-full shadow-sm bg-white text-[#66676b] hover:text-[#194297] hover:shadow-md border border-gray-200 grid place-items-center"
+        className="absolute top-3 -right-3 h-8 w-8 rounded-full shadow-sm bg-white text-[#66676b] hover:text-[#194297] hover:shadow-md border border-gray-200 grid place-items-center"
         aria-label={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
         title={open ? "Zijbalk verbergen" : "Zijbalk tonen"}
       >
-        {/* subtiele 'grip' i.p.v. pijl */}
+        {/* 6-dot grip (GPT-achtig) */}
         <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor" aria-hidden="true">
-          <circle cx="8" cy="8" r="1.3"/><circle cx="16" cy="8" r="1.3"/>
-          <circle cx="8" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/>
+          <circle cx="8" cy="7" r="1.25"/><circle cx="16" cy="7" r="1.25"/>
+          <circle cx="8" cy="12" r="1.25"/><circle cx="16" cy="12" r="1.25"/>
+          <circle cx="8" cy="17" r="1.25"/><circle cx="16" cy="17" r="1.25"/>
         </svg>
       </button>
 
-      {/* Titel */}
-      <div className="px-4 py-3 border-b border-gray-200/60">
-        <div className="text-sm font-semibold text-[#194297]">Blueline Chatpilot</div>
-        <p className="text-xs text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
-      </div>
+      {/* (Titel verwijderd op verzoek) */}
 
       {/* Acties */}
-      <nav className="p-3 flex-1 overflow-y-auto space-y-3">
+      <nav className="pt-12 px-3 flex-1 overflow-y-auto space-y-3">
         {/* Nieuwe chat */}
         <button
           type="button"
@@ -171,7 +168,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
             </svg>
             Insights
           </span>
-          <span className="text-[#04a0de] text-sm">{feedOpen ? "open" : "dicht"}</span>
+          {/* status-tekst (open/dicht) VERWIJDERD */}
         </button>
 
         {feedOpen && (
@@ -307,6 +304,8 @@ function BluelineChatpilotInner() {
     setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
     setInput("");
     setIsTyping(false);
+    // focus meteen in het invoerveld
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   return (
@@ -320,16 +319,18 @@ function BluelineChatpilotInner() {
         onNewChat={handleNewChat}
       />
 
-      {/* Handle wanneer sidebar dicht is (klein knopje aan linker rand) */}
+      {/* Handle wanneer sidebar dicht is (klein knopje aan linker bovenzijde) */}
       {!sidebarOpen && (
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          className="hidden md:flex fixed left-0 top-1/2 -translate-y-1/2 h-8 w-8 rounded-r-full bg-white border border-gray-200 shadow-sm text-[#66676b] hover:text-[#194297] items-center justify-center"
+          className="hidden md:flex fixed left-0 top-3 h-8 w-8 rounded-r-full bg-white border border-gray-200 shadow-sm text-[#66676b] hover:text-[#194297] items-center justify-center"
           aria-label="Zijbalk tonen"
           title="Zijbalk tonen"
         >
-          <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor"><circle cx="12" cy="8" r="1.3"/><circle cx="12" cy="16" r="1.3"/></svg>
+          <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor">
+            <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
+          </svg>
         </button>
       )}
 
@@ -358,7 +359,7 @@ function BluelineChatpilotInner() {
           onSelect={(v) => (v === "newsfeed" ? openNewsfeedMobile() : setMobileView("chat"))}
         />
 
-        {/* Mobile fullscreen Newsfeed */}
+        {/* Mobile fullscreen Insights */}
         {mobileView === "newsfeed" && (
           <div className="md:hidden fixed inset-0 z-40 bg-white">
             <div className="h-14 border-b flex items-center px-3 gap-2">
