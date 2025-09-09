@@ -109,6 +109,9 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
+
+import SidebarNewsFeed from "./SidebarNewsFeed";
+
 // NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
@@ -170,20 +173,12 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           {expanded && <span className="whitespace-nowrap">Insights</span>}
         </button>
 
-        {/* Feed items alleen tonen als open én expanded */}
-        {feedOpen && expanded && (
-          <div className="ml-1 mt-2 space-y-2">
-            {items.map((it, i) => (
-              <article key={i} className="rounded-lg border border-gray-200 bg-white p-3">
-                <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
-                <p className="text-xs text-[#66676b] mt-1">{it.summary}</p>
-                <p className="text-[11px] text-[#04a0de] mt-1">
-                  {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
+        {/* Insights / Newsfeed */}
+{feedOpen && expanded && (
+  <div className="mt-2">
+    <SidebarNewsFeed />
+  </div>
+)}
       </nav>
 
       {/* Profiel onderaan alleen in expanded */}
