@@ -474,7 +474,7 @@ function BluelineChatpilotInner() {
           <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
             {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
-              <div className="h[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
+              <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
                 <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
                 <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
               </div>
