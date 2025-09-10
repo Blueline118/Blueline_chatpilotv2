@@ -21,7 +21,7 @@ const FEEDS = [
   // Uitbreidbaar: voeg hier feeds toe
 ];
 
-const TTL_MS = 15 * 60 * 1000; // 15 min
+const TTL_MS = 12 * 60 * 60 * 1000; // 12 uur
 let CACHE = { at: 0, items: [] };
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
