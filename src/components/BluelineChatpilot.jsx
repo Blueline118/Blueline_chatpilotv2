@@ -110,8 +110,6 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-import SidebarNewsFeed from "./SidebarNewsFeed";
-
 // NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
