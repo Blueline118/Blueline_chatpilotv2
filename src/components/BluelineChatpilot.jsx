@@ -480,9 +480,11 @@ function BluelineChatpilotInner() {
             {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
               <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-                <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
-                <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
-              </div>
+  <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
+    <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
+    <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
+  </div>
+</div>
             ) : (
               <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                 {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
