@@ -1,16 +1,17 @@
 // src/pages/Login.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-// ... existing imports
 
 export default function Login() {
   const navigate = useNavigate();
-  // existing state hooks...
+  const { user } = useAuth();
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState('');
 
-  // Fallback: if someone lands on /login *with* tokens in the URL, forward to /auth/callback
+  // Als de magic link per ongeluk op /login landt mét tokens in de URL, stuur door naar /auth/callback
   useEffect(() => {
     const hasHashTokens = window.location.hash.includes('access_token=');
     const hasCode = new URLSearchParams(window.location.search).has('code');
@@ -19,38 +20,27 @@ export default function Login() {
     }
   }, [navigate]);
 
-  // ...rest of your Login.jsx code
-}
-
-export default function Login() {
-  const { user } = useAuth();
-  const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
-  const [err, setErr] = useState('');
+  // Als je al ingelogd bent, ga naar /app
+  useEffect(() => {
+    if (user) navigate('/app', { replace: true });
+  }, [user, navigate]);
 
   const onSendLink = async (e) => {
     e.preventDefault();
     setErr('');
+    setSent(false);
+
     const redirectTo = `${window.location.origin}/auth/callback`;
-const { error } = await supabase.auth.signInWithOtp({
-  email,
-  options: {
-    emailRedirectTo: redirectTo,
-    shouldCreateUser: true,
-  },
-});
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: true,
+      },
+    });
     if (error) setErr(error.message);
     else setSent(true);
   };
-
-  if (user) {
-    return (
-      <div style={{ padding: 24 }}>
-        <h2>Je bent al ingelogd</h2>
-        <a href="/app">Ga naar de app →</a>
-      </div>
-    );
-  }
 
   return (
     <div style={{ maxWidth: 360, margin: '64px auto', padding: 24, border: '1px solid #eee', borderRadius: 12 }}>

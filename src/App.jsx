@@ -4,6 +4,7 @@ import { AuthProvider } from './providers/AuthProvider';
 import Protected from './components/Protected';
 import Login from './pages/Login';
 import AppHome from './pages/AppHome';
+import AuthCallback from './pages/AuthCallback'; // ← import
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} /> {/* ← nieuw */}
           <Route
             path="/app"
             element={
@@ -19,7 +21,6 @@ export default function App() {
               </Protected>
             }
           />
-          {/* standaard naar /app als voorbeeld */}
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </BrowserRouter>
