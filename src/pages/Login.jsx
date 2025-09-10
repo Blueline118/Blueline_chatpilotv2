@@ -2,6 +2,25 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+// ... existing imports
+
+export default function Login() {
+  const navigate = useNavigate();
+  // existing state hooks...
+
+  // Fallback: if someone lands on /login *with* tokens in the URL, forward to /auth/callback
+  useEffect(() => {
+    const hasHashTokens = window.location.hash.includes('access_token=');
+    const hasCode = new URLSearchParams(window.location.search).has('code');
+    if (hasHashTokens || hasCode) {
+      navigate('/auth/callback' + window.location.search + window.location.hash, { replace: true });
+    }
+  }, [navigate]);
+
+  // ...rest of your Login.jsx code
+}
 
 export default function Login() {
   const { user } = useAuth();
@@ -15,7 +34,10 @@ export default function Login() {
     const redirectTo = `${window.location.origin}/auth/callback`;
 const { error } = await supabase.auth.signInWithOtp({
   email,
-  options: { emailRedirectTo: redirectTo }
+  options: {
+    emailRedirectTo: redirectTo,
+    shouldCreateUser: true,
+  },
 });
     if (error) setErr(error.message);
     else setSent(true);
