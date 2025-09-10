@@ -205,12 +205,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
 /* ---------------- Mobile Sidebar (off-canvas) ---------------- */
 function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
   // Zelfde items als desktop (optioneel: centraliseren in util)
-  const items = [
-    { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
-    { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
-    { title: "Bezorging & transparency", summary: "Heldere updates verminderen druk.", source: "Logistiek Pro", date: "2025-08-27" },
-  ];
-
+  
   return (
     <div className={cx(
       "md:hidden fixed inset-0 z-50 transition-opacity",
@@ -287,18 +282,10 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
 
         {/* Live feed (optioneel inklappen) */}
         {feedOpen && (
-          <div className="px-3 pb-2 space-y-2">
-            {items.map((it, i) => (
-              <article key={i} className="rounded-lg p-3 hover:bg-gray-50">
-                <div className="text-sm font-medium text-[#194297] line-clamp-2">{it.title}</div>
-                <p className="text-xs text-[#66676b] mt-1 line-clamp-3">{it.summary}</p>
-                <p className="text-[11px] text-[#04a0de] mt-1">
-                  {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
-                </p>
-              </article>
-            ))}
-          </div>
-        )}
+  <div className="px-3 pb-2">
+    <SidebarNewsFeed limit={3} />
+  </div>
+)}
 
         {/* Profiel onderaan */}
         <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
@@ -463,14 +450,8 @@ function BluelineChatpilotInner() {
               <div className="text-sm font-semibold text-[#194297]">Insights</div>
             </div>
             <div className="p-3 space-y-3 overflow-y-auto h-[calc(100vh-56px)]">
-              {getSidebarItems().map((it, i) => (
-                <article key={i} className="rounded-lg border border-gray-200 p-3">
-                  <div className="text-sm font-semibold text-[#194297]">{it.title}</div>
-                  <p className="text-sm text-[#66676b] mt-1">{it.summary}</p>
-                  <p className="text-[11px] text-[#04a0de] mt-2">{it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}</p>
-                </article>
-              ))}
-            </div>
+  <SidebarNewsFeed limit={3} variant="full" />
+</div>
           </div>
         )}
 
