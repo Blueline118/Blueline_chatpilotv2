@@ -18,25 +18,7 @@ const FEEDS = [
     url: "https://customerthink.com/feed/",
     host: "customerthink.com",
   },
-  // Uitbreidbaar: voeg hier makkelijk feeds toe (zie docs/newsfeed.md)
-  // {
-  //   source: "CustomerFirst",
-  //   source_url: "https://customerfirst.nl/",
-  //   url: "https://customerfirst.nl/rss", // voorbeeld
-  //   host: "customerfirst.nl",
-  // },
-  // {
-  //   source: "CCW Digital",
-  //   source_url: "https://www.customercontactweekdigital.com/",
-  //   url: "https://www.customercontactweekdigital.com/rss", // voorbeeld
-  //   host: "www.customercontactweekdigital.com",
-  // },
-  // {
-  //   source: "CX Network",
-  //   source_url: "https://www.cxnetwork.com/",
-  //   url: "https://www.cxnetwork.com/rss", // voorbeeld
-  //   host: "www.cxnetwork.com",
-  // },
+  // Uitbreidbaar: voeg hier feeds toe
 ];
 
 const TTL_MS = 15 * 60 * 1000; // 15 min
@@ -44,12 +26,11 @@ let CACHE = { at: 0, items: [] };
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const MAX_SERVER_ITEMS = 12;
-
 const FEED_TIMEOUT_MS = 6000;
 
 // Eenvoudige permissieve XML parser zonder externe dependency (basic RSS/Atom)
 function parseXml(xml) {
-  // Proberen als RSS 2.0
+  // RSS 2.0
   let channelMatch = xml.match(/<channel[\s\S]*?<\/channel>/i);
   if (channelMatch) {
     const channel = channelMatch[0];
@@ -63,7 +44,7 @@ function parseXml(xml) {
     });
   }
 
-  // Proberen als Atom
+  // Atom
   let feedMatch = xml.match(/<feed[\s\S]*?<\/feed>/i);
   if (feedMatch) {
     const feed = feedMatch[0];
@@ -78,7 +59,6 @@ function parseXml(xml) {
     });
   }
 
-  // Fallback: leeg
   return [];
 }
 
@@ -129,7 +109,7 @@ function corsHeaders(request) {
   const origin = request.headers.get("origin") || "*";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Vary": "Origin",
+    Vary: "Origin",
   };
 }
 
@@ -148,16 +128,23 @@ export default async (request) => {
     }
 
     if (request.method !== "GET") {
-      return new Response(JSON.stringify({ error: "Use GET" }), { status: 405, headers: JSON_HEADERS });
+      return new Response(JSON.stringify({ error: "Use GET" }), {
+        status: 405,
+        headers: JSON_HEADERS,
+      });
     }
 
     // Cache check
     const now = Date.now();
-    const url = new URL(request.url);
-    // Limiet tussen 1 en 8, standaard 4
-    const limitParam = Math.min(Math.max(Number(url.searchParams.get("limit")) || 4, 1), 8);
-    const useCache = CACHE.items.length && (now - CACHE.at) < TTL_MS;
+    const reqUrl = new URL(request.url);
 
+    // Eén keer parsen en hergebruiken; geen her-declaratie
+    const limitParam = Math.min(
+      Math.max(Number(reqUrl.searchParams.get("limit")) || 4, 1),
+      Math.min(8, MAX_SERVER_ITEMS)
+    );
+
+    const useCache = CACHE.items.length && now - CACHE.at < TTL_MS;
     if (useCache) {
       return new Response(JSON.stringify({ items: CACHE.items.slice(0, limitParam) }), {
         status: 200,
@@ -169,7 +156,7 @@ export default async (request) => {
       });
     }
 
-    // Haal feeds op (parallel)
+    // Feeds ophalen (parallel)
     const results = await Promise.allSettled(
       FEEDS.map(async (f) => {
         // Whitelist guard
@@ -184,7 +171,7 @@ export default async (request) => {
             source_url: f.source_url,
             title: p.title || "",
             url: p.link || "",
-            published_at: iso,   // alias
+            published_at: iso,
             iso_date: iso,
           };
         });
@@ -197,7 +184,6 @@ export default async (request) => {
     for (const r of results) {
       if (r.status === "fulfilled") {
         anyOk = true;
-        // filter op geldige url + title
         items.push(...r.value.filter((x) => x.title && x.url));
       }
     }
@@ -209,17 +195,15 @@ export default async (request) => {
       });
     }
 
-    // Dedup + sort + limit
+    // Dedup + sort (nieuwste eerst)
     items = dedupe(items).sort((a, b) => {
       const ta = a.iso_date ? Date.parse(a.iso_date) : 0;
       const tb = b.iso_date ? Date.parse(b.iso_date) : 0;
       return tb - ta;
     });
 
-    // --- NIEUW: maximaal 1 item per bron (distinct-first), vul aan tot 'limit' ---
-
-    // Kies max 1 per bron
-    function pickDistinctBySource(arr, max = 4) {
+    // Max 1 item per bron; daarna aanvullen tot 'limitParam'
+    function pickDistinctBySource(arr, max) {
       const seen = new Set();
       const out = [];
       for (const it of arr) {
@@ -232,11 +216,9 @@ export default async (request) => {
       return out;
     }
 
-    // 1) Eerst unieke bronnen
     const distinctFirst = pickDistinctBySource(items, limitParam);
 
-    // 2) Aanvullen indien minder dan 'limit'
-    const usedUrls = new Set(distinctFirst.map(i => i.url));
+    const usedUrls = new Set(distinctFirst.map((i) => i.url));
     const filled = [...distinctFirst];
     for (const it of items) {
       if (filled.length >= limitParam) break;
@@ -245,10 +227,9 @@ export default async (request) => {
       usedUrls.add(it.url);
     }
 
-    // Cache (volledige itemslijst bewaren; kan helpen voor volgende requests)
+    // Cache volledige lijst (handig voor volgende requests)
     CACHE = { at: Date.now(), items };
 
-    // Response in het verwachte formaat { items: [...] } + je bestaande headers
     return new Response(JSON.stringify({ items: filled }), {
       status: 200,
       headers: {
@@ -257,3 +238,10 @@ export default async (request) => {
         "Cache-Control": "public, max-age=300, s-maxage=900",
       },
     });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e?.message || "Unknown error" }), {
+      status: 500,
+      headers: { ...JSON_HEADERS, ...corsHeaders(request) },
+    });
+  }
+};
