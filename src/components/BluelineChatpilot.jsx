@@ -238,33 +238,34 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             <div className="mt-2">
               <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-[#66676b]">Recente chats</div>
               <ul className="px-2 space-y-1">
-                {(Array.isArray(recent) ? recent.slice(0,5) : []).map((c) => (
-                  <li key={c.id} className="group relative">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 justify-start"
-                      title={c?.title || "Chat"}
-                    >
-                      <div className="w-6 h-6 rounded-full bg-[#e8efff] grid place-items-center text-[10px] text-[#194297]">
-                        {(c.title || "").slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 text-left">
-                        <div className="text-[13px] text-[#194297] truncate">{c.title || "Chat"}</div>
-                        <div className="text-[11px] text-[#66676b] truncate">{new Date(c.lastMessageAt || Date.now()).toLocaleString("nl-NL")}</div>
-                      </div>
-                    </button>
+  {(Array.isArray(recent) ? recent.slice(0, 5) : []).map((c) => {
+    const raw = (c.title || "Chat").toString().trim();
+    const label = raw.length > 23 ? raw.slice(0, 23) + "…" : raw;
+    return (
+      <li key={c.id}>
+        <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100">
+          {/* Linkerzijde: alleen titel, strak links uitgelijnd */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
+            className="text-left min-w-0 flex-1"
+            title={raw}
+          >
+            <div className="text-[13px] text-[#194297] truncate">{label}</div>
+          </button>
 
-                    {/* 3-puntjes menu */}
-                    <div className="absolute right-1 top-1.5">
-                      <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
-                    </div>
-                  </li>
-                ))}
-                {!recent?.length && (
-                  <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
-                )}
-              </ul>
+          {/* Rechterzijde: 3-puntjes menu, valt niet over de tekst */}
+          <div className="shrink-0 ml-2">
+            <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+          </div>
+        </div>
+      </li>
+    );
+  })}
+  {!recent?.length && (
+    <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
+  )}
+</ul>
             </div>
           )}
         </nav>
