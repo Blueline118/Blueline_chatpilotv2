@@ -110,14 +110,31 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-import SidebarNewsFeed from "./SidebarNewsFeed.jsx";
-// NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
+import SidebarNewsFeed from "./SidebarNewsFeed";
+
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
-  // Breedtes: 256 open, 56 dicht (alleen iconen)
   const sidebarWidth = expanded ? 256 : 56;
 
-  const items = getSidebarItems();
+  // Klik op Insights: als ingeklapt → eerst uitklappen, dán feed tonen
+  function handleInsightsClick() {
+    if (!expanded) onToggleSidebar?.();
+    onToggleFeed?.();
+  }
+
+  // Generieke tooltip (subtiel) voor ingeklapte staat
+  const Tooltip = ({ children }) => (
+    <span
+      className={cx(
+        "pointer-events-none absolute left-14 top-1/2 -translate-y-1/2",
+        "px-2 py-1 rounded-md text-[11px] leading-none",
+        "bg-white border border-gray-200 shadow-sm text-[#194297]",
+        "opacity-0 group-hover:opacity-100 transition-opacity"
+      )}
+    >
+      {children}
+    </span>
+  );
 
   return (
     <aside
@@ -129,8 +146,8 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
       style={{ width: sidebarWidth }}
       aria-expanded={expanded}
     >
-      {/* Toggle bovenin (subtiel, modern) */}
-      <div className="h-14 flex items-center justify-end px-2">
+      {/* Header: toggle exact gecentreerd en zelfde icoonmaat als items */}
+      <div className="h-14 flex items-center justify-center px-2">
         <button
           type="button"
           onClick={onToggleSidebar}
@@ -138,7 +155,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
           title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
         >
-          {/* Split-pane icoon (GPT-achtig) */}
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="4" width="18" height="16" rx="2" />
             <line x1="12" y1="4" x2="12" y2="20" />
@@ -146,57 +162,83 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         </button>
       </div>
 
-      {/* Acties – géén borders, wel hover */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-3 space-y-1">
-        <button
-          type="button"
-          onClick={onNewChat}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#194297] hover:bg-gray-100"
-        >
-          {/* Pen/pad icoon */}
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
-          </svg>
-          {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
-        </button>
+      {/* Acties – met tooltips bij ingeklapte staat */}
+      <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
+        {/* Nieuwe chat */}
+        <div className="relative group">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className={cx(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
+              expanded ? "text-[#194297]" : "text-[#66676b] justify-center"
+            )}
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
+          </button>
+          {!expanded && <Tooltip>Nieuwe chat</Tooltip>}
+        </div>
 
-        <button
-          type="button"
-          onClick={onToggleFeed}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#65676a] hover:bg-gray-100"
-        >
-          {/* Insights icoon (outline) */}
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-          </svg>
-          {expanded && <span className="whitespace-nowrap">Insights</span>}
-        </button>
+        {/* Insights */}
+        <div className="relative group">
+          <button
+            type="button"
+            onClick={handleInsightsClick}
+            className={cx(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
+              expanded ? "text-[#65676a]" : "text-[#66676b] justify-center"
+            )}
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+            </svg>
+            {expanded && <span className="whitespace-nowrap">Insights</span>}
+          </button>
+          {!expanded && <Tooltip>Insights</Tooltip>}
+        </div>
 
-        {/* Live Insights feed (RSS via Netlify Function) */}
-{feedOpen && (
-  <div className="px-3 pb-2">
-    <SidebarNewsFeed
-      limit={3}            // mobiel mag tot 3 tonen
-      className="space-y-2" // optioneel extra spacing
-      dense                 // compacte weergave (de component ondersteunt dit)
-    />
-  </div>
-)}
-
+        {/* Insights / Newsfeed */}
+        {feedOpen && expanded && (
+          <div className="mt-2">
+            <SidebarNewsFeed limit={3} />
+          </div>
+        )}
       </nav>
 
-      {/* Profiel onderaan alleen in expanded */}
-      {expanded && (
-        <div className="mt-auto p-3 border-t border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
+      {/* Profiel: altijd zichtbaar. Ingeklapt alleen avatar; uitgeklapt avatar + tekst */}
+      <div className="mt-auto p-3 border-t border-gray-200">
+        <div className={cx("flex items-center gap-3", expanded ? "justify-start" : "justify-center")}>
+          <div
+            className="relative group w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold"
+            aria-label="Profiel actief"
+            title="Profiel actief"
+          >
+            SB
+            {/* subtiele tooltip bij ingeklapt */}
+            {!expanded && (
+              <span
+                className={cx(
+                  "pointer-events-none absolute right-[-8px] top-1/2 -translate-y-1/2 translate-x-full",
+                  "px-2 py-1 rounded-md text-[11px] leading-none",
+                  "bg-white border border-gray-200 shadow-sm text-[#194297]",
+                  "opacity-0 group-hover:opacity-100 transition-opacity"
+                )}
+              >
+                Profiel actief
+              </span>
+            )}
+          </div>
+          {expanded && (
             <div>
               <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
               <div className="text-[11px] text-[#66676b]">Profiel actief</div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </aside>
   );
 }
