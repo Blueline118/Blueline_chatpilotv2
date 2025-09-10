@@ -208,17 +208,24 @@ export default async (request) => {
       });
     }
 
-    // Dedup + sort + limit
-    // ---- HUIDIGE CODE VERWIJDEREN vanaf het punt ná sorteren/trimmen ----
-// bv. iets als: const top = merged.slice(0, 12); return new Response(JSON.stringify(top), ...);
+   // Dedup + sort + limit
+items = dedupe(items).sort((a, b) => {
+  const ta = a.iso_date ? Date.parse(a.iso_date) : 0;
+  const tb = b.iso_date ? Date.parse(b.iso_date) : 0;
+  return tb - ta;
+});
 
-// ---- NIEUWE CODE PLAKKEN ----
+// --- NIEUW: maximaal 1 item per bron (distinct-first), vul aan tot 'limit' ---
 
-// Hulpfunctie: kies maximaal 1 item per bron (distinct sources eerst)
-function pickDistinctBySource(items, max = 4) {
+// Zorg dat we een limit hebben (1..8); gebruik bestaande URL of maak 'm aan.
+const _url = typeof url !== "undefined" ? url : new URL(request.url);
+const limitParam = Math.min(Math.max(Number(_url.searchParams.get("limit")) || 4, 1), 8);
+
+// Kies max 1 per bron
+function pickDistinctBySource(arr, max = 4) {
   const seen = new Set();
   const out = [];
-  for (const it of items) {
+  for (const it of arr) {
     const key = (it.source || "").toLowerCase().trim();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -228,33 +235,28 @@ function pickDistinctBySource(items, max = 4) {
   return out;
 }
 
-// Optional: query parameters (bv. ?limit=4)
-const url = new URL(request.url);
-const limitParam = Math.min(
-  Math.max(Number(url.searchParams.get("limit")) || 4, 1), // min 1
-  8 // max 8 voor sidebar
-);
+// 1) Eerst unieke bronnen
+const distinctFirst = pickDistinctBySource(items, limitParam);
 
-// 1) Eerst distinct-per-bron (max 1 per bron)
-const distinctFirst = pickDistinctBySource(merged, limitParam);
-
-// 2) Als we minder dan 'limit' hebben (bijv. weinig unieke bronnen),
-// vul aan met resterende items (zonder dubbele URLs/titles), maar vermijd
-// dezelfde URL’s; ze kunnen wel van dezelfde bron zijn als “opvulling”.
+// 2) Aanvullen indien minder dan 'limit'
 const usedUrls = new Set(distinctFirst.map(i => i.url));
 const filled = [...distinctFirst];
-for (const it of merged) {
+for (const it of items) {
   if (filled.length >= limitParam) break;
   if (usedUrls.has(it.url)) continue;
   filled.push(it);
   usedUrls.add(it.url);
 }
 
-// Stuur alleen de ‘filled’ lijst naar de client (typisch 4)
-return new Response(JSON.stringify(filled), {
+// Cache (volledige itemslijst bewaren; kan helpen voor volgende requests)
+CACHE = { at: Date.now(), items };
+
+// Response in het verwachte formaat { items: [...] } + je bestaande headers
+return new Response(JSON.stringify({ items: filled }), {
   status: 200,
   headers: {
-    "Content-Type": "application/json; charset=utf-8",
+    ...JSON_HEADERS,
+    ...corsHeaders(request),
     "Cache-Control": "public, max-age=300, s-maxage=900",
   },
 });
