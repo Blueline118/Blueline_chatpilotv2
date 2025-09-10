@@ -21,7 +21,7 @@ const FEEDS = [
 ];
 
 const BATCH_SIZE = 5;
-const FEED_TIMEOUT_MS = 8000;
+const FEED_TIMEOUT_MS = 6000;
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
 // Cache: 24u batch-cache + (optioneel) 15 min feedlist cache om netwerk te sparen
