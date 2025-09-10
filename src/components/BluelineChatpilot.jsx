@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-
+import { getAnonId } from "../utils/anonId";
+import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
+import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -78,14 +80,6 @@ function generateAssistantReply(text, type, tone) {
   return `Thanks voor je bericht! Stuur je ordernummer${orderNo?` (#${orderNo})`:""} en je postcode even mee (en bij schade een foto)? Dan check ik het direct en krijg je snel een update 🙂`;
 }
 
-function getSidebarItems() {
-  return [
-    { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
-    { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
-    { title: "Bezorging & transparency", summary: "Heldere updates verminderen druk.", source: "Logistiek Pro", date: "2025-08-27" },
-  ];
-}
-
 /******************** Kleine UI Bits ********************/
 function CopyButton({ id, text, onCopied, isCopied }) {
   return (
@@ -112,7 +106,43 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 /******************** Sidebar (desktop) ********************/
 import SidebarNewsFeed from "./SidebarNewsFeed";
 
-function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
+// [4I] Helper: contextmenu voor Recente chats (verwijderen)
+function RecentChatMenu({ chatId, onDelete }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    function close() { setOpen(false); }
+    if (open) document.addEventListener("click", close, { once: true });
+    return () => document.removeEventListener("click", close);
+  }, [open]);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Meer opties"
+        title="Meer opties"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="h-6 w-6 grid place-items-center rounded hover:bg-gray-200 text-[#66676b]"
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-7 z-40 w-36 rounded-lg border border-gray-200 bg-white shadow-md" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-100 text-red-600"
+            onClick={() => { setOpen(false); onDelete?.(chatId); }}
+          >
+            Verwijderen
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat }) {
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
 
@@ -120,12 +150,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
   const [tip, setTip] = React.useState({ text: "", x: 0, y: 0, show: false });
   function showTip(e, text) {
     const r = e.currentTarget.getBoundingClientRect();
-    setTip({
-      text,
-      x: r.right + 8,              // rechts naast het icoon
-      y: r.top + r.height / 2,     // verticaal centreren
-      show: true,
-    });
+    setTip({ text, x: r.right + 8, y: r.top + r.height / 2, show: true });
   }
   function hideTip() { setTip((t) => ({ ...t, show: false })); }
 
@@ -146,8 +171,8 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         style={{ width: sidebarWidth }}
         aria-expanded={expanded}
       >
-        {/* 1) Toggle: ingeklapt gecentreerd; uitgeklapt rechts. Subtiel kleiner formaat */}
-        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}>
+        {/* Toggle */}
+        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}> 
           <button
             type="button"
             onClick={onToggleSidebar}
@@ -162,7 +187,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           </button>
         </div>
 
-        {/* 3) Tooltips bij ingeklapte staat (hover) + geen overflow issues */}
         <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
           {/* Nieuwe chat */}
           <div className="relative">
@@ -208,9 +232,44 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
               <SidebarNewsFeed limit={3} />
             </div>
           )}
+
+          {/* Recente chats — alleen tonen als uitgeklapt, zodat ingeklapt clean blijft */}
+          {expanded && (
+            <div className="mt-2">
+              <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-[#66676b]">Recente chats</div>
+              <ul className="px-2 space-y-1">
+                {(Array.isArray(recent) ? recent.slice(0,5) : []).map((c) => (
+                  <li key={c.id} className="group relative">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 justify-start"
+                      title={c?.title || "Chat"}
+                    >
+                      <div className="w-6 h-6 rounded-full bg-[#e8efff] grid place-items-center text-[10px] text-[#194297]">
+                        {(c.title || "").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="text-[13px] text-[#194297] truncate">{c.title || "Chat"}</div>
+                        <div className="text-[11px] text-[#66676b] truncate">{new Date(c.lastMessageAt || Date.now()).toLocaleString("nl-NL")}</div>
+                      </div>
+                    </button>
+
+                    {/* 3-puntjes menu */}
+                    <div className="absolute right-1 top-1.5">
+                      <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+                    </div>
+                  </li>
+                ))}
+                {!recent?.length && (
+                  <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
+                )}
+              </ul>
+            </div>
+          )}
         </nav>
 
-        {/* 2 & 4) Profiel-avatar blijft onderin zichtbaar, ook ingeklapt */}
+        {/* Profiel onderaan */}
         <div className="mt-auto p-3 border-t border-gray-200">
           <div className={cx("flex items-center gap-3", expanded ? "justify-start" : "justify-center")}>
             <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
@@ -240,8 +299,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
 /******************** Mobile Drawer (hamburger) ********************/
 /* ---------------- Mobile Sidebar (off-canvas) ---------------- */
 function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
-  // Zelfde items als desktop (optioneel: centraliseren in util)
-  
   return (
     <div className={cx(
       "md:hidden fixed inset-0 z-50 transition-opacity",
@@ -265,10 +322,9 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
         aria-modal="true"
         aria-label="Zijmenu"
       >
-        {/* Header (alleen voor paneel) */}
+        {/* Header */}
         <div className="h-14 flex items-center justify-between px-3 border-b border-[#eef1f6]">
           <div className="flex items-center gap-2 text-[#194297] font-semibold text-sm">
-            {/* Klein split-pane icoon (matching desktop) */}
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="4" width="18" height="16" rx="2" />
               <line x1="12" y1="4" x2="12" y2="20" />
@@ -294,7 +350,6 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
             onClick={() => { onNewChat?.(); onClose(); }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#194297] hover:bg-gray-100"
           >
-            {/* pen/pad icoon */}
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
@@ -307,7 +362,6 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
             onClick={() => { onToggleFeed?.(); onClose(); }}
             className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#1f2937] hover:bg-gray-100"
           >
-            {/* insights (playlists) icoon (outline) */}
             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 10l12-5v14L3 14z" />
               <path d="M15 5l6-2v18l-6-2" />
@@ -316,12 +370,12 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
           </button>
         </nav>
 
-        {/* Live feed (optioneel inklappen) */}
+        {/* Live feed */}
         {feedOpen && (
-  <div className="px-3 pb-2">
-    <SidebarNewsFeed limit={3} />
-  </div>
-)}
+          <div className="px-3 pb-2">
+            <SidebarNewsFeed limit={3} />
+          </div>
+        )}
 
         {/* Profiel onderaan */}
         <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
@@ -347,6 +401,11 @@ function BluelineChatpilotInner() {
   const [feedOpen, setFeedOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState("chat"); // "chat" | "newsfeed"
+
+  // [4B] STATE — Recente chats/threads
+  const [recent, setRecent] = useState([]);
+  const uidRef = useRef(null);
+  const currentChatIdRef = useRef(null);
 
   // Chat state
   const [messageType, setMessageType] = useState(loaded.messageType || "Social Media");
@@ -386,6 +445,13 @@ function BluelineChatpilotInner() {
   useEffect(() => { if (inputRef.current) autoresizeTextarea(inputRef.current); return () => copiedTimer.current && clearTimeout(copiedTimer.current); }, []);
   useEffect(() => { safeSave({ messageType, tone, profileKey }); }, [messageType, tone, profileKey]);
 
+  // Init anonId + recents + start chatId
+  useEffect(() => {
+    uidRef.current = getAnonId();
+    setRecent(fetchRecentChats(uidRef.current));
+    if (!currentChatIdRef.current) currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  }, []);
+
   const onInputChange = (e) => { setInput(e.target.value); autoresizeTextarea(e.target); };
 
   async function handleSend(e) {
@@ -406,9 +472,23 @@ function BluelineChatpilotInner() {
       const data = await r.json();
       const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
       setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
+
+      // Opslaan in thread + recents
+      const chatId = currentChatIdRef.current;
+      const uid = uidRef.current;
+      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
+      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
+      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
+      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
     } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
       setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
+      const chatId = currentChatIdRef.current;
+      const uid = uidRef.current;
+      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
+      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
+      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
+      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
     } finally { setIsTyping(false); }
   }
 
@@ -421,12 +501,31 @@ function BluelineChatpilotInner() {
   const openNewsfeedMobile = () => { setMobileView("newsfeed"); setMobileMenuOpen(false); };
   const backToChatMobile = () => setMobileView("chat");
 
-  const handleNewChat = () => {
+  function handleNewChat() {
     setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
     setInput("");
     setIsTyping(false);
+    currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
     requestAnimationFrame(() => inputRef.current?.focus());
-  };
+  }
+
+  // Recall & delete
+  function loadChat(chatId) {
+    const uid = uidRef.current;
+    const thread = getThread(uid, chatId);
+    if (!Array.isArray(thread) || !thread.length) return;
+    currentChatIdRef.current = chatId;
+    setMessages(thread);
+  }
+  function handleDeleteChat(chatId) {
+    const uid = uidRef.current;
+    deleteThread(uid, chatId);
+    setRecent(deleteRecentChat(uid, chatId));
+    if (currentChatIdRef.current === chatId) {
+      currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+      setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-white text-[#65676a]">
@@ -437,6 +536,9 @@ function BluelineChatpilotInner() {
         onToggleFeed={() => setFeedOpen((v) => !v)}
         feedOpen={feedOpen}
         onNewChat={handleNewChat}
+        recent={recent}
+        loadChat={loadChat}
+        onDeleteChat={handleDeleteChat}
       />
 
       {/* Handle wanneer sidebar dicht is (klein knopje aan linker bovenzijde) */}
@@ -467,7 +569,6 @@ function BluelineChatpilotInner() {
             className="md:hidden h-9 w-9 grid place-items-center rounded-md text-[#194297] hover:bg-gray-100"
             aria-label="Zijmenu openen"
           >
-            {/* GPT-achtige hamburger */}
             <svg viewBox="0 0 24 24" className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
@@ -486,8 +587,8 @@ function BluelineChatpilotInner() {
               <div className="text-sm font-semibold text-[#194297]">Insights</div>
             </div>
             <div className="p-3 space-y-3 overflow-y-auto h-[calc(100vh-56px)]">
-  <SidebarNewsFeed limit={3} variant="full" />
-</div>
+              <SidebarNewsFeed limit={3} variant="full" />
+            </div>
           </div>
         )}
 
@@ -497,11 +598,11 @@ function BluelineChatpilotInner() {
             {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
               <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-  <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
-    <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
-    <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
-  </div>
-</div>
+                <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
+                  <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
+                  <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
+                </div>
+              </div>
             ) : (
               <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                 {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
