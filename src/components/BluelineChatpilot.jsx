@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import SidebarNewsFeed from "./SidebarNewsFeed.jsx";
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -172,12 +173,16 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           {expanded && <span className="whitespace-nowrap">Insights</span>}
         </button>
 
-        {/* Insights / Newsfeed */}
-        {feedOpen && expanded && (
-          <div className="mt-2">
-            <SidebarNewsFeed />
-          </div>
-        )}
+        {/* Live Insights feed (RSS via Netlify Function) */}
+{feedOpen && (
+  <div className="px-3 pb-2">
+    <SidebarNewsFeed
+      limit={3}            // mobiel mag tot 8 tonen
+      className="space-y-2" // optioneel extra spacing
+      dense                 // compacte weergave (de component ondersteunt dit)
+    />
+  </div>
+)}
       </nav>
 
       {/* Profiel onderaan alleen in expanded */}
