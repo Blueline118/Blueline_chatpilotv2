@@ -10,14 +10,28 @@ function autoresizeTextarea(el) {
 }
 
 async function copyToClipboard(text) {
-  try { await navigator.clipboard.writeText(text || ""); return true; } catch { return false; }
+  try {
+    await navigator.clipboard.writeText(text || "");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const LS_KEY = "blueline.chatpilot.state.v5";
 function safeLoad() {
-  try { const raw = localStorage.getItem(LS_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; }
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
 }
-function safeSave(obj) { try { localStorage.setItem(LS_KEY, JSON.stringify(obj || {})); } catch {} }
+function safeSave(obj) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(obj || {}));
+  } catch {}
+}
 
 /* Dagdeel + roterende subteksten (geen naam) */
 const SUB_ROTATIONS = [
@@ -94,14 +108,16 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
-/******************** Newsfeed (live) ********************/
+/******************** Sidebar (desktop) ********************/
 import SidebarNewsFeed from "./SidebarNewsFeed";
 
-/******************** Sidebar (desktop) ********************/
-// Prop "open" bepaalt breedte; inhoud blijft ALTJD zichtbaar (iconen bij dicht, labels bij open)
+// NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
-  const widthPx = expanded ? 256 : 56; // 64 vs 14 tailwind-approx
+  // Breedtes: 256 open, 56 dicht (alleen iconen)
+  const sidebarWidth = expanded ? 256 : 56;
+
+  const items = getSidebarItems();
 
   return (
     <aside
@@ -110,10 +126,10 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         "bg-[#f7f8fa] border-r border-gray-200 shadow-sm",
         "flex-col transition-[width] duration-300 ease-out"
       )}
-      style={{ width: widthPx }}
+      style={{ width: sidebarWidth }}
       aria-expanded={expanded}
     >
-      {/* Top handle (subtiel, GPT-achtig) */}
+      {/* Toggle bovenin (subtiel, modern) */}
       <div className="h-14 flex items-center justify-end px-2">
         <button
           type="button"
@@ -122,7 +138,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
           title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
         >
-          {/* Split-pane icoon */}
+          {/* Split-pane icoon (GPT-achtig) */}
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="4" width="18" height="16" rx="2" />
             <line x1="12" y1="4" x2="12" y2="20" />
@@ -130,8 +146,8 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         </button>
       </div>
 
-      {/* Acties: iconen ALTIJD zichtbaar; labels alleen als expanded */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-3">
+      {/* Acties – géén borders, wel hover */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-3 space-y-1">
         <button
           type="button"
           onClick={onNewChat}
@@ -156,7 +172,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           {expanded && <span className="whitespace-nowrap">Insights</span>}
         </button>
 
-        {/* Live newsfeed alleen tonen als expanded én feedOpen */}
+        {/* Insights / Newsfeed */}
         {feedOpen && expanded && (
           <div className="mt-2">
             <SidebarNewsFeed />
@@ -181,20 +197,115 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
 }
 
 /******************** Mobile Drawer (hamburger) ********************/
-function MobileDrawer({ open, onClose, onSelect }) {
+/* ---------------- Mobile Sidebar (off-canvas) ---------------- */
+function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
+  // Zelfde items als desktop (optioneel: centraliseren in util)
+  const items = [
+    { title: "Customer Care trend: AI hand-offs", summary: "Waarom dit relevant is voor supportteams.", source: "CX Today", date: "2025-08-31" },
+    { title: "Retourbeleid optimaliseren", summary: "Best practices rond retouren.", source: "E-commerce NL", date: "2025-08-29" },
+    { title: "Bezorging & transparency", summary: "Heldere updates verminderen druk.", source: "Logistiek Pro", date: "2025-08-27" },
+  ];
+
   return (
-    <div className={cx("md:hidden fixed inset-0 z-50 transition-opacity", open ? "opacity-100" : "opacity-0 pointer-events-none")}> 
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
-      <div className={cx("absolute left-0 top-0 h-full w-[82%] max-w-[360px] bg-white shadow-xl border-r border-gray-200 p-4", open ? "translate-x-0" : "-translate-x-full", "transition-transform duration-300")}> 
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-[#194297]">Menu</div>
-          <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={onClose} aria-label="Sluiten">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    <div className={cx(
+      "md:hidden fixed inset-0 z-50 transition-opacity",
+      open ? "opacity-100" : "opacity-0 pointer-events-none"
+    )}>
+      {/* Scrim */}
+      <div
+        className={cx("absolute inset-0 bg-black/30 transition-opacity", open ? "opacity-100" : "opacity-0")}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Panel */}
+      <aside
+        className={cx(
+          "absolute left-0 top-0 h-full w-[86vw] max-w-[360px]",
+          "bg-[#fbfbfd] text-[#1f2937] border-r border-[#e5e7eb]",
+          "shadow-xl transition-transform duration-300",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Zijmenu"
+      >
+        {/* Header (alleen voor paneel) */}
+        <div className="h-14 flex items-center justify-between px-3 border-b border-[#eef1f6]">
+          <div className="flex items-center gap-2 text-[#194297] font-semibold text-sm">
+            {/* Klein split-pane icoon (matching desktop) */}
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+            Menu
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 w-8 grid place-items-center rounded-md text-gray-500 hover:text-gray-700"
+            aria-label="Sluiten"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
           </button>
         </div>
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("newsfeed"); onClose(); }}>📢 Insights</button>
-        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 text-[#04a0de]" onClick={() => { onSelect("chat"); onClose(); }}>💬 Chat</button>
-      </div>
+
+        {/* Acties */}
+        <nav className="px-2 py-2">
+          <button
+            type="button"
+            onClick={() => { onNewChat?.(); onClose(); }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#194297] hover:bg-gray-100"
+          >
+            {/* pen/pad icoon */}
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+            </svg>
+            <span className="text-[13px] font-medium">Nieuwe chat</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { onToggleFeed?.(); onClose(); }}
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#1f2937] hover:bg-gray-100"
+          >
+            {/* insights (playlists) icoon (outline) */}
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 10l12-5v14L3 14z" />
+              <path d="M15 5l6-2v18l-6-2" />
+            </svg>
+            <span className="text-[13px]">Insights</span>
+          </button>
+        </nav>
+
+        {/* Live feed (optioneel inklappen) */}
+        {feedOpen && (
+          <div className="px-3 pb-2 space-y-2">
+            {items.map((it, i) => (
+              <article key={i} className="rounded-lg p-3 hover:bg-gray-50">
+                <div className="text-sm font-medium text-[#194297] line-clamp-2">{it.title}</div>
+                <p className="text-xs text-[#66676b] mt-1 line-clamp-3">{it.summary}</p>
+                <p className="text-[11px] text-[#04a0de] mt-1">
+                  {it.source} • {new Date(it.date).toLocaleDateString("nl-NL")}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {/* Profiel onderaan */}
+        <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
+            <div>
+              <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
+              <div className="text-[11px] text-[#66676b]">Profiel actief</div>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -310,7 +421,7 @@ function BluelineChatpilotInner() {
           title="Zijbalk tonen"
         >
           <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor">
-              <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
+            <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
           </svg>
         </button>
       )}
@@ -320,28 +431,22 @@ function BluelineChatpilotInner() {
         "h-full flex flex-col transition-[margin] duration-300",
         sidebarOpen ? "md:ml-64" : "md:ml-14"
       )}>
-        {/* Header */}
-        <header className="h-14 border-b border-gray-200 flex items-center px-4 md:px-5 bg-white sticky top-0 z-10">
-          {/* Mobile hamburger */}
+        {/* Header: hamburger alleen mobiel */}
+        <header className="h-14 flex items-center gap-2 px-3 border-b md:border-0">
           <button
             type="button"
-            className="md:hidden -ml-1 mr-2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#65676a] hover:bg-gray-100"
-            aria-label="Menu"
             onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden h-9 w-9 grid place-items-center rounded-md text-[#194297] hover:bg-gray-100"
+            aria-label="Zijmenu openen"
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            {/* GPT-achtige hamburger */}
+            <svg viewBox="0 0 24 24" className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
           </button>
-
           <h1 className="text-[15px] md:text-base font-semibold text-[#194297]">Blueline Chatpilot</h1>
           <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
         </header>
-
-        {/* Mobile drawer */}
-        <MobileDrawer
-          open={mobileMenuOpen}
-          onClose={() => setMobileMenuOpen(false)}
-          onSelect={(v) => (v === "newsfeed" ? openNewsfeedMobile() : setMobileView("chat"))}
-        />
 
         {/* Mobile fullscreen Insights */}
         {mobileView === "newsfeed" && (
@@ -369,42 +474,42 @@ function BluelineChatpilotInner() {
           <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
             {/* Hero greeting zolang er geen user-message is */}
             {!messages.some(m=>m.role === "user") ? (
-              <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
+              <div className="h[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
                 <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
                 <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
               </div>
             ) : (
               <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                  {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
-                    const isUser = m.role === "user";
-                    return (
-                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                        <div className={cx(
-                          "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                          isUser
-                            ? "bg-[#2563eb] text-white"
-                            : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                        )}>{m.text}</div>
-                        {!isUser && (
-                          <div className="-mt-1 ml-2 self-end"> 
-                            <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                        <span className="relative inline-block w-6 h-2 align-middle">
-                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
-                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
-                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
-                        </span>
-                        <span className="ml-2">Typen…</span>
-                      </div>
+                {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
+                  const isUser = m.role === "user";
+                  return (
+                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
+                      <div className={cx(
+                        "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                        isUser
+                          ? "bg-[#2563eb] text-white"
+                          : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                      )}>{m.text}</div>
+                      {!isUser && (
+                        <div className="-mt-1 ml-2 self-end"> 
+                          <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
+                        </div>
+                      )}
                     </div>
-                  )}
+                  );
+                })}
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                      <span className="relative inline-block w-6 h-2 align-middle">
+                        <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
+                        <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
+                        <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
+                      </span>
+                      <span className="ml-2">Typen…</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -490,8 +595,17 @@ function BluelineChatpilotInner() {
         </div>
       </div>
 
-      {/* Mobile drawer lives outside padding so it overlays full */}
-      <MobileDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} onSelect={(v)=> (v === 'newsfeed' ? setMobileView('newsfeed') : setMobileView('chat'))} />
+      {/* Mobile off-canvas sidebar */}
+      <MobileSidebar
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        onNewChat={() => {
+          inputRef?.current?.focus?.();
+          setMobileMenuOpen(false);
+        }}
+        onToggleFeed={openNewsfeedMobile}
+        feedOpen={feedOpen}
+      />
     </div>
   );
 }
