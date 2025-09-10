@@ -128,16 +128,19 @@ function RecentChatMenu({ chatId, onDelete }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 top-7 z-40 w-36 rounded-lg border border-gray-200 bg-white shadow-md" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-100 text-red-600"
-            onClick={() => { setOpen(false); onDelete?.(chatId); }}
-          >
-            Verwijderen
-          </button>
-        </div>
-      )}
+  <div
+    className="absolute left-[-8px] top-7 z-40 w-36 rounded-lg border border-gray-200 bg-white shadow-md origin-left"
+    onClick={(e) => e.stopPropagation()}
+  >
+    <button
+      type="button"
+      className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-100 text-red-600"
+      onClick={() => { setOpen(false); onDelete?.(chatId); }}
+    >
+      Verwijderen
+    </button>
+  </div>
+)}
     </div>
   );
 }
