@@ -129,7 +129,7 @@ function RecentChatMenu({ chatId, onDelete }) {
       </button>
       {open && (
   <div
-    className="absolute left-[-8px] top-7 z-40 w-36 rounded-lg border border-gray-200 bg-white shadow-md origin-left"
+    className="absolute -top-1 left-[calc(100%+8px)] z-[60] w-36 rounded-lg border border-gray-200 bg-white shadow-md"
     onClick={(e) => e.stopPropagation()}
   >
     <button
@@ -258,9 +258,9 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
           </button>
 
           {/* Rechterzijde: 3-puntjes menu, valt niet over de tekst */}
-          <div className="shrink-0 ml-2">
-            <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
-          </div>
+          <div className="ml-2 flex-shrink-0 relative">
+  <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+</div>
         </div>
       </li>
     );
