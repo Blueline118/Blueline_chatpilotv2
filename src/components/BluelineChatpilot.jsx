@@ -176,12 +176,13 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
 {feedOpen && (
   <div className="px-3 pb-2">
     <SidebarNewsFeed
-      limit={3}
-      className="space-y-2"
-      dense
+      limit={3}            // mobiel mag tot 3 tonen
+      className="space-y-2" // optioneel extra spacing
+      dense                 // compacte weergave (de component ondersteunt dit)
     />
   </div>
 )}
+
       </nav>
 
       {/* Profiel onderaan alleen in expanded */}
