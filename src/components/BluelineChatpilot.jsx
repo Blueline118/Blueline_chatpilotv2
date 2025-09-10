@@ -10,28 +10,14 @@ function autoresizeTextarea(el) {
 }
 
 async function copyToClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text || "");
-    return true;
-  } catch {
-    return false;
-  }
+  try { await navigator.clipboard.writeText(text || ""); return true; } catch { return false; }
 }
 
 const LS_KEY = "blueline.chatpilot.state.v5";
 function safeLoad() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  try { const raw = localStorage.getItem(LS_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; }
 }
-function safeSave(obj) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(obj || {}));
-  } catch {}
-}
+function safeSave(obj) { try { localStorage.setItem(LS_KEY, JSON.stringify(obj || {})); } catch {} }
 
 /* Dagdeel + roterende subteksten (geen naam) */
 const SUB_ROTATIONS = [
@@ -108,17 +94,14 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
-/******************** Sidebar (desktop) ********************/
-
+/******************** Newsfeed (live) ********************/
 import SidebarNewsFeed from "./SidebarNewsFeed";
 
-// NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
+/******************** Sidebar (desktop) ********************/
+// Prop "open" bepaalt breedte; inhoud blijft ALTJD zichtbaar (iconen bij dicht, labels bij open)
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
-  // Breedtes: 256 open, 56 dicht (alleen iconen)
-  const sidebarWidth = expanded ? 256 : 56;
-
-  const items = getSidebarItems();
+  const widthPx = expanded ? 256 : 56; // 64 vs 14 tailwind-approx
 
   return (
     <aside
@@ -127,10 +110,10 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         "bg-[#f7f8fa] border-r border-gray-200 shadow-sm",
         "flex-col transition-[width] duration-300 ease-out"
       )}
-      style={{ width: sidebarWidth }}
+      style={{ width: widthPx }}
       aria-expanded={expanded}
     >
-      {/* Toggle bovenin (subtiel, modern) */}
+      {/* Top handle (subtiel, GPT-achtig) */}
       <div className="h-14 flex items-center justify-end px-2">
         <button
           type="button"
@@ -139,7 +122,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
           title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
         >
-          {/* Split-pane icoon (GPT-achtig) */}
+          {/* Split-pane icoon */}
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="4" width="18" height="16" rx="2" />
             <line x1="12" y1="4" x2="12" y2="20" />
@@ -147,8 +130,8 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
         </button>
       </div>
 
-      {/* Acties – géén borders, wel hover */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-3 space-y-1">
+      {/* Acties: iconen ALTIJD zichtbaar; labels alleen als expanded */}
+      <nav className="flex-1 overflow-y-auto px-2 pb-3">
         <button
           type="button"
           onClick={onNewChat}
@@ -173,12 +156,12 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
           {expanded && <span className="whitespace-nowrap">Insights</span>}
         </button>
 
-        {/* Insights / Newsfeed */}
-{feedOpen && expanded && (
-  <div className="mt-2">
-    <SidebarNewsFeed />
-  </div>
-)}
+        {/* Live newsfeed alleen tonen als expanded én feedOpen */}
+        {feedOpen && expanded && (
+          <div className="mt-2">
+            <SidebarNewsFeed />
+          </div>
+        )}
       </nav>
 
       {/* Profiel onderaan alleen in expanded */}
@@ -327,7 +310,7 @@ function BluelineChatpilotInner() {
           title="Zijbalk tonen"
         >
           <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor">
-            <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
+              <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
           </svg>
         </button>
       )}
@@ -392,36 +375,36 @@ function BluelineChatpilotInner() {
               </div>
             ) : (
               <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
-                  const isUser = m.role === "user";
-                  return (
-                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                      <div className={cx(
-                        "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                        isUser
-                          ? "bg-[#2563eb] text-white"
-                          : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                      )}>{m.text}</div>
-                      {!isUser && (
-                        <div className="-mt-1 ml-2 self-end"> 
-                          <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
-                        </div>
-                      )}
+                  {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
+                    const isUser = m.role === "user";
+                    return (
+                      <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
+                        <div className={cx(
+                          "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                          isUser
+                            ? "bg-[#2563eb] text-white"
+                            : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                        )}>{m.text}</div>
+                        {!isUser && (
+                          <div className="-mt-1 ml-2 self-end"> 
+                            <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {isTyping && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                        <span className="relative inline-block w-6 h-2 align-middle">
+                          <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
+                          <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
+                          <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
+                        </span>
+                        <span className="ml-2">Typen…</span>
+                      </div>
                     </div>
-                  );
-                })}
-                {isTyping && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                      <span className="relative inline-block w-6 h-2 align-middle">
-                        <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
-                        <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
-                        <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
-                      </span>
-                      <span className="ml-2">Typen…</span>
-                    </div>
-                  </div>
-                )}
+                  )}
               </div>
             )}
           </div>
