@@ -116,130 +116,124 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
 
+  // Tooltip (fixed gepositioneerd: geen horizontale scrollbar)
+  const [tip, setTip] = React.useState({ text: "", x: 0, y: 0, show: false });
+  function showTip(e, text) {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({
+      text,
+      x: r.right + 8,              // rechts naast het icoon
+      y: r.top + r.height / 2,     // verticaal centreren
+      show: true,
+    });
+  }
+  function hideTip() { setTip((t) => ({ ...t, show: false })); }
+
   // Klik op Insights: als ingeklapt → eerst uitklappen, dán feed tonen
   function handleInsightsClick() {
     if (!expanded) onToggleSidebar?.();
     onToggleFeed?.();
   }
 
-  // Generieke tooltip (subtiel) voor ingeklapte staat
-  const Tooltip = ({ children }) => (
-    <span
-      className={cx(
-        "pointer-events-none absolute left-14 top-1/2 -translate-y-1/2",
-        "px-2 py-1 rounded-md text-[11px] leading-none",
-        "bg-white border border-gray-200 shadow-sm text-[#194297]",
-        "opacity-0 group-hover:opacity-100 transition-opacity"
-      )}
-    >
-      {children}
-    </span>
-  );
-
   return (
-    <aside
-      className={cx(
-        "hidden md:flex fixed inset-y-0 left-0 z-30",
-        "bg-[#f7f8fa] border-r border-gray-200 shadow-sm",
-        "flex-col transition-[width] duration-300 ease-out"
-      )}
-      style={{ width: sidebarWidth }}
-      aria-expanded={expanded}
-    >
-      {/* Header: toggle exact gecentreerd en zelfde icoonmaat als items */}
-      <div className="h-14 flex items-center justify-center px-2">
-        <button
-          type="button"
-          onClick={onToggleSidebar}
-          className="h-7 w-7 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
-          aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
-          title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <line x1="12" y1="4" x2="12" y2="20" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Acties – met tooltips bij ingeklapte staat */}
-      <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
-        {/* Nieuwe chat */}
-        <div className="relative group">
-          <button
-            type="button"
-            onClick={onNewChat}
-            className={cx(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
-              expanded ? "text-[#194297]" : "text-[#66676b] justify-center"
-            )}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
-            </svg>
-            {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
-          </button>
-          {!expanded && <Tooltip>Nieuwe chat</Tooltip>}
-        </div>
-
-        {/* Insights */}
-        <div className="relative group">
-          <button
-            type="button"
-            onClick={handleInsightsClick}
-            className={cx(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
-              expanded ? "text-[#65676a]" : "text-[#66676b] justify-center"
-            )}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-            </svg>
-            {expanded && <span className="whitespace-nowrap">Insights</span>}
-          </button>
-          {!expanded && <Tooltip>Insights</Tooltip>}
-        </div>
-
-        {/* Insights / Newsfeed */}
-        {feedOpen && expanded && (
-          <div className="mt-2">
-            <SidebarNewsFeed limit={3} />
-          </div>
+    <>
+      <aside
+        className={cx(
+          "hidden md:flex fixed inset-y-0 left-0 z-30",
+          "bg-[#f7f8fa] border-r border-gray-200 shadow-sm",
+          "flex-col transition-[width] duration-300 ease-out"
         )}
-      </nav>
-
-      {/* Profiel: altijd zichtbaar. Ingeklapt alleen avatar; uitgeklapt avatar + tekst */}
-      <div className="mt-auto p-3 border-t border-gray-200">
-        <div className={cx("flex items-center gap-3", expanded ? "justify-start" : "justify-center")}>
-          <div
-            className="relative group w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold"
-            aria-label="Profiel actief"
-            title="Profiel actief"
+        style={{ width: sidebarWidth }}
+        aria-expanded={expanded}
+      >
+        {/* 1) Toggle: ingeklapt gecentreerd; uitgeklapt rechts. Subtiel kleiner formaat */}
+        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}>
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="h-6 w-6 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
+            aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+            title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
           >
-            SB
-            {/* subtiele tooltip bij ingeklapt */}
-            {!expanded && (
-              <span
-                className={cx(
-                  "pointer-events-none absolute right-[-8px] top-1/2 -translate-y-1/2 translate-x-full",
-                  "px-2 py-1 rounded-md text-[11px] leading-none",
-                  "bg-white border border-gray-200 shadow-sm text-[#194297]",
-                  "opacity-0 group-hover:opacity-100 transition-opacity"
-                )}
-              >
-                Profiel actief
-              </span>
-            )}
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 3) Tooltips bij ingeklapte staat (hover) + geen overflow issues */}
+        <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
+          {/* Nieuwe chat */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={onNewChat}
+              onMouseEnter={(e) => !expanded && showTip(e, "Nieuwe chat")}
+              onMouseLeave={hideTip}
+              className={cx(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
+                expanded ? "text-[#194297] justify-start" : "text-[#66676b] justify-center"
+              )}
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+              </svg>
+              {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
+            </button>
           </div>
-          {expanded && (
-            <div>
-              <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
-              <div className="text-[11px] text-[#66676b]">Profiel actief</div>
+
+          {/* Insights */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleInsightsClick}
+              onMouseEnter={(e) => !expanded && showTip(e, "Insights")}
+              onMouseLeave={hideTip}
+              className={cx(
+                "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
+                expanded ? "text-[#65676a] justify-start" : "text-[#66676b] justify-center"
+              )}
+            >
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+              </svg>
+              {expanded && <span className="whitespace-nowrap">Insights</span>}
+            </button>
+          </div>
+
+          {/* Newsfeed zichtbaar bij uitgeklapt */}
+          {feedOpen && expanded && (
+            <div className="mt-2">
+              <SidebarNewsFeed limit={3} />
             </div>
           )}
+        </nav>
+
+        {/* 2 & 4) Profiel-avatar blijft onderin zichtbaar, ook ingeklapt */}
+        <div className="mt-auto p-3 border-t border-gray-200">
+          <div className={cx("flex items-center gap-3", expanded ? "justify-start" : "justify-center")}>
+            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
+            {expanded && (
+              <div>
+                <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
+                <div className="text-[11px] text-[#66676b]">Profiel actief</div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+
+      {/* Tooltip renderer (fixed): subtiel en klein maar leesbaar */}
+      {tip.show && !expanded && (
+        <div
+          className="fixed z-50 px-2 py-1 rounded-md text-[11px] leading-none bg-white border border-gray-200 shadow-sm text-[#194297]"
+          style={{ left: tip.x, top: tip.y, transform: "translateY(-50%)" }}
+        >
+          {tip.text}
+        </div>
+      )}
+    </>
   );
 }
 
