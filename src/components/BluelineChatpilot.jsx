@@ -112,6 +112,16 @@ function RecentChatMenu({ chatId, onDelete }) {
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
   const btnRef = React.useRef(null);
+  const idRef = React.useRef(Symbol("recent-menu"));
+
+  // Sluit wanneer een ander menu opent
+  React.useEffect(() => {
+    function onAnyOpen(ev) {
+      if (ev?.detail !== idRef.current) setOpen(false);
+    }
+    window.addEventListener("recent-menu-open", onAnyOpen);
+    return () => window.removeEventListener("recent-menu-open", onAnyOpen);
+  }, []);
 
   // Buiten klik sluit het menu
   React.useEffect(() => {
@@ -120,15 +130,12 @@ function RecentChatMenu({ chatId, onDelete }) {
     return () => document.removeEventListener("click", close);
   }, [open]);
 
-  // Plaats menu naast de knop, boven UI-lagen (fixed + portal)
+  // Plaats menu naast de knop (portal + fixed)
   React.useEffect(() => {
     if (!open || !btnRef.current) return;
     function place() {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({
-        top: r.top - 4,           // iets naar boven
-        left: r.right + 8,        // rechts naast de knop
-      });
+      setPos({ top: r.top - 4, left: r.right + 8 });
     }
     place();
     window.addEventListener("resize", place);
@@ -146,7 +153,17 @@ function RecentChatMenu({ chatId, onDelete }) {
         type="button"
         aria-label="Meer opties"
         title="Meer opties"
-        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => {
+            const next = !v;
+            if (next) {
+              // vertel andere menus dat deze open gaat
+              window.dispatchEvent(new CustomEvent("recent-menu-open", { detail: idRef.current }));
+            }
+            return next;
+          });
+        }}
         className="h-6 w-6 grid place-items-center rounded hover:bg-gray-200 text-[#66676b]"
       >
         <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
