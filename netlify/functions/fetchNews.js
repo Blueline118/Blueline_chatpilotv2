@@ -154,7 +154,8 @@ export default async (request) => {
     // Cache check
     const now = Date.now();
     const url = new URL(request.url);
-    const limitParam = Math.min(Number(url.searchParams.get("limit") || MAX_SERVER_ITEMS), MAX_SERVER_ITEMS);
+    // Limiet tussen 1 en 8, standaard 4
+    const limitParam = Math.min(Math.max(Number(url.searchParams.get("limit")) || 4, 1), 8);
     const useCache = CACHE.items.length && (now - CACHE.at) < TTL_MS;
 
     if (useCache) {
@@ -208,56 +209,51 @@ export default async (request) => {
       });
     }
 
-   // Dedup + sort + limit
-items = dedupe(items).sort((a, b) => {
-  const ta = a.iso_date ? Date.parse(a.iso_date) : 0;
-  const tb = b.iso_date ? Date.parse(b.iso_date) : 0;
-  return tb - ta;
-});
+    // Dedup + sort + limit
+    items = dedupe(items).sort((a, b) => {
+      const ta = a.iso_date ? Date.parse(a.iso_date) : 0;
+      const tb = b.iso_date ? Date.parse(b.iso_date) : 0;
+      return tb - ta;
+    });
 
-// --- NIEUW: maximaal 1 item per bron (distinct-first), vul aan tot 'limit' ---
+    // --- NIEUW: maximaal 1 item per bron (distinct-first), vul aan tot 'limit' ---
 
-// Zorg dat we een limit hebben (1..8); gebruik bestaande URL of maak 'm aan.
-const _url = typeof url !== "undefined" ? url : new URL(request.url);
-const limitParam = Math.min(Math.max(Number(_url.searchParams.get("limit")) || 4, 1), 8);
+    // Kies max 1 per bron
+    function pickDistinctBySource(arr, max = 4) {
+      const seen = new Set();
+      const out = [];
+      for (const it of arr) {
+        const key = (it.source || "").toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(it);
+        if (out.length >= max) break;
+      }
+      return out;
+    }
 
-// Kies max 1 per bron
-function pickDistinctBySource(arr, max = 4) {
-  const seen = new Set();
-  const out = [];
-  for (const it of arr) {
-    const key = (it.source || "").toLowerCase().trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(it);
-    if (out.length >= max) break;
-  }
-  return out;
-}
+    // 1) Eerst unieke bronnen
+    const distinctFirst = pickDistinctBySource(items, limitParam);
 
-// 1) Eerst unieke bronnen
-const distinctFirst = pickDistinctBySource(items, limitParam);
+    // 2) Aanvullen indien minder dan 'limit'
+    const usedUrls = new Set(distinctFirst.map(i => i.url));
+    const filled = [...distinctFirst];
+    for (const it of items) {
+      if (filled.length >= limitParam) break;
+      if (usedUrls.has(it.url)) continue;
+      filled.push(it);
+      usedUrls.add(it.url);
+    }
 
-// 2) Aanvullen indien minder dan 'limit'
-const usedUrls = new Set(distinctFirst.map(i => i.url));
-const filled = [...distinctFirst];
-for (const it of items) {
-  if (filled.length >= limitParam) break;
-  if (usedUrls.has(it.url)) continue;
-  filled.push(it);
-  usedUrls.add(it.url);
-}
+    // Cache (volledige itemslijst bewaren; kan helpen voor volgende requests)
+    CACHE = { at: Date.now(), items };
 
-// Cache (volledige itemslijst bewaren; kan helpen voor volgende requests)
-CACHE = { at: Date.now(), items };
-
-// Response in het verwachte formaat { items: [...] } + je bestaande headers
-return new Response(JSON.stringify({ items: filled }), {
-  status: 200,
-  headers: {
-    ...JSON_HEADERS,
-    ...corsHeaders(request),
-    "Cache-Control": "public, max-age=300, s-maxage=900",
-  },
-});
-
+    // Response in het verwachte formaat { items: [...] } + je bestaande headers
+    return new Response(JSON.stringify({ items: filled }), {
+      status: 200,
+      headers: {
+        ...JSON_HEADERS,
+        ...corsHeaders(request),
+        "Cache-Control": "public, max-age=300, s-maxage=900",
+      },
+    });
