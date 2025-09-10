@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import SidebarNewsFeed from "./SidebarNewsFeed.jsx";
+
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -110,6 +110,7 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
+import SidebarNewsFeed from "./SidebarNewsFeed.jsx";
 // NOTE: prop heet "open" (niet "expanded"). Dat voorkomt de eerdere bug waarbij de inhoud verborgen bleef.
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }) {
   const expanded = !!open;
@@ -175,9 +176,9 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat }
 {feedOpen && (
   <div className="px-3 pb-2">
     <SidebarNewsFeed
-      limit={3}            // mobiel mag tot 8 tonen
-      className="space-y-2" // optioneel extra spacing
-      dense                 // compacte weergave (de component ondersteunt dit)
+      limit={3}
+      className="space-y-2"
+      dense
     />
   </div>
 )}
