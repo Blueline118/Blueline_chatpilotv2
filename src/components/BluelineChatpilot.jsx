@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
@@ -109,39 +110,72 @@ import SidebarNewsFeed from "./SidebarNewsFeed";
 // [4I] Helper: contextmenu voor Recente chats (verwijderen)
 function RecentChatMenu({ chatId, onDelete }) {
   const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const btnRef = React.useRef(null);
+
+  // Buiten klik sluit het menu
   React.useEffect(() => {
     function close() { setOpen(false); }
     if (open) document.addEventListener("click", close, { once: true });
     return () => document.removeEventListener("click", close);
   }, [open]);
+
+  // Plaats menu naast de knop, boven UI-lagen (fixed + portal)
+  React.useEffect(() => {
+    if (!open || !btnRef.current) return;
+    function place() {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({
+        top: r.top - 4,           // iets naar boven
+        left: r.right + 8,        // rechts naast de knop
+      });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, { passive: true });
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
         aria-label="Meer opties"
         title="Meer opties"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
         className="h-6 w-6 grid place-items-center rounded hover:bg-gray-200 text-[#66676b]"
       >
         <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
         </svg>
       </button>
-      {open && (
-  <div
-    className="absolute -top-1 left-[calc(100%+8px)] z-[60] w-36 rounded-lg border border-gray-200 bg-white shadow-md"
-    onClick={(e) => e.stopPropagation()}
-  >
-    <button
-      type="button"
-      className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-100 text-red-600"
-      onClick={() => { setOpen(false); onDelete?.(chatId); }}
-    >
-      Verwijderen
-    </button>
-  </div>
-)}
-    </div>
+
+      {open && createPortal(
+        <div
+          className="z-[9999] w-40 rounded-lg border border-gray-200 bg-white shadow-xl"
+          style={{ position: "fixed", top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-gray-100 text-red-600"
+            onClick={() => { setOpen(false); onDelete?.(chatId); }}
+          >
+            {/* rood prullenbak-icoon */}
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14"/>
+            </svg>
+            Verwijderen
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
