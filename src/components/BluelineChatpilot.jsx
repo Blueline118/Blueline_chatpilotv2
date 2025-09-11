@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
+import AuthProfileButton from './AuthProfileButton';
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -325,18 +326,11 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         </nav>
 
         {/* Profiel onderaan */}
-        <div className="mt-auto p-3 border-t border-gray-200">
-          <div className={cx("flex items-center gap-3", expanded ? "justify-start" : "justify-center")}>
-            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
-            {expanded && (
-              <div>
-                <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
-                <div className="text-[11px] text-[#66676b]">Profiel actief</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
+<div className="mt-auto p-3 border-t border-gray-200">
+  <AuthProfileButton />
+</div>
+</aside>
+
 
       {/* Tooltip renderer (fixed): subtiel en klein maar leesbaar */}
       {tip.show && !expanded && (
