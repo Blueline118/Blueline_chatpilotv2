@@ -11,24 +11,51 @@ export default function WorkspaceSwitcher() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase.rpc('get_user_orgs');
-      if (error) {
-        console.error('[WorkspaceSwitcher] get_user_orgs error:', error);
-        setOrgs([]);
-      } else {
-        setOrgs(data || []);
-        // reset als activeOrgId niet meer bestaat
-        if (activeOrgId && !data?.find(o => o.id === activeOrgId)) {
-          setActiveOrgId(null);
-        }
-        // precies 1 org? kies automatisch
-        if (!activeOrgId && data && data.length === 1) {
-          setActiveOrgId(data[0].id);
+
+      // 1) Try RPC
+      let list = [];
+      let err = null;
+      {
+        const { data, error } = await supabase.rpc('get_user_orgs');
+        if (error) err = error;
+        else list = data || [];
+      }
+
+      // 2) Fallback to direct select if RPC failed or returned empty (covers most RLS hiccups)
+      if (err || list.length === 0) {
+        const { data, error } = await supabase
+          .from('memberships')
+          .select('org_id, role, organizations ( id, name )')
+          .order('created_at', { ascending: true });
+
+        if (!error && data) {
+          list = data
+            .map((row) => ({
+              id: row.organizations?.id,
+              name: row.organizations?.name,
+              role: row.role,
+            }))
+            .filter((x) => x.id && x.name);
+        } else if (error) {
+          console.error('[WorkspaceSwitcher] fallback error:', error);
         }
       }
+
+      setOrgs(list);
+
+      // Reset activeOrgId if it no longer exists
+      if (activeOrgId && !list.find((o) => o.id === activeOrgId)) {
+        setActiveOrgId(null);
+      }
+      // Auto-pick when there is exactly one org
+      if (!activeOrgId && list.length === 1) {
+        setActiveOrgId(list[0].id);
+      }
+
       setLoading(false);
     })();
-  }, [user]); // eslint-disable-line
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   if (!user || loading) return null;
 
