@@ -5,7 +5,7 @@ import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
 import PermissionGate from '../components/PermissionGate';
 import RoleBadge from '../components/RoleBadge';
 import ChatList from '../components/ChatList';
-
+import MembersAdmin from '../components/MembersAdmin';
 
 
 export default function AppHome() {
@@ -49,3 +49,4 @@ export default function AppHome() {
 }
 
 <ChatList />
+<MembersAdmin />
