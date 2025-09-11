@@ -4,28 +4,34 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 
 export function useMembership() {
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, user } = useAuth();
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(!!activeOrgId);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    if (!activeOrgId) {
-      setRole(null);
-      setLoading(false);
+
+    async function run() {
+      if (!activeOrgId || !user?.id) {
+        setRole(null);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      setLoading(true);
       setError(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    (async () => {
+
+      // Belangrijk: filter óók op user_id, zodat er precies 1 rij terugkomt
       const { data, error } = await supabase
         .from('memberships')
         .select('role')
         .eq('org_id', activeOrgId)
+        .eq('user_id', user.id)
         .single();
+
       if (cancelled) return;
+
       if (error) {
         setError(error);
         setRole(null);
@@ -33,11 +39,11 @@ export function useMembership() {
         setRole(data?.role ?? null);
       }
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrgId]);
+    }
+
+    run();
+    return () => { cancelled = true; };
+  }, [activeOrgId, user?.id]);
 
   return { role, loading, error };
 }
