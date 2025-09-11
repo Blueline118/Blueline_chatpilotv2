@@ -1,4 +1,3 @@
-// src/components/WorkspaceSwitcher.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
@@ -12,30 +11,26 @@ export default function WorkspaceSwitcher() {
     if (!user) return;
     (async () => {
       setLoading(true);
-      // memberships + gekoppelde organizations ophalen
-      const { data, error } = await supabase
-        .from('memberships')
-        .select('org_id, role, organizations ( id, name )')
-        .order('created_at', { ascending: true });
-      if (!error) {
-        const formatted = (data || []).map((row) => ({
-          id: row.organizations?.id,
-          name: row.organizations?.name,
-          role: row.role
-        })).filter(Boolean);
-        setOrgs(formatted);
-
-        // als er nog geen activeOrgId is en je hebt precies 1 org, kies die automatisch
-        if (!activeOrgId && formatted.length === 1 && formatted[0].id) {
-          setActiveOrgId(formatted[0].id);
+      const { data, error } = await supabase.rpc('get_user_orgs');
+      if (error) {
+        console.error('[WorkspaceSwitcher] get_user_orgs error:', error);
+        setOrgs([]);
+      } else {
+        setOrgs(data || []);
+        // reset als activeOrgId niet meer bestaat
+        if (activeOrgId && !data?.find(o => o.id === activeOrgId)) {
+          setActiveOrgId(null);
+        }
+        // precies 1 org? kies automatisch
+        if (!activeOrgId && data && data.length === 1) {
+          setActiveOrgId(data[0].id);
         }
       }
       setLoading(false);
     })();
   }, [user]); // eslint-disable-line
 
-  if (!user) return null;
-  if (loading) return null;
+  if (!user || loading) return null;
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
