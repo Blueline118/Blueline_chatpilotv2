@@ -4,6 +4,7 @@ import AuthStatus from '../components/AuthStatus';
 import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
 import PermissionGate from '../components/PermissionGate';
 import RoleBadge from '../components/RoleBadge';
+import ChatList from '../components/ChatList';
 
 
 
@@ -46,3 +47,5 @@ export default function AppHome() {
     </div>
   );
 }
+
+<ChatList />
