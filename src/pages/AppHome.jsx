@@ -1,9 +1,11 @@
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
+import AuthStatus from '../components/AuthStatus';
 import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
 import PermissionGate from '../components/PermissionGate';
 import RoleBadge from '../components/RoleBadge';
-  
+
+
 
 export default function AppHome() {
   const { user, activeOrgId } = useAuth();
@@ -15,6 +17,7 @@ export default function AppHome() {
 
   return (
     <div style={{ padding: 16 }}>
+      <AuthStatus />   {/* eventueel tijdelijk voor debug */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
   <h2>Chatpilot</h2>
   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
