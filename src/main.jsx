@@ -1,12 +1,10 @@
 import { createRoot } from 'react-dom/client';
-import AppHome from './pages/AppHome';
 
-function Safe() {
-  try {
-    return <AppHome />;
-  } catch (e) {
-    return <pre style={{whiteSpace:'pre-wrap',padding:16}}>App error: {String(e)}</pre>;
-  }
-}
+// Kies het juiste pad naar jouw component.
+// Meest waarschijnlijke locatie:
+import BluelineChatpilot from './components/BluelineChatpilot';
+// Als dat niet bestaat, probeer één van deze en gebruik degene die *bestaat*:
+// import BluelineChatpilot from './components/Chatpilot';
+// import BluelineChatpilot from './pages/BluelineChatpilot';
 
-createRoot(document.getElementById('root')).render(<Safe />);
+createRoot(document.getElementById('root')).render(<BluelineChatpilot />);
