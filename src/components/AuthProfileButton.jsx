@@ -4,13 +4,23 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
 
+/**
+ * Props:
+ * - expanded (boolean)  => optioneel. Default: true.
+ *   - expanded=false  => (desktop) ingelogd: alleen avatar, uitgelogd: niets
+ *   - expanded=true   => (desktop) ingelogd: avatar + naam + rol, uitgelogd: compacte login-knop
+ *
+ * Mobiel (<768px):
+ *   - ingelogd  => alleen avatar
+ *   - uitgelogd => compacte login-knop
+ */
 export default function AuthProfileButton({ expanded = true }) {
   const { session, user } = useAuth();
   const { role } = useMembership();
   const [busy, setBusy] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detecteer mobiel
+  // Detect mobiel
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const apply = () => setIsMobile(mq.matches);
@@ -19,22 +29,25 @@ export default function AuthProfileButton({ expanded = true }) {
     return () => mq.removeEventListener?.('change', apply);
   }, []);
 
-  // ── UITGELOGD: ALTIJD een werkende inlogknop (ook mobiel & collapsed)
+  // ------- UITGELOGD -------
   if (!session) {
+    // Mobiel en Desktop: compacte, subtiele login-knop (geen volle breedte)
+    // (Als je per se niets wil tonen bij desktop-collapsed, geef dan expanded={false} door vanuit de sidebar.)
     return (
       <a
         href="/login?intent=1"
-        className="w-full block text-center px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#194297] hover:opacity-90"
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#d0d7ea] bg-white text-[12px] font-medium text-[#194297] hover:bg-[#f5f8ff] shadow-sm transition-colors"
+        style={{ display: 'inline-flex' }}
       >
         Inloggen
       </a>
     );
   }
 
-  // ── INGELOGD
+  // ------- INGELOGD -------
   const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
-  // Mobiel: alleen avatar
+  // Mobiel: altijd alleen avatar
   if (isMobile) {
     return (
       <div className="w-full flex items-center justify-center">
@@ -45,7 +58,7 @@ export default function AuthProfileButton({ expanded = true }) {
     );
   }
 
-  // Desktop collapsed: alleen avatar
+  // Desktop collapsed: alleen avatar (als expanded=false wordt doorgegeven)
   if (!expanded) {
     return (
       <div className="w-full flex items-center justify-center">
@@ -56,7 +69,7 @@ export default function AuthProfileButton({ expanded = true }) {
     );
   }
 
-  // Desktop expanded: volledig blok + uitloggen
+  // Desktop expanded: avatar + naam + rol + uitloggen
   return (
     <div className="w-full">
       <div className="flex items-center gap-3">
@@ -78,7 +91,7 @@ export default function AuthProfileButton({ expanded = true }) {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              window.location.replace('/app');
+              window.location.replace('/app'); // terug naar de main UI
             }
           }}
           className="px-3 py-1.5 rounded-md border text-[12px] hover:bg-gray-50"
