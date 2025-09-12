@@ -1,52 +1,19 @@
 // src/components/AuthProfileButton.jsx
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../providers/AuthProvider';
+import { useMembership } from '../hooks/useMembership';
 
 export default function AuthProfileButton() {
-  const [session, setSession] = useState(null);
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const { session, user } = useAuth();
+  const { role } = useMembership();
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        // Session + user ophalen zonder AuthProvider
-        const { data: s } = await supabase.auth.getSession();
-        if (cancelled) return;
-        setSession(s?.session || null);
-
-        const { data: u } = await supabase.auth.getUser();
-        if (cancelled) return;
-        setUser(u?.user || null);
-
-        // Probeer rol te bepalen (optioneel, alleen als org + user bestaan)
-        const activeOrgId = localStorage.getItem('activeOrgId');
-        if (u?.user?.id && activeOrgId) {
-          const { data, error } = await supabase
-            .from('memberships')
-            .select('role')
-            .eq('org_id', activeOrgId)
-            .eq('user_id', u.user.id)
-            .single();
-          if (!error && data?.role) setRole(data.role);
-        }
-      } catch {
-        // geen crash; laat gewoon de Inloggen-knop zien
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Niet ingelogd → simpele link naar /login, geen Router nodig
+  // Niet ingelogd → eenvoudige anchor (router-vrij)
   if (!session) {
     return (
       <a
-        href="/login"
+        href="/login?intent=1"
         className="w-full block text-center px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#194297] hover:opacity-90"
       >
         Inloggen
@@ -77,8 +44,8 @@ export default function AuthProfileButton() {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              // Zonder Router: gewoon hard navigeren
-              window.location.href = '/login';
+              // Altijd terug naar je Chatpilot-UI
+              window.location.replace('/app');
             }
           }}
           className="px-3 py-1.5 rounded-md border text-[12px] hover:bg-gray-50"
