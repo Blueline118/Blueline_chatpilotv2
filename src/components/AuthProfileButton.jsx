@@ -4,13 +4,21 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
 
-export default function AuthProfileButton() {
+/**
+ * Props:
+ * - expanded (boolean): of de sidebar uitgeklapt is
+ */
+export default function AuthProfileButton({ expanded = true }) {
   const { session, user } = useAuth();
   const { role } = useMembership();
   const [busy, setBusy] = useState(false);
 
-  // Niet ingelogd → eenvoudige anchor (router-vrij)
+  // UITGELOGD
   if (!session) {
+    // Sidebar ingeklapt -> toon niets
+    if (!expanded) return null;
+
+    // Sidebar uitgeklapt -> toon login-knop
     return (
       <a
         href="/login?intent=1"
@@ -21,8 +29,21 @@ export default function AuthProfileButton() {
     );
   }
 
-  const initials = String(user?.email || '?').slice(0,2).toUpperCase();
+  // INGELOGD
+  const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
+  // Ingeklapt -> alleen avatar
+  if (!expanded) {
+    return (
+      <div className="w-full flex items-center justify-center">
+        <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">
+          {initials}
+        </div>
+      </div>
+    );
+  }
+
+  // Uitgeklapt -> volledig profielblok + uitloggen
   return (
     <div className="w-full">
       <div className="flex items-center gap-3">
@@ -44,8 +65,7 @@ export default function AuthProfileButton() {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              // Altijd terug naar je Chatpilot-UI
-              window.location.replace('/app');
+              window.location.replace('/app'); // altijd terug naar main UI
             }
           }}
           className="px-3 py-1.5 rounded-md border text-[12px] hover:bg-gray-50"
