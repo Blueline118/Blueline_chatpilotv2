@@ -6,21 +6,18 @@ import { useMembership } from '../hooks/useMembership';
 
 /**
  * Props:
- * - expanded (boolean)  => optioneel. Default: true.
- *   - expanded=false  => (desktop) ingelogd: alleen avatar, uitgelogd: niets
- *   - expanded=true   => (desktop) ingelogd: avatar + naam + rol, uitgelogd: compacte login-knop
- *
- * Mobiel (<768px):
- *   - ingelogd  => alleen avatar
- *   - uitgelogd => compacte login-knop
+ * - expanded?: boolean
+ *   - true  => force "volledig" (desktop-achtig)
+ *   - false => force "compact"  (collapsed-achtig)
+ *   - undefined => auto: mobiel = compact, desktop = volledig
  */
-export default function AuthProfileButton({ expanded = true }) {
+export default function AuthProfileButton({ expanded }) {
   const { session, user } = useAuth();
   const { role } = useMembership();
   const [busy, setBusy] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detect mobiel
+  // Detecteer mobiel voor auto-modus
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const apply = () => setIsMobile(mq.matches);
@@ -29,26 +26,34 @@ export default function AuthProfileButton({ expanded = true }) {
     return () => mq.removeEventListener?.('change', apply);
   }, []);
 
-  // ------- UITGELOGD -------
+  // Bepaal modus
+  // - als prop is meegegeven: respecteer die
+  // - anders: mobiel => compact, desktop => volledig
+  const mode = expanded === undefined
+    ? (isMobile ? 'compact' : 'full')
+    : (expanded ? 'full' : 'compact');
+
+  // ===== UITGELOGD =====
   if (!session) {
-    // Mobiel en Desktop: compacte, subtiele login-knop (geen volle breedte)
-    // (Als je per se niets wil tonen bij desktop-collapsed, geef dan expanded={false} door vanuit de sidebar.)
+    // Subtiele, smalle knop (geen full-width), werkt ook op mobiel
     return (
       <a
         href="/login?intent=1"
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#d0d7ea] bg-white text-[12px] font-medium text-[#194297] hover:bg-[#f5f8ff] shadow-sm transition-colors"
-        style={{ display: 'inline-flex' }}
+        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-[#cfd7ee] text-xs font-medium text-[#194297] hover:bg-[#eef3ff] transition-colors"
+        title="Inloggen"
       >
+        {/* klein “key” icoon met pure CSS, zodat we geen icon-lib hoeven */}
+        <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full bg-[#194297]" />
         Inloggen
       </a>
     );
   }
 
-  // ------- INGELOGD -------
+  // ===== INGELOGD =====
   const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
-  // Mobiel: altijd alleen avatar
-  if (isMobile) {
+  if (mode === 'compact') {
+    // Compact: alleen avatar (mobiel of desktop-collapsed)
     return (
       <div className="w-full flex items-center justify-center">
         <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">
@@ -58,18 +63,7 @@ export default function AuthProfileButton({ expanded = true }) {
     );
   }
 
-  // Desktop collapsed: alleen avatar (als expanded=false wordt doorgegeven)
-  if (!expanded) {
-    return (
-      <div className="w-full flex items-center justify-center">
-        <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">
-          {initials}
-        </div>
-      </div>
-    );
-  }
-
-  // Desktop expanded: avatar + naam + rol + uitloggen
+  // Volledig (desktop-uitgeklapt): avatar + naam + rol + (kleine) uitlogknop
   return (
     <div className="w-full">
       <div className="flex items-center gap-3">
@@ -82,7 +76,7 @@ export default function AuthProfileButton({ expanded = true }) {
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2 flex gap-2">
         <button
           type="button"
           onClick={async () => {
@@ -91,12 +85,15 @@ export default function AuthProfileButton({ expanded = true }) {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              window.location.replace('/app'); // terug naar de main UI
+              // Altijd terug naar je Chatpilot hoofdpagina
+              window.location.replace('/app');
             }
           }}
-          className="px-3 py-1.5 rounded-md border text-[12px] hover:bg-gray-50"
+          className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#e4e7f2] text-[12px] hover:bg-gray-50 transition-colors"
           disabled={busy}
+          title="Uitloggen"
         >
+          <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full bg-[#66676b]" />
           {busy ? 'Uitloggen…' : 'Uitloggen'}
         </button>
       </div>
