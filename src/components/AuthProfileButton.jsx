@@ -4,24 +4,13 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
 
-/**
- * Props:
- * - expanded (boolean): desktop/sidebar uitgeklapt
- *
- * Desktop:
- *  - expanded=true  -> volledig blok (email/rol/uitlog)
- *  - expanded=false -> alleen avatar (ingelogd) / niets (uitgelogd)
- * Mobiel (<768px):
- *  - ingelogd  -> alleen avatar
- *  - uitgelogd -> compacte Inloggen-knop (router-vrij)
- */
 export default function AuthProfileButton({ expanded = true }) {
   const { session, user } = useAuth();
   const { role } = useMembership();
   const [busy, setBusy] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Mobiel detectie
+  // Detecteer mobiel
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const apply = () => setIsMobile(mq.matches);
@@ -30,22 +19,8 @@ export default function AuthProfileButton({ expanded = true }) {
     return () => mq.removeEventListener?.('change', apply);
   }, []);
 
-  // UITGELOGD
+  // ── UITGELOGD: ALTIJD een werkende inlogknop (ook mobiel & collapsed)
   if (!session) {
-    if (isMobile) {
-      // Mobiel: compacte login-knop
-      return (
-        <a
-          href="/login?intent=1"
-          className="w-full block text-center px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#194297] hover:opacity-90"
-        >
-          Inloggen
-        </a>
-      );
-    }
-    // Desktop collapsed -> niets
-    if (!expanded) return null;
-    // Desktop expanded -> grote login-knop
     return (
       <a
         href="/login?intent=1"
@@ -56,7 +31,7 @@ export default function AuthProfileButton({ expanded = true }) {
     );
   }
 
-  // INGELOGD
+  // ── INGELOGD
   const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
   // Mobiel: alleen avatar
@@ -81,7 +56,7 @@ export default function AuthProfileButton({ expanded = true }) {
     );
   }
 
-  // Desktop expanded: volledig profielblok + uitloggen
+  // Desktop expanded: volledig blok + uitloggen
   return (
     <div className="w-full">
       <div className="flex items-center gap-3">
@@ -103,7 +78,7 @@ export default function AuthProfileButton({ expanded = true }) {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              window.location.replace('/app'); // terug naar main UI
+              window.location.replace('/app');
             }
           }}
           className="px-3 py-1.5 rounded-md border text-[12px] hover:bg-gray-50"

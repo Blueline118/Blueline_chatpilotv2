@@ -427,15 +427,9 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
         )}
 
         {/* Profiel onderaan */}
-        <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#e8efff] grid place-items-center text-[#194297] font-semibold">SB</div>
-            <div>
-              <div className="text-sm font-medium text-[#194297]">Samir Bouchdak</div>
-              <div className="text-[11px] text-[#66676b]">Profiel actief</div>
-            </div>
-          </div>
-        </div>
+<div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
+  <AuthProfileButton expanded={expanded} />
+</div>
       </aside>
     </div>
   );
