@@ -8,13 +8,12 @@ import { useMembership } from '../hooks/useMembership';
  * Props:
  * - expanded (boolean): desktop/sidebar uitgeklapt
  *
- * Gedrag:
- * - Desktop:
- *    - expanded=true  -> volledig blok (email/rol/uitlog)
- *    - expanded=false -> alleen avatar (ingelogd) / niets (uitgelogd)
- * - Mobile (<768px): altijd "collapsed-gedrag"
- *    - ingelogd  -> alleen avatar
- *    - uitgelogd -> niets
+ * Desktop:
+ *  - expanded=true  -> volledig blok (email/rol/uitlog)
+ *  - expanded=false -> alleen avatar (ingelogd) / niets (uitgelogd)
+ * Mobiel (<768px):
+ *  - ingelogd  -> alleen avatar
+ *  - uitgelogd -> compacte Inloggen-knop (router-vrij)
  */
 export default function AuthProfileButton({ expanded = true }) {
   const { session, user } = useAuth();
@@ -22,7 +21,7 @@ export default function AuthProfileButton({ expanded = true }) {
   const [busy, setBusy] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Detecteer mobiele viewport zonder iets anders aan te raken
+  // Mobiel detectie
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const apply = () => setIsMobile(mq.matches);
@@ -33,12 +32,20 @@ export default function AuthProfileButton({ expanded = true }) {
 
   // UITGELOGD
   if (!session) {
-    // Mobile -> niets tonen
-    if (isMobile) return null;
+    if (isMobile) {
+      // Mobiel: compacte login-knop
+      return (
+        <a
+          href="/login?intent=1"
+          className="w-full block text-center px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#194297] hover:opacity-90"
+        >
+          Inloggen
+        </a>
+      );
+    }
     // Desktop collapsed -> niets
     if (!expanded) return null;
-
-    // Desktop expanded -> login-knop
+    // Desktop expanded -> grote login-knop
     return (
       <a
         href="/login?intent=1"
@@ -52,7 +59,7 @@ export default function AuthProfileButton({ expanded = true }) {
   // INGELOGD
   const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
-  // Mobile: altijd alleen avatar
+  // Mobiel: alleen avatar
   if (isMobile) {
     return (
       <div className="w-full flex items-center justify-center">
