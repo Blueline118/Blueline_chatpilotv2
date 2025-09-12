@@ -1,27 +1,35 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.jsx';
-import './index.css';
-import CxChat from './pages/CxChat'; // ← nieuw
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './providers/AuthProvider';
 
-// ...
-<Route
-  path="/app"
-  element={
-    <Protected>
-      <AppLayout />
-    </Protected>
-  }
->
-  <Route index element={<CxChat />} />      {/* Chat als startpagina */}
-  <Route path="chat" element={<CxChat />} />{/* expliciete /app/chat */}
-  <Route path="news" element={<News />} />
-  <Route path="settings" element={<Settings />} />
-</Route>
+import Protected from './components/Protected';
+import AppHome from './pages/AppHome';          // bestaat al en werkt
+import Login from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 
+// Optioneel: als je al een aparte Chatpagina gemaakt hebt:
+// import CxChat from './pages/CxChat';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+createRoot(document.getElementById('root')).render(
+  <BrowserRouter>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+
+        {/* Simpel en stabiel: gebruik je bestaande AppHome als /app */}
+        <Route
+          path="/app"
+          element={
+            <Protected>
+              <AppHome />
+            </Protected>
+          }
+        />
+
+        {/* Default redirect */}
+        <Route path="*" element={<Navigate to="/app" replace />} />
+      </Routes>
+    </AuthProvider>
+  </BrowserRouter>
 );
