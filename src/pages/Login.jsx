@@ -6,20 +6,22 @@ import { useAuth } from '../providers/AuthProvider';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // alleen lezen; zorgt niet voor loops
+  const { user } = useAuth(); // alleen lezen
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState('');
-  const [didRedirect, setDidRedirect] = useState(false); // voorkomt knipper/loop
+  const [didRedirect, setDidRedirect] = useState(false); // voorkom knipper/loop
 
   // Eén debounced effect voor alle login-redirects
   useEffect(() => {
     if (didRedirect) return;
 
+    const url = new URL(window.location.href);
     const hasHashTokens = window.location.hash.includes('access_token=');
-    const hasCode = new URLSearchParams(window.location.search).has('code');
+    const hasCode = url.searchParams.has('code');
+    const intent = url.searchParams.get('intent') === '1';
 
-    // 1) Magic link/OAuth kwam per ongeluk op /login binnen? -> stuur door naar /auth/callback
+    // 1) Magic link / OAuth tokens? -> door naar /auth/callback
     if (hasHashTokens || hasCode) {
       setDidRedirect(true);
       navigate('/auth/callback' + window.location.search + window.location.hash, { replace: true });
@@ -28,6 +30,13 @@ export default function Login() {
 
     // 2) Al ingelogd? -> naar /app
     if (user) {
+      setDidRedirect(true);
+      navigate('/app', { replace: true });
+      return;
+    }
+
+    // 3) Geen intent en geen tokens? -> per ongeluk op /login => terug naar /app
+    if (!intent) {
       setDidRedirect(true);
       navigate('/app', { replace: true });
       return;
@@ -51,8 +60,7 @@ export default function Login() {
     else setSent(true);
   };
 
-  // Tijdens redirect tonen we niets (voorkomt flicker)
-  if (didRedirect) return null;
+  if (didRedirect) return null; // toon niets tijdens redirect
 
   return (
     <div style={{ maxWidth: 360, margin: '64px auto', padding: 24, border: '1px solid #eee', borderRadius: 12 }}>
