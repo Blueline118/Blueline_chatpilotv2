@@ -38,3 +38,6 @@ export default function AuthCallback() {
 
   return <div style={{ padding: 24 }}>Bezig met inloggen…</div>;
 }
+
+// nadat supabase de sessie heeft gezet:
+window.location.replace('/app');

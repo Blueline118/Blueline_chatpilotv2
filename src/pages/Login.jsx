@@ -20,10 +20,13 @@ export default function Login() {
     }
   }, [navigate]);
 
-  // Als je al ingelogd bent, ga naar /app
+   // Als je al ingelogd bent (user of session), ga naar /app
   useEffect(() => {
-    if (user) navigate('/app', { replace: true });
+    if (user) {
+      navigate('/app', { replace: true });
+    }
   }, [user, navigate]);
+
 
   const onSendLink = async (e) => {
     e.preventDefault();
