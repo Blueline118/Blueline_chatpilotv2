@@ -1,8 +1,8 @@
 // src/pages/AppHome.jsx
+import PermissionGate from '../components/PermissionGate';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
-import PermissionGate from '../components/PermissionGate';
 import ChatList from '../components/ChatList';
 import MembersAdmin from '../components/MembersAdmin';
 import RoleBadge from '../components/RoleBadge';
