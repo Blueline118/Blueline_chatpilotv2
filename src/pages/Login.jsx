@@ -6,27 +6,33 @@ import { useAuth } from '../providers/AuthProvider';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useAuth(); // alleen lezen; zorgt niet voor loops
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState('');
+  const [didRedirect, setDidRedirect] = useState(false); // voorkomt knipper/loop
 
-  // Als de magic link per ongeluk op /login landt mét tokens in de URL, stuur door naar /auth/callback
+  // Eén debounced effect voor alle login-redirects
   useEffect(() => {
+    if (didRedirect) return;
+
     const hasHashTokens = window.location.hash.includes('access_token=');
     const hasCode = new URLSearchParams(window.location.search).has('code');
+
+    // 1) Magic link/OAuth kwam per ongeluk op /login binnen? -> stuur door naar /auth/callback
     if (hasHashTokens || hasCode) {
+      setDidRedirect(true);
       navigate('/auth/callback' + window.location.search + window.location.hash, { replace: true });
+      return;
     }
-  }, [navigate]);
 
-   // Als je al ingelogd bent (user of session), ga naar /app
-  useEffect(() => {
+    // 2) Al ingelogd? -> naar /app
     if (user) {
+      setDidRedirect(true);
       navigate('/app', { replace: true });
+      return;
     }
-  }, [user, navigate]);
-
+  }, [user, navigate, didRedirect]);
 
   const onSendLink = async (e) => {
     e.preventDefault();
@@ -44,6 +50,9 @@ export default function Login() {
     if (error) setErr(error.message);
     else setSent(true);
   };
+
+  // Tijdens redirect tonen we niets (voorkomt flicker)
+  if (didRedirect) return null;
 
   return (
     <div style={{ maxWidth: 360, margin: '64px auto', padding: 24, border: '1px solid #eee', borderRadius: 12 }}>

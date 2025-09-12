@@ -1,43 +1,39 @@
 // src/pages/AuthCallback.jsx
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
-
   useEffect(() => {
     (async () => {
-      const hashParams = new URLSearchParams(window.location.hash.slice(1));
-      const searchParams = new URLSearchParams(window.location.search);
-
-      const access_token = hashParams.get('access_token');
-      const refresh_token = hashParams.get('refresh_token');
-      const code = searchParams.get('code');
-
-      // Debug: zie je tokens binnenkomen?
-      console.log('[AuthCallback] has access_token?', !!access_token, 'has code?', !!code);
-
       try {
-        if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (error) throw error;
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-        } else {
-          await supabase.auth.getSession();
+        const url = new URL(window.location.href);
+        const hasCode = url.searchParams.get('code');
+        const hash = url.hash;
+
+        // 1) OAuth PKCE: code → sessie
+        if (hasCode) {
+          const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (error) console.error('exchangeCode error', error);
+          window.location.replace('/app');
+          return;
         }
+
+        // 2) Magic-link (hash tokens): Supabase zet normaliter zelf de sessie
+        if (hash && hash.includes('access_token=')) {
+          // geef Supabase eventjes de tijd om de sessie te zetten
+          await new Promise((r) => setTimeout(r, 50));
+          window.location.replace('/app');
+          return;
+        }
+
+        // 3) Fallback
+        window.location.replace('/app');
       } catch (e) {
-        console.error('Auth callback error:', e);
-      } finally {
-        navigate('/app', { replace: true });
+        console.error('AuthCallback error', e);
+        window.location.replace('/app');
       }
     })();
-  }, [navigate]);
+  }, []);
 
-  return <div style={{ padding: 24 }}>Bezig met inloggen…</div>;
+  return null;
 }
-
-// nadat supabase de sessie heeft gezet:
-window.location.replace('/app');
