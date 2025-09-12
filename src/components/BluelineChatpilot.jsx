@@ -428,7 +428,7 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
 
         {/* Profiel onderaan */}
 <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
-  <AuthProfileButton expanded={expanded} />
+  <AuthProfileButton />
 </div>
       </aside>
     </div>
