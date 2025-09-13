@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { NavLink, useLocation } from 'react-router-dom';
+
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
+
 import AuthProfileButton from './AuthProfileButton';
-import { useMembership } from '../hooks/useMembership';
 import MembersAdmin from './MembersAdmin';
-import { NavLink, useLocation } from 'react-router-dom';
+import SidebarNewsFeed from "./SidebarNewsFeed";
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -109,9 +111,6 @@ function CopyButton({ id, text, onCopied, isCopied }) {
 }
 
 /******************** Sidebar (desktop) ********************/
-import SidebarNewsFeed from "./SidebarNewsFeed";
-
-// [4I] Helper: contextmenu voor Recente chats (verwijderen)
 function RecentChatMenu({ chatId, onDelete }) {
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState({ top: 0, left: 0 });
@@ -301,11 +300,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
           </NavLink>
 
-          {/* Newsfeed zichtbaar bij uitgeklapt */}
-          {/* ... rest van je sidebar: feed en recente chats blijven ongewijzigd */}
-
-          {/* Newsfeed zichtbaar bij uitgeklapt */}
-          {/* (originele code hieronder blijft intact) */}
+          {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
             <div className="mt-2">
               <SidebarNewsFeed limit={3} />
@@ -331,8 +326,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
                         >
                           <div className="text-[13px] text-[#194297] truncate">{label}</div>
                         </button>
-
-                        {/* Rechterzijde: 3-puntjes menu, valt niet over de tekst */}
                         <div className="ml-2 flex-shrink-0 relative">
                           <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
                         </div>
@@ -368,7 +361,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
 }
 
 /******************** Mobile Drawer (hamburger) ********************/
-/* ---------------- Mobile Sidebar (off-canvas) ---------------- */
 function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
   return (
     <div className={cx(
@@ -460,14 +452,16 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
 /******************** Main ********************/
 function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+  const location = useLocation();
+  const isMembers = location.pathname.startsWith('/members');
 
-  // Layout state
+  // Layout state (sidebar moet altijd zichtbaar blijven, open/closed)
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState("chat"); // "chat" | "newsfeed"
 
-  // [4B] STATE — Recente chats/threads
+  // Recente chats/threads
   const [recent, setRecent] = useState([]);
   const uidRef = useRef(null);
   const currentChatIdRef = useRef(null);
@@ -493,12 +487,6 @@ function BluelineChatpilotInner() {
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const copiedTimer = useRef(null);
-
-// ↓↓↓ deze drie regels toevoegen bij je andere useState/useEffect boven de return
-const { role } = useMembership();
-const isAdmin = role === 'ADMIN';
-const [showAdmin, setShowAdmin] = useState(false);
-
 
   // Init hero + rotaties
   useEffect(() => {
@@ -598,24 +586,23 @@ const [showAdmin, setShowAdmin] = useState(false);
     }
   }
 
+  const containerMaxW = isMembers ? 'max-w-[960px]' : 'max-w-[760px]';
+
   return (
     <div className="fixed inset-0 bg-white text-[#65676a]">
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — blijft zichtbaar (open/closed), ook op /members */}
       <AppSidebar
-  open={sidebarOpen}
-  onToggleSidebar={() => setSidebarOpen((v) => !v)}
-  onToggleFeed={() => setFeedOpen((v) => !v)}
-  feedOpen={feedOpen}
-  onNewChat={handleNewChat}
-  recent={recent}
-  loadChat={loadChat}
-  onDeleteChat={handleDeleteChat}
-  isAdmin={isAdmin}                      // ← nieuw
-  onOpenAdmin={() => setShowAdmin(true)} // ← nieuw
-/>
+        open={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onToggleFeed={() => setFeedOpen((v) => !v)}
+        feedOpen={feedOpen}
+        onNewChat={handleNewChat}
+        recent={recent}
+        loadChat={loadChat}
+        onDeleteChat={handleDeleteChat}
+      />
 
-
-      {/* Handle wanneer sidebar dicht is (klein knopje aan linker bovenzijde) */}
+      {/* Handle wanneer sidebar dicht is (klein knopje) */}
       {!sidebarOpen && (
         <button
           type="button"
@@ -630,7 +617,7 @@ const [showAdmin, setShowAdmin] = useState(false);
         </button>
       )}
 
-      {/* Main column met linker marge wanneer sidebar (gedeeltelijk) zichtbaar is */}
+      {/* Main kolom met linker marge afhankelijk van sidebar state */}
       <div className={cx(
         "h-full flex flex-col transition-[margin] duration-300",
         sidebarOpen ? "md:ml-64" : "md:ml-14"
@@ -647,7 +634,7 @@ const [showAdmin, setShowAdmin] = useState(false);
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
           </button>
-          <h1 className="text-[15px] md:text;base font-semibold text-[#194297]">Blueline Chatpilot</h1>
+          <h1 className="text-[15px] md:text:base font-semibold text-[#194297]">Blueline Chatpilot</h1>
           <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
         </header>
 
@@ -656,7 +643,7 @@ const [showAdmin, setShowAdmin] = useState(false);
           <div className="md:hidden fixed inset-0 z-40 bg-white">
             <div className="h-14 border-b flex items-center px-3 gap-2">
               <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={backToChatMobile} aria-label="Terug">
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path dName="M15 18l-6-6 6-6"/></svg>
               </button>
               <div className="text-sm font-semibold text-[#194297]">Insights</div>
             </div>
@@ -666,153 +653,144 @@ const [showAdmin, setShowAdmin] = useState(false);
           </div>
         )}
 
-        {/* Scrollable chat viewport */}
-     
-<main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-  <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
-    {showAdmin ? (
-      // ==== LEDENBEHEER (alleen zichtbaar als showAdmin true is) ====
-      <div className="py-5">
-        <div className="mb-3">
-          <button
-            type="button"
-            onClick={() => setShowAdmin(false)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#e4e7f2] text-[12px] hover:bg-gray-50"
-          >
-            ← Terug naar chat
-          </button>
-        </div>
-        <MembersAdmin />
-      </div>
-    ) : (
-      // ==== JOUW HUIDIGE CHAT UI (ongewijzigd) ====
-      <>
-        {/* Hero greeting zolang er geen user-message is */}
-        {!messages.some(m=>m.role === "user") ? (
-          <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-            <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
-              <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
-              <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-            {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
-              const isUser = m.role === "user";
-              return (
-                <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                  <div className={cx(
-                    "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                    isUser
-                      ? "bg-[#2563eb] text-white"
-                      : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                  )}>{m.text}</div>
-                  {!isUser && (
-                    <div className="-mt-1 ml-2 self:end"> 
-                      <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                  <span className="relative inline-block w-6 h-2 align-middle">
-                    <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
-                    <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
-                    <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
-                  </span>
-                  <span className="ml-2">Typen…</span>
-                </div>
+        {/* Scrollable viewport */}
+        <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <div className={cx("mx-auto w-full px-4 md:px-5", containerMaxW)}>
+            {isMembers ? (
+              // ===== /members: MembersAdmin binnen de layout, gecentreerd (max-w-960) =====
+              <div className="py-5">
+                <MembersAdmin />
               </div>
+            ) : (
+              // ===== Andere routes: Chat gecentreerd (max-w-760) =====
+              <>
+                {/* Hero greeting zolang er geen user-message is */}
+                {!messages.some(m=>m.role === "user") ? (
+                  <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
+                    <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
+                      <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
+                      <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
+                    {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
+                      const isUser = m.role === "user";
+                      return (
+                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
+                          <div className={cx(
+                            "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                            isUser
+                              ? "bg-[#2563eb] text-white"
+                              : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                          )}>{m.text}</div>
+                          {!isUser && (
+                            <div className="-mt-1 ml-2 self:end"> 
+                              <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {isTyping && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                          <span className="relative inline-block w-6 h-2 align-middle">
+                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
+                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
+                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
+                          </span>
+                          <span className="ml-2">Typen…</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
-        )}
-      </>
-    )}
-  </div>
-</main>
+        </main>
 
+        {/* Dock/tekstinvoer: blijft zoals het is — NIET renderen op /members */}
+        {!isMembers && (
+          <div className="bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+            <form onSubmit={handleSend} className="mx-auto max-w-[760px] px-4 md:px-5 py-3">
+              <div className="relative rounded-2xl border border-gray-200 bg-white">
+                {/* textarea */}
+                <div className="px-4 pt-3 pb-10">
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={input}
+                    onChange={onInputChange}
+                    placeholder="Typ een bericht..."
+                    className="w-full resize-none outline-none placeholder:text-[#66676b] placeholder:text-[15px] text-[15px] leading-6"
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                  />
+                </div>
 
-        {/* Dock (alleen input-blok) — GEEN extra scheidingslijn meer erboven */}
-        <div className="bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-          <form onSubmit={handleSend} className="mx-auto max-w-[760px] px-4 md:px-5 py-3">
-            <div className="relative rounded-2xl border border-gray-200 bg-white">
-              {/* textarea */}
-              <div className="px-4 pt-3 pb-10">
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={input}
-                  onChange={onInputChange}
-                  placeholder="Typ een bericht..."
-                  className="w-full resize-none outline-none placeholder:text-[#66676b] placeholder:text-[15px] text-[15px] leading-6"
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                />
-              </div>
+                {/* onderregel: + (profiel), type toggles, mic + send */}
+                <div className="absolute left-0 right-0 bottom-0 h-10 flex items-center">
+                  {/* Links */}
+                  <div className="pl-4 flex items-center gap-3 relative">
+                    {/* plus */}
+                    <button type="button" className="w-5 h-5 text-[#65676a] hover:text-[#194297]" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
+                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
 
-              {/* onderregel: + (profiel), type toggles, mic + send */}
-              <div className="absolute left-0 right-0 bottom-0 h-10 flex items-center">
-                {/* Links */}
-                <div className="pl-4 flex items-center gap-3 relative">
-                  {/* plus */}
-                  <button type="button" className="w-5 h-5 text-[#65676a] hover:text-[#194297]" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
-                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                  </button>
+                    {/* Profiel dropdown */}
+                    {profileMenuOpen && (
+                      <div className="absolute bottom-11 left-0 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                        {[{key:"default",label:"Standaard"},{key:"merrachi",label:"Merrachi"}].map((p) => (
+                          <button
+                            key={p.key}
+                            type="button"
+                            onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
+                            className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Profiel dropdown */}
-                  {profileMenuOpen && (
-                    <div className="absolute bottom-11 left-0 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
-                      {[{key:"default",label:"Standaard"},{key:"merrachi",label:"Merrachi"}].map((p) => (
-                        <button
-                          key={p.key}
-                          type="button"
-                          onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
-                          className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
-                        >
-                          {p.label}
-                        </button>
+                    {/* Type toggles */}
+                    <div className="flex items-center gap-4 text-[14px]">
+                      {["Social Media","E-mail"].map((t) => (
+                        <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
                       ))}
                     </div>
-                  )}
-
-                  {/* Type toggles */}
-                  <div className="flex items-center gap-4 text-[14px]">
-                    {["Social Media","E-mail"].map((t) => (
-                      <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
-                    ))}
                   </div>
-                </div>
 
-                {/* Rechts */}
-                <div className="ml-auto pr-3 flex items-center gap-2">
-                  {/* Mic (dummy) */}
-                  <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-[#65676a] hover:bg-[#f2f8ff]" aria-label="Spraak">
-                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z"/>
-                      <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                      <path d="M12 19v3"/>
-                    </svg>
-                  </button>
-
-                  {/* Send (fade + delay) */}
-                  {showSendDelayed && (
-                    <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f8ff] text-[#194297] shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
-                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 2L11 13" />
-                        <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                  {/* Rechts */}
+                  <div className="ml-auto pr-3 flex items-center gap-2">
+                    {/* Mic (dummy) */}
+                    <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-[#65676a] hover:bg-[#f2f8ff]" aria-label="Spraak">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z"/>
+                        <path d="M19 10v2a7 7 0 01-14 0v-2"/>
+                        <path d="M12 19v3"/>
                       </svg>
                     </button>
-                  )}
+
+                    {/* Send (fade + delay) */}
+                    {showSendDelayed && (
+                      <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f8ff] text-[#194297] shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
+                        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 2L11 13" />
+                          <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </form>
+            </form>
 
-          {/* Disclaimer */}
-          <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
-        </div>
+            {/* Disclaimer */}
+            <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
+          </div>
+        )}
       </div>
 
       {/* Mobile off-canvas sidebar */}

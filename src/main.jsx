@@ -23,14 +23,14 @@ createRoot(document.getElementById('root')).render(
         <Route path="/app" element={<BluelineChatpilot />} />
 
         {/* Ledenbeheer alleen voor ingelogde users */}
-        <Route
-          path="/members"
-          element={
-            <Protected>
-              <MembersAdmin />
-            </Protected>
-          }
-        />
+        <<Route
+  path="/members"
+  element={
+    <Protected>
+      <BluelineChatpilot />
+    </Protected>
+  }
+/>
 
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
