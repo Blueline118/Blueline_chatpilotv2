@@ -6,7 +6,7 @@ import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
 import AuthProfileButton from './AuthProfileButton';
 import { useMembership } from '../hooks/useMembership';
 import MembersAdmin from './MembersAdmin';
-
+import { NavLink, useLocation } from 'react-router-dom';
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -200,7 +200,7 @@ function RecentChatMenu({ chatId, onDelete }) {
   );
 }
 
-function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat, isAdmin, onOpenAdmin }) {
+function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat }) {
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
 
@@ -259,7 +259,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
               )}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
               </svg>
               {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
             </button>
@@ -278,43 +278,41 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
               )}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+                  <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
               </svg>
               {expanded && <span className="whitespace-nowrap">Insights</span>}
             </button>
           </div>
 
-{/* Ledenbeheer (alleen voor Admin en uitgeklapte sidebar) */}
-{isAdmin && expanded && (
-  <div className="relative">
-    <button
-      type="button"
-      onClick={onOpenAdmin}
-      className={cx(
-        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
-        "text-[#65676a] justify-start"
-      )}
-      title="Leden beheren"
-    >
-      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M16 11c1.657 0 3-1.343 3-3S17.657 5 16 5s-3 1.343-3 3 1.343 3 3 3z" />
-        <path d="M2 20c0-3.314 2.686-6 6-6h4" />
-        <path d="M19 14v4" />
-        <path d="M21 16h-4" />
-      </svg>
-      <span className="whitespace-nowrap">Ledenbeheer</span>
-    </button>
-  </div>
-)}
+          {/* --- Ledenbeheer (icoon/label, werkt ook ingeklapt) --- */}
+          <NavLink
+            to="/members"
+            title="Ledenbeheer"
+            className={({ isActive }) => [
+              "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
+              expanded ? "justify-start" : "justify-center",
+              isActive ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+            ].join(' ')}
+          >
+            {/* people/users icon */}
+            <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
+              <path fill="currentColor" d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0" />
+            </svg>
+            {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
+          </NavLink>
 
           {/* Newsfeed zichtbaar bij uitgeklapt */}
+          {/* ... rest van je sidebar: feed en recente chats blijven ongewijzigd */}
+
+          {/* Newsfeed zichtbaar bij uitgeklapt */}
+          {/* (originele code hieronder blijft intact) */}
           {feedOpen && expanded && (
             <div className="mt-2">
               <SidebarNewsFeed limit={3} />
             </div>
           )}
 
-          {/* Recente chats — alleen tonen als uitgeklapt, zodat ingeklapt clean blijft */}
+          {/* Recente chats */}
           {expanded && (
             <div className="mt-2">
               <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-[#66676b]">Recente chats</div>
@@ -325,7 +323,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
                   return (
                     <li key={c.id}>
                       <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100">
-                        {/* Linkerzijde: alleen titel, strak links uitgelijnd */}
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
