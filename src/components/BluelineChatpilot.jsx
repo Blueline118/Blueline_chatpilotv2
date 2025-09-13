@@ -327,7 +327,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
 
         {/* Profiel onderaan */}
 <div className="mt-auto p-3 border-t border-gray-200">
-  <AuthProfileButton expanded={expanded} />
+  <AuthProfileButton expanded={sidebarOpen} />
 </div>
 </aside>
 
