@@ -577,17 +577,13 @@ function goToChatRoute() {
   setInput("");
   setIsTyping(false);
 
-  // opslaan in recents (zodat het meteen zichtbaar is)
-  const uid = uidRef.current;
-  const title = "Nieuwe chat";
-  setRecent(saveRecentChat(uid, { id: newId, title, lastMessageAt: Date.now() }));
-
   // ga (indien nodig) naar chatroute (weg uit /members)
   goToChatRoute();
 
   // focus op input
   requestAnimationFrame(() => inputRef.current?.focus?.());
 }
+
 
 
   // Recall & delete
