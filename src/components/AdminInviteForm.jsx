@@ -6,55 +6,48 @@ const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 const roleLabel = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
 
 /**
- * Uitgelijnd met MembersAdmin:
- *   grid-cols-[1fr_200px_96px]  => Lid / Rol / Acties
- * props:
- *   - orgId   (uuid van actieve organisatie)  [verplicht]
- *   - gridCols (optioneel override van grid template cols)
+ * Uitgelijnd met MembersAdmin (grid-cols-[1fr_200px_96px]).
+ * Genereert invite link en kopieert deze direct naar het klembord.
  */
 export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200px_96px]' }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('TEAM');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [ok, setOk] = useState('');
+  const [ok, setOk] = useState('');       // tekstfeedback
+  const [lastLink, setLastLink] = useState(''); // laatste gegenereerde link (fallback kopie)
 
   async function onGenerate() {
     setErr('');
     setOk('');
-    if (!orgId) {
-      setErr('Geen organisatie gekozen.');
-      return;
-    }
-    if (!email) {
-      setErr('Vul een e-mailadres in.');
-      return;
-    }
+    setLastLink('');
+
+    if (!orgId) { setErr('Geen organisatie gekozen.'); return; }
+    if (!email) { setErr('Vul een e-mailadres in.'); return; }
 
     setBusy(true);
     try {
-      /**
-       * Gebruik de RPC die je al eerder hebt aangemaakt om invites te creëren.
-       * Vervang onderstaande rpc-naam en parameters als jouw functie anders heet.
-       * Veelgebruikte varianten die we eerder zagen:
-       *   - create_invite(p_org uuid, p_email text, p_role text) returns text (link)
-       *   - generate_invite_link(org uuid, email text, role text) returns text (link)
-       */
+      // Vervang de RPC-naam en parameter-namen indien jouw variant anders heet.
       const { data, error } = await supabase.rpc('create_invite', {
         p_org: orgId,
         p_email: email,
         p_role: role,
       });
-
       if (error) throw error;
 
-      // data kan bij jou een URL of token zijn; toon in elk geval “gelukt”
-      setOk('Invite link gegenereerd.');
+      const link = String(data ?? '');
+      setLastLink(link);
+
+      // Probeer direct te kopiëren
+      try {
+        await navigator.clipboard?.writeText(link);
+        setOk('Invite link gegenereerd en gekopieerd.');
+      } catch {
+        setOk('Invite link gegenereerd. (Kopieer handmatig)');
+      }
+
       setEmail('');
       setRole('TEAM');
-
-      // Als je de gegenereerde link wilt tonen / kopiëren:
-      // navigator.clipboard?.writeText(String(data)).catch(() => {});
     } catch (e) {
       console.error('[AdminInviteForm] create_invite error:', e);
       setErr(e.message || 'Kon invite niet genereren.');
@@ -63,15 +56,23 @@ export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200p
     }
   }
 
+  function copyAgain() {
+    if (!lastLink) return;
+    navigator.clipboard?.writeText(lastLink).then(
+      () => setOk('Link gekopieerd.'),
+      () => setErr('Kopiëren mislukt.')
+    );
+  }
+
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-[#eef1f6] bg-white">
       <div className="border-b border-[#f2f4f8] px-4 py-2 text-xs font-medium text-[#81848b]">
         Lid uitnodigen
       </div>
 
-      {/* de rij met exact dezelfde kolombreedtes als de ledenlijst */}
+      {/* zelfde grid als ledenlijst */}
       <div className={`grid ${gridCols} items-center gap-2 px-4 py-3`}>
-        {/* Lid (email input) */}
+        {/* E-mail */}
         <div className="min-w-0">
           <label htmlFor="invite-email" className="sr-only">E-mail</label>
           <input
@@ -85,7 +86,7 @@ export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200p
           />
         </div>
 
-        {/* Rol (200px) */}
+        {/* Rol */}
         <div className="w-[200px] justify-self-start">
           <label htmlFor="invite-role" className="sr-only">Rol</label>
           <select
@@ -100,14 +101,15 @@ export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200p
           </select>
         </div>
 
-        {/* Acties (96px) */}
+        {/* Actieknop */}
         <div className="flex justify-end w-[96px]">
           <button
             type="button"
             onClick={onGenerate}
             disabled={busy}
-            className="inline-flex h-10 items-center justify-center rounded-md border border-[#e5e7eb] px-3 text-sm hover:bg-gray-50"
-            title="Genereer invite link"
+            className="inline-flex h-10 w-[96px] items-center justify-center rounded-md border border-[#e5e7eb] text-sm hover:bg-gray-50"
+            title="Genereer invite link (en kopieer)"
+            aria-label="Genereer invite link"
           >
             {busy ? (
               <svg className="h-[18px] w-[18px] animate-spin" viewBox="0 0 24 24">
@@ -121,10 +123,22 @@ export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200p
         </div>
       </div>
 
-      {(err || ok) && (
-        <div className="px-4 pb-3">
-          {err && <p className="text-sm text-rose-700">{err}</p>}
-          {ok && <p className="text-sm text-emerald-700">{ok}</p>}
+      {(err || ok || lastLink) && (
+        <div className="flex items-center justify-between gap-3 px-4 pb-3">
+          <div className="text-sm">
+            {err && <span className="text-rose-700">{err}</span>}
+            {!err && ok && <span className="text-emerald-700">{ok}</span>}
+          </div>
+          {lastLink && (
+            <button
+              type="button"
+              onClick={copyAgain}
+              className="text-sm text-[#1d4ed8] hover:underline"
+              title="Kopieer link nogmaals"
+            >
+              Kopieer opnieuw
+            </button>
+          )}
         </div>
       )}
     </div>

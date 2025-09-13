@@ -9,7 +9,6 @@ import AdminInviteForm from './AdminInviteForm';
 const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 const roleLabel = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
 
-// ---------- helpers ----------
 function classNames(...xs) { return xs.filter(Boolean).join(' '); }
 function VisuallyHidden({ children }) {
   return <span style={{position:'absolute',left:-9999,top:'auto',width:1,height:1,overflow:'hidden'}}>{children}</span>;
@@ -20,7 +19,7 @@ function csvEscape(v=''){const s=String(v??'');return /[",\n]/.test(s)?`"${s.rep
 function rowsToCsv(rows){
   const header=['email','user_id','role']; const lines=[header.join(',')];
   for(const r of rows){lines.push([csvEscape(r.email),csvEscape(r.user_id),csvEscape(r.role)].join(','));}
-  return '\uFEFF'+lines.join('\n'); // BOM for Excel
+  return '\uFEFF'+lines.join('\n');
 }
 function downloadCsv(filename,text){
   const blob=new Blob([text],{type:'text/csv;charset=utf-8;'});
@@ -28,7 +27,6 @@ function downloadCsv(filename,text){
   a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
 }
 
-// ---------- Toast ----------
 function Toast({ msg, onClose }) {
   useEffect(()=>{ if(!msg) return; const t=setTimeout(onClose,2200); return ()=>clearTimeout(t); },[msg,onClose]);
   if(!msg) return null;
@@ -40,7 +38,6 @@ function Toast({ msg, onClose }) {
   );
 }
 
-// ---------- Confirm Modal ----------
 function ConfirmModal({ open, title='Weet je het zeker?', body, confirmText='Verwijderen', onConfirm, onCancel }) {
   if (!open) return null;
   return (
@@ -78,7 +75,6 @@ export default function MembersAdmin() {
   const [toast, setToast] = useState('');
   const [confirm, setConfirm] = useState({ open: false, userId: null, email: '' });
 
-  // ---------- data ophalen ----------
   async function fetchMembers() {
     if (!activeOrgId) return;
     setLoading(true); setErrMsg('');
@@ -89,7 +85,6 @@ export default function MembersAdmin() {
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
 
-  // ---------- rol wijzigen ----------
   async function changeRole(userId, newRole) {
     setBusyUser(userId);
     const { data, error } = await supabase.rpc('update_member_role', { org: activeOrgId, target: userId, new_role: newRole });
@@ -99,13 +94,11 @@ export default function MembersAdmin() {
     setToast('Rol bijgewerkt');
   }
 
-  // ---------- verwijderen (met modal) ----------
   function askRemove(userId, email){ setConfirm({ open:true, userId, email }); }
   async function doRemove(){
     const { userId, email } = confirm;
     setConfirm({ open:false, userId:null, email:'' });
     if(!userId) return;
-
     setBusyUser(userId);
     const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
     setBusyUser(null);
@@ -114,7 +107,6 @@ export default function MembersAdmin() {
     setToast(`Lid verwijderd: ${email}`);
   }
 
-  // ---------- filter + export ----------
   const filtered = useMemo(()=>{
     const s=q.trim().toLowerCase(); if(!s) return rows;
     return rows.filter(r => (r.email||'').toLowerCase().includes(s));
@@ -126,8 +118,7 @@ export default function MembersAdmin() {
     downloadCsv(`leden-${date}.csv`, csv);
   }
 
-  // vaste grid-kolommen voor strakke uitlijning
-  const GRID_COLS = 'grid-cols-[1fr_200px_96px]'; // Lid / Rol(200px) / Acties(96px)
+  const GRID_COLS = 'grid-cols-[1fr_200px_96px]';
 
   return (
     <section className="space-y-4">
@@ -145,11 +136,36 @@ export default function MembersAdmin() {
               className="h-8 rounded-md border border-[#e5e7eb] bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-[#d6e0ff]"
             />
           </label>
-          <button type="button" onClick={fetchMembers}
-            className="h-8 rounded-md border border-[#e5e7eb] px-3 text-sm hover:bg-gray-50">Vernieuwen</button>
-          <button type="button" onClick={exportCsv}
-            className="h-8 rounded-md border border-[#e5e7eb] px-3 text-sm hover:bg-gray-50" title="Exporteer CSV (gefilterde lijst)">
-            Export CSV
+
+          {/* Icon-only refresh */}
+          <button
+            type="button"
+            onClick={fetchMembers}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] hover:bg-gray-50"
+            title="Vernieuwen"
+            aria-label="Vernieuwen"
+          >
+            {/* refresh icon */}
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M3 12a9 9 0 0 1 15.54-5.66M21 12a9 9 0 0 1-15.54 5.66" />
+              <path d="M17 6v4h-4M7 18v-4h4" />
+            </svg>
+          </button>
+
+          {/* Icon-only export */}
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#e5e7eb] hover:bg-gray-50"
+            title="Export CSV"
+            aria-label="Export CSV"
+          >
+            {/* download icon */}
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 3v12" />
+              <path d="M8 11l4 4 4-4" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
           </button>
         </div>
       </div>
@@ -188,7 +204,6 @@ export default function MembersAdmin() {
                   const isBusy = busyUser===row.user_id;
                   return (
                     <li key={row.user_id} className={classNames('grid items-center gap-2 px-4 py-3', GRID_COLS)}>
-                      {/* Lid: e-mail + rol-badge (user_id-regel verwijderd) */}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <a href={`mailto:${row.email}`} className="truncate text-[16px] font-medium text-[#1c2b49] hover:underline" title={row.email}>
@@ -198,7 +213,6 @@ export default function MembersAdmin() {
                         </div>
                       </div>
 
-                      {/* Rol */}
                       <div className="justify-self-start w-[200px]">
                         <label className="sr-only" htmlFor={`role-${row.user_id}`}>Wijzig rol</label>
                         <select
@@ -210,7 +224,6 @@ export default function MembersAdmin() {
                         </select>
                       </div>
 
-                      {/* Acties */}
                       <div className="flex justify-end w-[96px]">
                         {!me ? (
                           <button type="button" onClick={()=>askRemove(row.user_id, row.email)} disabled={isBusy}
@@ -239,12 +252,10 @@ export default function MembersAdmin() {
             )}
           </div>
 
-          {/* Invite-form */}
           <AdminInviteForm orgId={activeOrgId} />
         </>
       )}
 
-      {/* Toast & Confirm */}
       <Toast msg={toast} onClose={()=>setToast('')} />
       <ConfirmModal
         open={confirm.open}
