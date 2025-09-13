@@ -670,15 +670,7 @@ const [showAdmin, setShowAdmin] = useState(false);
         )}
 
         {/* Scrollable chat viewport */}
-        // VERVANG je huidige <main>...</main> blok door dit volledige blok.
-// Vereist dat je in dezelfde component hebt staan:
-//   import MembersAdmin from './MembersAdmin';
-//   import { useMembership } from '../hooks/useMembership';
-//   const { role } = useMembership();
-//   const isAdmin = role === 'ADMIN';
-//   const [showAdmin, setShowAdmin] = useState(false);
-// En dat je in je sidebar een knop hebt die setShowAdmin(true) kan aanroepen (alleen voor admins).
-
+     
 <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
   <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
     {showAdmin ? (
