@@ -293,44 +293,43 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             <div className="mt-2">
               <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-[#66676b]">Recente chats</div>
               <ul className="px-2 space-y-1">
-  {(Array.isArray(recent) ? recent.slice(0, 5) : []).map((c) => {
-    const raw = (c.title || "Chat").toString().trim();
-    const label = raw.length > 23 ? raw.slice(0, 23) + "…" : raw;
-    return (
-      <li key={c.id}>
-        <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100">
-          {/* Linkerzijde: alleen titel, strak links uitgelijnd */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
-            className="text-left min-w-0 flex-1"
-            title={raw}
-          >
-            <div className="text-[13px] text-[#194297] truncate">{label}</div>
-          </button>
+                {(Array.isArray(recent) ? recent.slice(0, 5) : []).map((c) => {
+                  const raw = (c.title || "Chat").toString().trim();
+                  const label = raw.length > 23 ? raw.slice(0, 23) + "…" : raw;
+                  return (
+                    <li key={c.id}>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-100">
+                        {/* Linkerzijde: alleen titel, strak links uitgelijnd */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); loadChat?.(c.id); }}
+                          className="text-left min-w-0 flex-1"
+                          title={raw}
+                        >
+                          <div className="text-[13px] text-[#194297] truncate">{label}</div>
+                        </button>
 
-          {/* Rechterzijde: 3-puntjes menu, valt niet over de tekst */}
-          <div className="ml-2 flex-shrink-0 relative">
-  <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
-</div>
-        </div>
-      </li>
-    );
-  })}
-  {!recent?.length && (
-    <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
-  )}
-</ul>
+                        {/* Rechterzijde: 3-puntjes menu, valt niet over de tekst */}
+                        <div className="ml-2 flex-shrink-0 relative">
+                          <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+                {!recent?.length && (
+                  <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
+                )}
+              </ul>
             </div>
           )}
         </nav>
 
-        {/* Profiel onderaan */}
-<div className="mt-auto p-3 border-t border-gray-200">
-  <AuthProfileButton expanded={sidebarOpen} />
-</div>
-</aside>
-
+        {/* Profiel onderaan (desktop sidebar) */}
+        <div className="mt-auto p-3 border-t border-gray-200">
+          <AuthProfileButton expanded={expanded} />
+        </div>
+      </aside>
 
       {/* Tooltip renderer (fixed): subtiel en klein maar leesbaar */}
       {tip.show && !expanded && (
@@ -426,10 +425,10 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
           </div>
         )}
 
-        {/* Profiel onderaan */}
-<div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
-  <AuthProfileButton />
-</div>
+        {/* Profiel onderaan (mobiele drawer open = full) */}
+        <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
+          <AuthProfileButton expanded={true} />
+        </div>
       </aside>
     </div>
   );
@@ -616,7 +615,7 @@ function BluelineChatpilotInner() {
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
           </button>
-          <h1 className="text-[15px] md:text-base font-semibold text-[#194297]">Blueline Chatpilot</h1>
+          <h1 className="text-[15px] md:text;base font-semibold text-[#194297]">Blueline Chatpilot</h1>
           <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
         </header>
 
@@ -659,7 +658,7 @@ function BluelineChatpilotInner() {
                           : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
                       )}>{m.text}</div>
                       {!isUser && (
-                        <div className="-mt-1 ml-2 self-end"> 
+                        <div className="-mt-1 ml-2 self:end"> 
                           <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
                         </div>
                       )}
@@ -668,7 +667,7 @@ function BluelineChatpilotInner() {
                 })}
                 {isTyping && (
                   <div className="flex justify-start">
-                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
                       <span className="relative inline-block w-6 h-2 align-middle">
                         <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
                         <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
