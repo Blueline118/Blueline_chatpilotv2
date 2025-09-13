@@ -1,10 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './providers/AuthProvider';
-
 import BluelineChatpilot from './components/BluelineChatpilot';
 import Login from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
+import AcceptInvite from './pages/AcceptInvite';
 
 import './index.css';
 
@@ -21,3 +21,10 @@ createRoot(document.getElementById('root')).render(
     </AuthProvider>
   </BrowserRouter>
 );
+
+// ...
+<Routes>
+  {/* ... bestaande routes ... */}
+  <Route path="/accept-invite" element={<AcceptInvite />} />
+  {/* ... */}
+</Routes>
