@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
@@ -454,6 +454,13 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
+const navigate = useNavigate();
+function goToChatRoute() {
+  if (location.pathname.startsWith('/members')) {
+    navigate('/app'); // of je chatroute (bijv. '/')
+  }
+}
+
 
   // Layout state (sidebar moet altijd zichtbaar blijven, open/closed)
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -561,21 +568,50 @@ function BluelineChatpilotInner() {
   const backToChatMobile = () => setMobileView("chat");
 
   function handleNewChat() {
-    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
-    setInput("");
-    setIsTyping(false);
-    currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }
+  // maak nieuwe chatId
+  const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  currentChatIdRef.current = newId;
+
+  // reset lijst en input
+  setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+  setInput("");
+  setIsTyping(false);
+
+  // opslaan in recents (zodat het meteen zichtbaar is)
+  const uid = uidRef.current;
+  const title = "Nieuwe chat";
+  setRecent(saveRecentChat(uid, { id: newId, title, lastMessageAt: Date.now() }));
+
+  // ga (indien nodig) naar chatroute (weg uit /members)
+  goToChatRoute();
+
+  // focus op input
+  requestAnimationFrame(() => inputRef.current?.focus?.());
+}
+
 
   // Recall & delete
   function loadChat(chatId) {
-    const uid = uidRef.current;
-    const thread = getThread(uid, chatId);
-    if (!Array.isArray(thread) || !thread.length) return;
-    currentChatIdRef.current = chatId;
+  const uid = uidRef.current;
+  const thread = getThread(uid, chatId);
+
+  // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
+  currentChatIdRef.current = chatId;
+
+  if (Array.isArray(thread) && thread.length) {
     setMessages(thread);
+  } else {
+    // toon hero als placeholder
+    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
   }
+
+  // verlaat /members en ga naar chatroute
+  goToChatRoute();
+
+  // focus op input
+  requestAnimationFrame(() => inputRef.current?.focus?.());
+}
+
   function handleDeleteChat(chatId) {
     const uid = uidRef.current;
     deleteThread(uid, chatId);
@@ -795,15 +831,13 @@ function BluelineChatpilotInner() {
 
       {/* Mobile off-canvas sidebar */}
       <MobileSidebar
-        open={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-        onNewChat={() => {
-          inputRef?.current?.focus?.();
-          setMobileMenuOpen(false);
-        }}
-        onToggleFeed={openNewsfeedMobile}
-        feedOpen={feedOpen}
-      />
+  open={mobileMenuOpen}
+  onClose={() => setMobileMenuOpen(false)}
+  onNewChat={() => { handleNewChat(); setMobileMenuOpen(false); }}
+  onToggleFeed={openNewsfeedMobile}
+  feedOpen={feedOpen}
+/>
+
     </div>
   );
 }
