@@ -3,13 +3,13 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
-import RoleBadge from './RoleBadge';           // ← role badge naast elk lid
-import AdminInviteForm from './AdminInviteForm'; // ← invite form onder de lijst
+import RoleBadge from './RoleBadge';
+import AdminInviteForm from './AdminInviteForm';
 
 const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 
 export default function MembersAdmin() {
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, user } = useAuth();        // user.id nodig om jezelf niet te tonen voor verwijderen
   const { role, loading: roleLoading } = useMembership();
 
   const [rows, setRows] = useState([]);
@@ -44,6 +44,20 @@ export default function MembersAdmin() {
       return;
     }
     setRows(r => r.map(x => x.user_id === userId ? { ...x, role: newRole } : x));
+  }
+
+  // Lid verwijderen (alleen ADMIN; laatste admin wordt door RPC geblokt)
+  async function removeMember(userId, email) {
+    if (!confirm(`Lid verwijderen?\n\n${email}`)) return;
+    const { data, error } = await supabase.rpc('delete_member', {
+      p_org: activeOrgId,
+      p_target: userId
+    });
+    if (error || data !== true) {
+      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
+      return;
+    }
+    setRows(r => r.filter(x => x.user_id !== userId));
   }
 
   // UI
@@ -82,28 +96,28 @@ export default function MembersAdmin() {
                     display:'flex',
                     justifyContent:'space-between',
                     alignItems:'center',
+                    gap: 12,
                     border:'1px solid #eee',
                     borderRadius:8,
                     padding:12
                   }}
                 >
-                  {/* Linkerzijde: e-mail + user_id + badge */}
+                  {/* Links: e-mail + badge + id */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis' }}>
                         {row.email}
                       </div>
-                      {/* Role badge (read-only) */}
-                      <RoleBadge role={row.role} />
+                      <RoleBadge role={row.role} /> {/* toont nu de echte rij-rol */}
                     </div>
                     <div style={{fontSize:12, opacity:.7, marginTop:4}}>
                       user_id: {row.user_id}
                     </div>
                   </div>
 
-                  {/* Rechterzijde: rol wijzigen (alleen voor ADMIN zelf zichtbaar) */}
+                  {/* Rechts: rol select + verwijderen (niet bij jezelf) */}
                   {role === 'ADMIN' ? (
-                    <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <select
                         value={row.role}
                         onChange={(e) => changeRole(row.user_id, e.target.value)}
@@ -111,6 +125,17 @@ export default function MembersAdmin() {
                       >
                         {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
+
+                      {user?.id !== row.user_id && (
+                        <button
+                          type="button"
+                          onClick={() => removeMember(row.user_id, row.email)}
+                          className="px-2 py-1 text-[12px] rounded-md border border-[#e0e4ef] hover:bg-gray-50"
+                          title="Verwijderen"
+                        >
+                          Verwijderen
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div style={{ fontSize:12, opacity:.6 }}>—</div>
