@@ -4,6 +4,9 @@ import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
 import AuthProfileButton from './AuthProfileButton';
+import { useMembership } from '../hooks/useMembership';
+import MembersAdmin from './MembersAdmin';
+
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -197,7 +200,7 @@ function RecentChatMenu({ chatId, onDelete }) {
   );
 }
 
-function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat }) {
+function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat, isAdmin, onOpenAdmin }) {
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
 
@@ -280,6 +283,29 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
               {expanded && <span className="whitespace-nowrap">Insights</span>}
             </button>
           </div>
+
+{/* Ledenbeheer (alleen voor Admin en uitgeklapte sidebar) */}
+{isAdmin && expanded && (
+  <div className="relative">
+    <button
+      type="button"
+      onClick={onOpenAdmin}
+      className={cx(
+        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] hover:bg-gray-100",
+        "text-[#65676a] justify-start"
+      )}
+      title="Leden beheren"
+    >
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M16 11c1.657 0 3-1.343 3-3S17.657 5 16 5s-3 1.343-3 3 1.343 3 3 3z" />
+        <path d="M2 20c0-3.314 2.686-6 6-6h4" />
+        <path d="M19 14v4" />
+        <path d="M21 16h-4" />
+      </svg>
+      <span className="whitespace-nowrap">Ledenbeheer</span>
+    </button>
+  </div>
+)}
 
           {/* Newsfeed zichtbaar bij uitgeklapt */}
           {feedOpen && expanded && (
@@ -471,6 +497,12 @@ function BluelineChatpilotInner() {
   const inputRef = useRef(null);
   const copiedTimer = useRef(null);
 
+// ↓↓↓ deze drie regels toevoegen bij je andere useState/useEffect boven de return
+const { role } = useMembership();
+const isAdmin = role === 'ADMIN';
+const [showAdmin, setShowAdmin] = useState(false);
+
+
   // Init hero + rotaties
   useEffect(() => {
     setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
@@ -573,15 +605,18 @@ function BluelineChatpilotInner() {
     <div className="fixed inset-0 bg-white text-[#65676a]">
       {/* Desktop sidebar */}
       <AppSidebar
-        open={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onToggleFeed={() => setFeedOpen((v) => !v)}
-        feedOpen={feedOpen}
-        onNewChat={handleNewChat}
-        recent={recent}
-        loadChat={loadChat}
-        onDeleteChat={handleDeleteChat}
-      />
+  open={sidebarOpen}
+  onToggleSidebar={() => setSidebarOpen((v) => !v)}
+  onToggleFeed={() => setFeedOpen((v) => !v)}
+  feedOpen={feedOpen}
+  onNewChat={handleNewChat}
+  recent={recent}
+  loadChat={loadChat}
+  onDeleteChat={handleDeleteChat}
+  isAdmin={isAdmin}                      // ← nieuw
+  onOpenAdmin={() => setShowAdmin(true)} // ← nieuw
+/>
+
 
       {/* Handle wanneer sidebar dicht is (klein knopje aan linker bovenzijde) */}
       {!sidebarOpen && (
@@ -635,52 +670,81 @@ function BluelineChatpilotInner() {
         )}
 
         {/* Scrollable chat viewport */}
-        <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
-            {/* Hero greeting zolang er geen user-message is */}
-            {!messages.some(m=>m.role === "user") ? (
-              <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-                <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
-                  <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
-                  <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
+        // VERVANG je huidige <main>...</main> blok door dit volledige blok.
+// Vereist dat je in dezelfde component hebt staan:
+//   import MembersAdmin from './MembersAdmin';
+//   import { useMembership } from '../hooks/useMembership';
+//   const { role } = useMembership();
+//   const isAdmin = role === 'ADMIN';
+//   const [showAdmin, setShowAdmin] = useState(false);
+// En dat je in je sidebar een knop hebt die setShowAdmin(true) kan aanroepen (alleen voor admins).
+
+<main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+  <div className="mx-auto w-full max-w-[760px] px-4 md:px-5">
+    {showAdmin ? (
+      // ==== LEDENBEHEER (alleen zichtbaar als showAdmin true is) ====
+      <div className="py-5">
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setShowAdmin(false)}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-[#e4e7f2] text-[12px] hover:bg-gray-50"
+          >
+            ← Terug naar chat
+          </button>
+        </div>
+        <MembersAdmin />
+      </div>
+    ) : (
+      // ==== JOUW HUIDIGE CHAT UI (ongewijzigd) ====
+      <>
+        {/* Hero greeting zolang er geen user-message is */}
+        {!messages.some(m=>m.role === "user") ? (
+          <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
+            <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
+              <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
+              <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
+            {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
+              const isUser = m.role === "user";
+              return (
+                <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
+                  <div className={cx(
+                    "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                    isUser
+                      ? "bg-[#2563eb] text-white"
+                      : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                  )}>{m.text}</div>
+                  {!isUser && (
+                    <div className="-mt-1 ml-2 self:end"> 
+                      <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
-                  const isUser = m.role === "user";
-                  return (
-                    <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                      <div className={cx(
-                        "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                        isUser
-                          ? "bg-[#2563eb] text-white"
-                          : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                      )}>{m.text}</div>
-                      {!isUser && (
-                        <div className="-mt-1 ml-2 self:end"> 
-                          <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {isTyping && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                      <span className="relative inline-block w-6 h-2 align-middle">
-                        <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
-                        <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
-                        <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
-                      </span>
-                      <span className="ml-2">Typen…</span>
-                    </div>
-                  </div>
-                )}
+              );
+            })}
+            {isTyping && (
+              <div className="flex justify-start">
+                <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
+                  <span className="relative inline-block w-6 h-2 align-middle">
+                    <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
+                    <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
+                    <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
+                  </span>
+                  <span className="ml-2">Typen…</span>
+                </div>
               </div>
             )}
           </div>
-        </main>
+        )}
+      </>
+    )}
+  </div>
+</main>
+
 
         {/* Dock (alleen input-blok) — GEEN extra scheidingslijn meer erboven */}
         <div className="bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
