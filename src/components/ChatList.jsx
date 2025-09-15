@@ -29,6 +29,10 @@ export default function ChatList() {
   async function handleDelete(id) {
   if (!confirm('Weet je zeker dat je deze chat wilt verwijderen?')) return;
   setBusy(id);
+
+  // ✅ log precies vóór de DB-call
+  console.log('[DELETE]', { id, activeOrgId, user: user?.id, role });
+
   try {
     const { error } = await supabase
       .from('chats')
@@ -46,6 +50,20 @@ export default function ChatList() {
   }
 }
 
+// ✅ boven je return, is prima zo; je kunt ‘m evt. dempen:
+if (!loading && chats.length > 0) {
+  console.table(
+    chats.map(c => ({
+      id: c.id,
+      owner_id: c.owner_id,
+      you: user?.id,
+      role
+    }))
+  );
+}
+
+// in handleDelete net vóór de delete-call:
+console.log('[DELETE]', { id, activeOrgId, user: user?.id, role });
 
   if (!activeOrgId) return <p>Kies eerst een workspace.</p>;
   if (loading) return <p>Laden…</p>;
