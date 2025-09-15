@@ -27,20 +27,25 @@ export default function ChatList() {
   useEffect(() => { load(); }, [activeOrgId]);
 
   async function handleDelete(id) {
-    if (!confirm('Weet je zeker dat je deze chat wilt verwijderen?')) return;
-    setBusy(id);
+  if (!confirm('Weet je zeker dat je deze chat wilt verwijderen?')) return;
+  setBusy(id);
+  try {
     const { error } = await supabase
       .from('chats')
       .delete()
       .eq('org_id', activeOrgId)
       .eq('id', id);
+
+    if (error) throw error;
+
+    setChats((list) => list.filter((c) => c.id !== id));
+  } catch (e) {
+    alert('Je kunt deze chat niet verwijderen (alleen eigenaar of admin).');
+  } finally {
     setBusy(null);
-    if (error) {
-      alert('Verwijderen mislukt: ' + error.message);
-    } else {
-      setChats((list) => list.filter((c) => c.id !== id));
-    }
   }
+}
+
 
   if (!activeOrgId) return <p>Kies eerst een workspace.</p>;
   if (loading) return <p>Laden…</p>;
