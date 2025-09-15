@@ -32,6 +32,38 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem('activeOrgId');
   }, [activeOrgId]);
 
+  // ✅ Auto-heal: kies automatisch een geldige workspace (org) voor de ingelogde user
+  useEffect(() => {
+    let on = true;
+
+    async function ensureOrg() {
+      if (!user?.id) return; // niet ingelogd → niets doen
+
+      const { data, error } = await supabase
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', user.id);
+
+      if (!on || error) return;
+
+      const orgIds = (data || []).map(r => r.org_id);
+
+      if (orgIds.length === 0) {
+        // user heeft (nog) geen memberships → clear
+        if (on) setActiveOrgId(null);
+        return;
+      }
+
+      // Geen selectie of een verouderde selectie? Neem de eerste geldige org.
+      if (!activeOrgId || !orgIds.includes(activeOrgId)) {
+        if (on) setActiveOrgId(orgIds[0]);
+      }
+    }
+
+    ensureOrg();
+    return () => { on = false; };
+  }, [user?.id, activeOrgId]);
+
   const value = { session, user, activeOrgId, setActiveOrgId, loading };
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
