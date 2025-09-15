@@ -1,10 +1,13 @@
+// src/components/ChatList.jsx
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
-import PermissionGate from './PermissionGate';
+import { useMembership } from '../hooks/useMembership';
+import { isOwnerOrAdmin } from '../utils/acl';
 
 export default function ChatList() {
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, user } = useAuth();
+  const { role } = useMembership(); // rol uit memberships (RLS-proof)
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
@@ -14,7 +17,7 @@ export default function ChatList() {
     setLoading(true);
     const { data, error } = await supabase
       .from('chats')
-      .select('id, title, created_at')
+      .select('id, title, created_at, owner_id') // ⬅ owner_id toegevoegd
       .eq('org_id', activeOrgId)
       .order('created_at', { ascending: false });
     if (!error) setChats(data || []);
@@ -45,24 +48,38 @@ export default function ChatList() {
 
   return (
     <div style={{ marginTop: 24, display: 'grid', gap: 8 }}>
-      {chats.map((c) => (
-        <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', border: '1px solid #eee', borderRadius: 8, padding: 12 }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>{c.title}</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>{new Date(c.created_at).toLocaleString()}</div>
-          </div>
+      {chats.map((c) => {
+        const canDelete = isOwnerOrAdmin({ row: c, userId: user?.id, role });
 
-          {/* Delete-knop alléén als je chat.delete hebt */}
-          <PermissionGate perm="chat.delete">
-            <button
-              onClick={() => handleDelete(c.id)}
-              disabled={busy === c.id}
-            >
-              {busy === c.id ? 'Verwijderen…' : 'Verwijderen'}
-            </button>
-          </PermissionGate>
-        </div>
-      ))}
+        return (
+          <div
+            key={c.id}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              border: '1px solid #eee',
+              borderRadius: 8,
+              padding: 12
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 600 }}>{c.title}</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>
+                {new Date(c.created_at).toLocaleString()}
+              </div>
+            </div>
+
+            {canDelete && (
+              <button
+                onClick={() => handleDelete(c.id)}
+                disabled={busy === c.id}
+              >
+                {busy === c.id ? 'Verwijderen…' : 'Verwijderen'}
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
