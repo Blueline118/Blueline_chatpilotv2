@@ -25,13 +25,14 @@ root.render(
 
         {/* Members: NIET rechtstreeks naar <MembersAdmin /> maar via dezelfde layout */}
         <Route
-          path="/members"
-          element={
-            <Protected>
-              <BluelineChatpilot />
-            </Protected>
-          }
-        />
+  path="/members"
+  element={
+    <Protected perm={null}>
+      <BluelineChatpilot />
+    </Protected>
+  }
+/>
+
 
         {/* Overige (optioneel, laat staan als je deze routes gebruikt) */}
         <Route path="/login" element={<Login />} />
