@@ -62,8 +62,6 @@ if (!loading && chats.length > 0) {
   );
 }
 
-// in handleDelete net vóór de delete-call:
-console.log('[DELETE]', { id, activeOrgId, user: user?.id, role });
 
   if (!activeOrgId) return <p>Kies eerst een workspace.</p>;
   if (loading) return <p>Laden…</p>;
