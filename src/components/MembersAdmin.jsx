@@ -78,8 +78,11 @@ export default function MembersAdmin() {
   async function fetchMembers() {
     if (!activeOrgId) return;
     setLoading(true); setErrMsg('');
-    const { data, error } = await supabase.rpc('get_org_members', { org: activeOrgId });
-    if (error) { console.error(error); setErrMsg(error.message || 'Onbekende fout'); setRows([]); }
+    const { data, error } = await supabase.rpc('get_org_members', { p_org: activeOrgId });
+    if (error) {
+      console.warn('get_org_members failed', { p_org: activeOrgId }, error);
+      console.error(error); setErrMsg(error.message || 'Onbekende fout'); setRows([]);
+    }
     else { setRows(data || []); }
     setLoading(false);
   }
@@ -87,9 +90,16 @@ export default function MembersAdmin() {
 
   async function changeRole(userId, newRole) {
     setBusyUser(userId);
-    const { data, error } = await supabase.rpc('update_member_role', { org: activeOrgId, target: userId, new_role: newRole });
+    const { data, error } = await supabase.rpc('update_member_role', {
+      p_org: activeOrgId,
+      p_target: userId,
+      p_role: newRole,
+    });
     setBusyUser(null);
-    if (error || data !== true) { alert('Wijzigen mislukt: ' + (error?.message || 'geen recht')); return; }
+    if (error || data !== true) {
+      console.warn('update_member_role failed', { p_org: activeOrgId, p_target: userId, p_role: newRole }, error);
+      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht')); return;
+    }
     setRows(r => r.map(x => x.user_id === userId ? { ...x, role: newRole } : x));
     setToast('Rol bijgewerkt');
   }
@@ -102,7 +112,10 @@ export default function MembersAdmin() {
     setBusyUser(userId);
     const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
     setBusyUser(null);
-    if (error || data !== true) { alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return; }
+    if (error || data !== true) {
+      console.warn('delete_member failed', { p_org: activeOrgId, p_target: userId }, error);
+      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return;
+    }
     setRows(r => r.filter(x => x.user_id !== userId));
     setToast(`Lid verwijderd: ${email}`);
   }
