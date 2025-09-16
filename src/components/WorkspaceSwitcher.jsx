@@ -77,14 +77,3 @@ export default function WorkspaceSwitcher() {
     </div>
   );
 }
-
-<div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-  <PermissionGate
-    perm="chat.delete"
-    fallback={<button disabled>Verwijderen (geen recht)</button>}
-  >
-    <button onClick={() => alert('Toegestaan: je bent TEAM/ADMIN')}>
-      Verwijderen (test)
-    </button>
-  </PermissionGate>
-</div>
