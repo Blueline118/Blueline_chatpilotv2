@@ -114,7 +114,6 @@ export default function MembersAdmin() {
       org: activeOrgId,
       target: userId,
       nextRole,
-      code: error?.code,
       error,
     });
     alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
@@ -126,14 +125,16 @@ export default function MembersAdmin() {
     setConfirm({ open:false, userId:null, email:'' });
     if(!userId) return;
     setBusyUser(userId);
-    const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
+    const { error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
     setBusyUser(null);
-    if (error || data !== true) {
-      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
-      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return;
+    if (!error) {
+      await fetchMembers();
+      setToast(`Lid verwijderd: ${email}`);
+      return;
     }
-    setRows(r => r.filter(x => x.user_id !== userId));
-    setToast(`Lid verwijderd: ${email}`);
+
+    console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
+    alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
   }
 
   const filtered = useMemo(()=>{

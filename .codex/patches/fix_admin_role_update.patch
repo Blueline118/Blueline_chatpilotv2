@@ -1,0 +1,364 @@
+diff --git a/README_ROLES_FIX.md b/README_ROLES_FIX.md
+new file mode 100644
+index 0000000..bdeda7c
+--- /dev/null
++++ b/README_ROLES_FIX.md
+@@ -0,0 +1,35 @@
++# Rollenbeheer fix checklist
++
++## Migraties uitvoeren in Supabase Studio
++1. Open [Supabase Studio](https://supabase.com/dashboard) voor het project.
++2. Ga naar **SQL Editor** → **New query**.
++3. Plak de inhoud van `supabase/migrations/01_memberships_policies.sql` en voer de query uit.
++4. Plak daarna de inhoud van `supabase/migrations/02_memberships_rpcs.sql` en voer ook deze uit.
++5. Controleer onder **Authentication → Policies** dat de nieuwe UPDATE/DELETE policies actief zijn.
++
++> Let op: de functie `public.is_org_admin` mag niet worden gewijzigd of verwijderd.
++
++## Verificatiescript draaien
++1. Zet de volgende variabelen in je shell:
++   ```bash
++   export SUPABASE_URL=...              # Project URL
++   export SUPABASE_ANON_KEY=...         # Anon/public API key
++   export SUPABASE_SERVICE_ROLE_KEY=... # Service role key
++   ```
++2. Installeer dependencies (eenmalig):
++   ```bash
++   npm install
++   ```
++3. Run het script:
++   ```bash
++   node scripts/verify-admin-actions.mjs
++   ```
++
++Het script controleert:
++- ✅ Admin kan de rol van het TEAM-lid bijwerken.
++- ✅ Customer krijgt een 403 bij dezelfde actie.
++- ✅ Admin kan de CUSTOMER verwijderen (en het script zet het lid weer terug).
++
++## Acceptatie
++- Admin kan in de UI rollen wijzigen en leden verwijderen; de lijst ververst zonder foutmeldingen.
++- Team en Customer accounts kunnen deze acties niet uitvoeren (403 via RPC, knoppen verborgen).
+diff --git a/scripts/verify-admin-actions.mjs b/scripts/verify-admin-actions.mjs
+new file mode 100644
+index 0000000..2ecbc61
+--- /dev/null
++++ b/scripts/verify-admin-actions.mjs
+@@ -0,0 +1,197 @@
++#!/usr/bin/env node
++import process from 'node:process';
++import { createClient } from '@supabase/supabase-js';
++
++const REQUIRED_ENVS = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY'];
++for (const key of REQUIRED_ENVS) {
++  if (!process.env[key]) {
++    console.error(`Missing required environment variable ${key}`);
++    process.exit(1);
++  }
++}
++
++const SUPABASE_URL = process.env.SUPABASE_URL;
++const ANON_KEY = process.env.SUPABASE_ANON_KEY;
++const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
++
++const ORG_ID = '54ec8e89-d265-474d-98fc-d2ba579ac83f';
++const USERS = {
++  admin: 'b1a5b296-c0ed-43e7-a0af-2b716b69037f',
++  team: '3e0be2af-d8ec-4780-9351-388503a8878c',
++  customer: '221b77de-755d-4861-9944-a303c796663a',
++};
++
++const serviceClient = createClient(SUPABASE_URL, SERVICE_KEY, {
++  auth: { persistSession: false, autoRefreshToken: false },
++});
++const anonClient = createClient(SUPABASE_URL, ANON_KEY, {
++  auth: { persistSession: false, autoRefreshToken: false },
++});
++
++const clientCache = new Map();
++const emailCache = new Map();
++
++function formatFailure(error) {
++  if (!error) return { code: 'unknown', message: 'Unknown error' };
++  if (error instanceof Error) {
++    return { code: error.code ?? error.status ?? 'ERR', message: error.message };
++  }
++  return {
++    code: error.code ?? error.status ?? 'ERR',
++    message: error.message ?? JSON.stringify(error),
++  };
++}
++
++async function fetchEmail(userId) {
++  if (emailCache.has(userId)) return emailCache.get(userId);
++  const { data, error } = await serviceClient.auth.admin.getUserById(userId);
++  if (error) {
++    throw Object.assign(new Error(`getUserById failed for ${userId}`), formatFailure(error));
++  }
++  const email = data?.user?.email;
++  if (!email) {
++    throw Object.assign(new Error(`No email for user ${userId}`), { code: 'NOEMAIL' });
++  }
++  emailCache.set(userId, email);
++  return email;
++}
++
++async function createSessionClient(userId) {
++  if (clientCache.has(userId)) return clientCache.get(userId);
++  const email = await fetchEmail(userId);
++  const { data, error } = await serviceClient.auth.admin.generateLink({ type: 'magiclink', email });
++  if (error) {
++    throw Object.assign(new Error(`generateLink failed for ${userId}`), formatFailure(error));
++  }
++  const props = data?.properties;
++  if (!props?.email_otp || !props?.verification_type) {
++    throw Object.assign(new Error(`OTP data missing for ${userId}`), { code: 'NOOTP' });
++  }
++  const verify = await anonClient.auth.verifyOtp({
++    email,
++    token: props.email_otp,
++    type: props.verification_type,
++  });
++  if (verify.error) {
++    throw Object.assign(new Error(`verifyOtp failed for ${userId}`), formatFailure(verify.error));
++  }
++  const accessToken = verify.data.session?.access_token;
++  if (!accessToken) {
++    throw Object.assign(new Error(`No access token for ${userId}`), { code: 'NOTOKEN' });
++  }
++  const client = createClient(SUPABASE_URL, ANON_KEY, {
++    auth: { persistSession: false, autoRefreshToken: false },
++    global: { headers: { Authorization: `Bearer ${accessToken}` } },
++  });
++  clientCache.set(userId, client);
++  return client;
++}
++
++async function assertMembershipRole(userId, expectedRole) {
++  const { data, error } = await serviceClient
++    .from('memberships')
++    .select('role')
++    .eq('org_id', ORG_ID)
++    .eq('user_id', userId)
++    .maybeSingle();
++  if (error) {
++    throw Object.assign(new Error(`memberships lookup failed for ${userId}`), formatFailure(error));
++  }
++  const role = data?.role ? String(data.role).toUpperCase() : null;
++  if (role !== expectedRole) {
++    throw Object.assign(new Error(`Expected role ${expectedRole}, got ${role ?? 'null'}`), {
++      code: 'BADROLE',
++    });
++  }
++}
++
++async function restoreMembership(userId, role) {
++  const { error } = await serviceClient
++    .from('memberships')
++    .upsert({ org_id: ORG_ID, user_id: userId, role }, { onConflict: 'org_id,user_id' });
++  if (error) {
++    throw Object.assign(new Error(`Restore membership failed for ${userId}`), formatFailure(error));
++  }
++}
++
++function logPass(step, message = '') {
++  console.log(`PASS ${step}${message ? ` - ${message}` : ''}`);
++}
++
++function logFail(step, error) {
++  const info = formatFailure(error);
++  console.error(`FAIL ${step} - ${info.code}: ${info.message}`);
++}
++
++let success = true;
++
++// Step A: admin updates team member role
++try {
++  const adminClient = await createSessionClient(USERS.admin);
++  const { error } = await adminClient.rpc('update_member_role', {
++    p_org: ORG_ID,
++    p_target: USERS.team,
++    p_role: 'TEAM',
++  });
++  if (error) throw error;
++  await assertMembershipRole(USERS.team, 'TEAM');
++  logPass('ADMIN update_member_role');
++} catch (error) {
++  success = false;
++  logFail('ADMIN update_member_role', error);
++}
++
++// Step B: customer forbidden to update
++try {
++  const customerClient = await createSessionClient(USERS.customer);
++  const { error } = await customerClient.rpc('update_member_role', {
++    p_org: ORG_ID,
++    p_target: USERS.team,
++    p_role: 'TEAM',
++  });
++  if (!error) {
++    throw Object.assign(new Error('Expected authorization error'), { code: 'EXPECTED_403' });
++  }
++  const status = error.status ?? Number(error.code);
++  if (status !== 403 && error.code !== '42501') {
++    throw Object.assign(new Error('Unexpected error response'), formatFailure(error));
++  }
++  logPass('CUSTOMER update_member_role blocked', `${error.code ?? error.status}: ${error.message}`);
++} catch (error) {
++  success = false;
++  logFail('CUSTOMER update_member_role blocked', error);
++}
++
++// Step C: admin deletes customer member
++try {
++  const adminClient = await createSessionClient(USERS.admin);
++  const { error } = await adminClient.rpc('delete_member', {
++    p_org: ORG_ID,
++    p_target: USERS.customer,
++  });
++  if (error) throw error;
++  const { data, error: lookupError } = await serviceClient
++    .from('memberships')
++    .select('user_id')
++    .eq('org_id', ORG_ID)
++    .eq('user_id', USERS.customer)
++    .maybeSingle();
++  if (lookupError) {
++    throw Object.assign(new Error('Lookup after delete failed'), formatFailure(lookupError));
++  }
++  if (data) {
++    throw Object.assign(new Error('Customer membership still present after delete'), { code: 'NOTDELETED' });
++  }
++  await restoreMembership(USERS.customer, 'CUSTOMER');
++  logPass('ADMIN delete_member', 'Membership removed and restored');
++} catch (error) {
++  success = false;
++  try {
++    await restoreMembership(USERS.customer, 'CUSTOMER');
++  } catch (restoreError) {
++    logFail('RESTORE membership fallback', restoreError);
++  }
++  logFail('ADMIN delete_member', error);
++}
++
++if (!success) process.exit(1);
+diff --git a/src/components/MembersAdmin.jsx b/src/components/MembersAdmin.jsx
+index ec5c356..229f6c0 100644
+--- a/src/components/MembersAdmin.jsx
++++ b/src/components/MembersAdmin.jsx
+@@ -114,7 +114,6 @@ export default function MembersAdmin() {
+       org: activeOrgId,
+       target: userId,
+       nextRole,
+-      code: error?.code,
+       error,
+     });
+     alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
+@@ -126,14 +125,16 @@ export default function MembersAdmin() {
+     setConfirm({ open:false, userId:null, email:'' });
+     if(!userId) return;
+     setBusyUser(userId);
+-    const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
++    const { error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
+     setBusyUser(null);
+-    if (error || data !== true) {
+-      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
+-      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return;
++    if (!error) {
++      await fetchMembers();
++      setToast(`Lid verwijderd: ${email}`);
++      return;
+     }
+-    setRows(r => r.filter(x => x.user_id !== userId));
+-    setToast(`Lid verwijderd: ${email}`);
++
++    console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
++    alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
+   }
+ 
+   const filtered = useMemo(()=>{
+diff --git a/src/hooks/useMembership.js b/src/hooks/useMembership.js
+index 3f680b7..da3997f 100644
+--- a/src/hooks/useMembership.js
++++ b/src/hooks/useMembership.js
+@@ -29,8 +29,10 @@ export function useMembership() {
+     }
+   );
+ 
++  const normalizedRole = data?.role ? String(data.role).toUpperCase() : null;
++
+   return {
+-    role: data?.role ?? null,
++    role: normalizedRole,
+     loading: !!key && isLoading,
+     error,
+   };
+diff --git a/supabase/migrations/01_memberships_policies.sql b/supabase/migrations/01_memberships_policies.sql
+new file mode 100644
+index 0000000..1cf9b04
+--- /dev/null
++++ b/supabase/migrations/01_memberships_policies.sql
+@@ -0,0 +1,21 @@
++-- Ensure authenticated users can attempt updates/deletes (RLS restricts them)
++grant update, delete on table public.memberships to authenticated;
++
++create or replace policy admin_update_member_role on public.memberships
++for update to authenticated
++using (
++  public.is_org_admin(org_id::uuid, auth.uid())
++  and user_id <> auth.uid()
++)
++with check (
++  public.is_org_admin(org_id::uuid, auth.uid())
++  and user_id <> auth.uid()
++);
++
++create or replace policy admin_delete_membership on public.memberships
++for delete to authenticated
++using (
++  public.is_org_admin(org_id::uuid, auth.uid())
++);
++
++notify pgrst, 'reload schema';
+diff --git a/supabase/migrations/02_memberships_rpcs.sql b/supabase/migrations/02_memberships_rpcs.sql
+new file mode 100644
+index 0000000..b2f932c
+--- /dev/null
++++ b/supabase/migrations/02_memberships_rpcs.sql
+@@ -0,0 +1,36 @@
++create or replace function public.update_member_role(p_org uuid, p_target uuid, p_role text)
++returns void
++language plpgsql
++security invoker
++as $$
++begin
++  update public.memberships m
++  set role = upper(p_role)::role_type
++  where m.org_id = p_org
++    and m.user_id = p_target;
++  if not found then
++    raise exception 'membership not found' using errcode = 'P0002';
++  end if;
++end;
++$$;
++
++grant execute on function public.update_member_role(uuid, uuid, text) to authenticated;
++
++create or replace function public.delete_member(p_org uuid, p_target uuid)
++returns void
++language plpgsql
++security invoker
++as $$
++begin
++  delete from public.memberships m
++  where m.org_id = p_org
++    and m.user_id = p_target;
++  if not found then
++    raise exception 'membership not found' using errcode = 'P0002';
++  end if;
++end;
++$$;
++
++grant execute on function public.delete_member(uuid, uuid) to authenticated;
++
++notify pgrst, 'reload schema';
