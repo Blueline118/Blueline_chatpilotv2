@@ -1,0 +1,79 @@
+diff --git a/src/components/MembersAdmin.jsx b/src/components/MembersAdmin.jsx
+index 1977335..74745b5 100644
+--- a/src/components/MembersAdmin.jsx
++++ b/src/components/MembersAdmin.jsx
+@@ -65,7 +65,8 @@ function ConfirmModal({ open, title='Weet je het zeker?', body, confirmText='Ver
+ 
+ export default function MembersAdmin() {
+   const { activeOrgId, user } = useAuth();
+-  const { role, loading: roleLoading } = useMembership();
++  const { role: userRole, loading: roleLoading } = useMembership();
++  const role = String(userRole || '').toUpperCase();
+ 
+   const [rows, setRows] = useState([]);
+   const [loading, setLoading] = useState(true);
+@@ -80,10 +81,17 @@ export default function MembersAdmin() {
+     setLoading(true); setErrMsg('');
+     const { data, error } = await supabase.rpc('get_org_members', { p_org: activeOrgId });
+     if (error) {
+-      console.warn('get_org_members failed', { p_org: activeOrgId }, error);
+-      console.error(error); setErrMsg(error.message || 'Onbekende fout'); setRows([]);
++      console.warn('[MembersAdmin] get_org_members failed', { org: activeOrgId, error });
++      setErrMsg(error.message || 'Onbekende fout'); setRows([]);
++    }
++    else {
++      const rows = (data || []).map(r => ({
++        user_id: r.user_id,
++        role: String(r.role || '').toUpperCase(),
++        email: r.email || r.user_id,
++      }));
++      setRows(rows);
+     }
+-    else { setRows(data || []); }
+     setLoading(false);
+   }
+   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
+@@ -97,7 +105,7 @@ export default function MembersAdmin() {
+     });
+     setBusyUser(null);
+     if (error || data !== true) {
+-      console.warn('update_member_role failed', { p_org: activeOrgId, p_target: userId, p_role: newRole }, error);
++      console.warn('[MembersAdmin] update_member_role failed', { org: activeOrgId, target: userId, error });
+       alert('Wijzigen mislukt: ' + (error?.message || 'geen recht')); return;
+     }
+     setRows(r => r.map(x => x.user_id === userId ? { ...x, role: newRole } : x));
+@@ -113,7 +121,7 @@ export default function MembersAdmin() {
+     const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
+     setBusyUser(null);
+     if (error || data !== true) {
+-      console.warn('delete_member failed', { p_org: activeOrgId, p_target: userId }, error);
++      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
+       alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return;
+     }
+     setRows(r => r.filter(x => x.user_id !== userId));
+@@ -124,6 +132,7 @@ export default function MembersAdmin() {
+     const s=q.trim().toLowerCase(); if(!s) return rows;
+     return rows.filter(r => (r.email||'').toLowerCase().includes(s));
+   },[rows,q]);
++  const hasSearch = q.trim().length>0;
+ 
+   function exportCsv(){
+     const csv=rowsToCsv(filtered);
+@@ -189,7 +198,7 @@ export default function MembersAdmin() {
+       {!activeOrgId && <div className="rounded-lg border border-[#eef1f6] bg-[#fcfcfe] p-4 text-sm text-[#5b5e66]">Kies eerst een workspace.</div>}
+       {!roleLoading && role!=='ADMIN' && activeOrgId && (
+         <div className="rounded-lg border border-[#eef1f6] bg-white p-4 text-sm text-[#5b5e66]">
+-          Alleen ADMIN kan leden beheren (jouw rol: {role ?? 'onbekend'}).
++          Alleen ADMIN kan leden beheren (jouw rol: {userRole ?? 'onbekend'}).
+         </div>
+       )}
+ 
+@@ -208,7 +217,7 @@ export default function MembersAdmin() {
+                 <svg width="64" height="64" viewBox="0 0 24 24" className="text-[#d1d5db]">
+                   <path fill="currentColor" d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z" />
+                 </svg>
+-                <div className="text-sm">Geen leden gevonden.</div>
++                <div className="text-sm">{hasSearch ? 'Geen resultaten. Wis je zoekfilter.' : 'Geen leden gevonden.'}</div>
+               </div>
+             ) : (
+               <ul className="divide-y divide-[#f2f4f8]">
