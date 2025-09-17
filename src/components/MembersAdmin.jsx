@@ -96,20 +96,28 @@ export default function MembersAdmin() {
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
 
-  async function changeRole(userId, newRole) {
+  async function changeRole(userId, nextRole) {
     setBusyUser(userId);
-    const { data, error } = await supabase.rpc('update_member_role', {
+    const { error } = await supabase.rpc('update_member_role', {
       p_org: activeOrgId,
       p_target: userId,
-      p_role: newRole,
+      p_role: nextRole,
     });
     setBusyUser(null);
-    if (error || data !== true) {
-      console.warn('[MembersAdmin] update_member_role failed', { org: activeOrgId, target: userId, error });
-      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht')); return;
+    if (!error) {
+      await fetchMembers();
+      setToast('Rol bijgewerkt');
+      return;
     }
-    setRows(r => r.map(x => x.user_id === userId ? { ...x, role: newRole } : x));
-    setToast('Rol bijgewerkt');
+
+    console.warn('[MembersAdmin] update_member_role failed', {
+      org: activeOrgId,
+      target: userId,
+      nextRole,
+      code: error?.code,
+      error,
+    });
+    alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
   }
 
   function askRemove(userId, email){ setConfirm({ open:true, userId, email }); }
