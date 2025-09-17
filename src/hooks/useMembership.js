@@ -29,8 +29,10 @@ export function useMembership() {
     }
   );
 
+  const normalizedRole = data?.role ? String(data.role).toUpperCase() : null;
+
   return {
-    role: data?.role ?? null,
+    role: normalizedRole,
     loading: !!key && isLoading,
     error,
   };

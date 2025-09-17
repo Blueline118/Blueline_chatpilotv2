@@ -65,7 +65,8 @@ function ConfirmModal({ open, title='Weet je het zeker?', body, confirmText='Ver
 
 export default function MembersAdmin() {
   const { activeOrgId, user } = useAuth();
-  const { role, loading: roleLoading } = useMembership();
+  const { role: userRole, loading: roleLoading } = useMembership();
+  const role = String(userRole || '').toUpperCase();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,28 +81,42 @@ export default function MembersAdmin() {
     setLoading(true); setErrMsg('');
     const { data, error } = await supabase.rpc('get_org_members', { p_org: activeOrgId });
     if (error) {
-      console.warn('get_org_members failed', { p_org: activeOrgId }, error);
-      console.error(error); setErrMsg(error.message || 'Onbekende fout'); setRows([]);
+      console.warn('[MembersAdmin] get_org_members failed', { org: activeOrgId, error });
+      setErrMsg(error.message || 'Onbekende fout'); setRows([]);
     }
-    else { setRows(data || []); }
+    else {
+      const rows = (data || []).map(r => ({
+        user_id: r.user_id,
+        role: String(r.role || '').toUpperCase(),
+        email: r.email || r.user_id,
+      }));
+      setRows(rows);
+    }
     setLoading(false);
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
 
-  async function changeRole(userId, newRole) {
+  async function changeRole(userId, nextRole) {
     setBusyUser(userId);
-    const { data, error } = await supabase.rpc('update_member_role', {
+    const { error } = await supabase.rpc('update_member_role', {
       p_org: activeOrgId,
       p_target: userId,
-      p_role: newRole,
+      p_role: nextRole,
     });
     setBusyUser(null);
-    if (error || data !== true) {
-      console.warn('update_member_role failed', { p_org: activeOrgId, p_target: userId, p_role: newRole }, error);
-      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht')); return;
+    if (!error) {
+      await fetchMembers();
+      setToast('Rol bijgewerkt');
+      return;
     }
-    setRows(r => r.map(x => x.user_id === userId ? { ...x, role: newRole } : x));
-    setToast('Rol bijgewerkt');
+
+    console.warn('[MembersAdmin] update_member_role failed', {
+      org: activeOrgId,
+      target: userId,
+      nextRole,
+      error,
+    });
+    alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
   }
 
   function askRemove(userId, email){ setConfirm({ open:true, userId, email }); }
@@ -110,20 +125,23 @@ export default function MembersAdmin() {
     setConfirm({ open:false, userId:null, email:'' });
     if(!userId) return;
     setBusyUser(userId);
-    const { data, error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
+    const { error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
     setBusyUser(null);
-    if (error || data !== true) {
-      console.warn('delete_member failed', { p_org: activeOrgId, p_target: userId }, error);
-      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht')); return;
+    if (!error) {
+      await fetchMembers();
+      setToast(`Lid verwijderd: ${email}`);
+      return;
     }
-    setRows(r => r.filter(x => x.user_id !== userId));
-    setToast(`Lid verwijderd: ${email}`);
+
+    console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
+    alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
   }
 
   const filtered = useMemo(()=>{
     const s=q.trim().toLowerCase(); if(!s) return rows;
     return rows.filter(r => (r.email||'').toLowerCase().includes(s));
   },[rows,q]);
+  const hasSearch = q.trim().length>0;
 
   function exportCsv(){
     const csv=rowsToCsv(filtered);
@@ -189,7 +207,7 @@ export default function MembersAdmin() {
       {!activeOrgId && <div className="rounded-lg border border-[#eef1f6] bg-[#fcfcfe] p-4 text-sm text-[#5b5e66]">Kies eerst een workspace.</div>}
       {!roleLoading && role!=='ADMIN' && activeOrgId && (
         <div className="rounded-lg border border-[#eef1f6] bg-white p-4 text-sm text-[#5b5e66]">
-          Alleen ADMIN kan leden beheren (jouw rol: {role ?? 'onbekend'}).
+          Alleen ADMIN kan leden beheren (jouw rol: {userRole ?? 'onbekend'}).
         </div>
       )}
 
@@ -208,7 +226,7 @@ export default function MembersAdmin() {
                 <svg width="64" height="64" viewBox="0 0 24 24" className="text-[#d1d5db]">
                   <path fill="currentColor" d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z" />
                 </svg>
-                <div className="text-sm">Geen leden gevonden.</div>
+                <div className="text-sm">{hasSearch ? 'Geen resultaten. Wis je zoekfilter.' : 'Geen leden gevonden.'}</div>
               </div>
             ) : (
               <ul className="divide-y divide-[#f2f4f8]">
