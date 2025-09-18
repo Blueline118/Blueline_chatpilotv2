@@ -71,70 +71,123 @@ export default function MembersAdmin() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState('');
-  const [busyUser, setBusyUser] = useState(null);
+  const [busyMembership, setBusyMembership] = useState(null);
   const [q, setQ] = useState('');
   const [toast, setToast] = useState('');
-  const [confirm, setConfirm] = useState({ open: false, userId: null, email: '' });
+  const [confirm, setConfirm] = useState({ open: false, membershipId: null, userId: null, email: '' });
+
+  async function fetchWithAuth(path, { method = 'GET', body } = {}) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) {
+      throw new Error('Geen geldige sessie voor geauthenticeerde call');
+    }
+
+    const headers = {
+      Authorization: `Bearer ${token}`,
+    };
+    let payload;
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      payload = JSON.stringify(body);
+    }
+
+    const res = await fetch(path, { method, headers, body: payload });
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      const err = json?.error || `Request mislukte (${res.status})`;
+      throw new Error(err);
+    }
+    return json;
+  }
 
   async function fetchMembers() {
     if (!activeOrgId) return;
     setLoading(true); setErrMsg('');
-    const { data, error } = await supabase.rpc('get_org_members', { p_org: activeOrgId });
-    if (error) {
-      console.warn('[MembersAdmin] get_org_members failed', { org: activeOrgId, error });
-      setErrMsg(error.message || 'Onbekende fout'); setRows([]);
-    }
-    else {
-      const rows = (data || []).map(r => ({
-        user_id: r.user_id,
-        role: String(r.role || '').toUpperCase(),
-        email: r.email || r.user_id,
+    try {
+      const { items } = await fetchWithAuth(
+        `/.netlify/functions/listMemberships?org_id=${encodeURIComponent(activeOrgId)}`
+      );
+      let mapped = (items || []).map(item => ({
+        membership_id: item.id,
+        org_id: item.org_id,
+        user_id: item.user_id,
+        role: String(item.role || '').toUpperCase(),
+        inserted_at: item.inserted_at,
+        email: item.user_id,
       }));
-      setRows(rows);
+
+      const userIds = mapped.map(r => r.user_id).filter(Boolean);
+      const uniqueIds = [...new Set(userIds)];
+      if (uniqueIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .in('id', uniqueIds);
+        if (!profileError && Array.isArray(profileRows)) {
+          const emails = new Map(profileRows.map(p => [p.id, p.email || '']));
+          mapped = mapped.map(row => ({
+            ...row,
+            email: emails.get(row.user_id) || row.email || row.user_id,
+          }));
+        } else if (profileError) {
+          console.warn('[MembersAdmin] profiles lookup failed', profileError);
+        }
+      }
+
+      setRows(mapped);
+    } catch (error) {
+      console.warn('[MembersAdmin] listMemberships failed', { org: activeOrgId, error });
+      setErrMsg(error.message || 'Onbekende fout');
+      setRows([]);
     }
     setLoading(false);
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
 
-  async function changeRole(userId, nextRole) {
-    setBusyUser(userId);
-    const { error } = await supabase.rpc('update_member_role', {
-      p_org: activeOrgId,
-      p_target: userId,
-      p_role: nextRole,
-    });
-    setBusyUser(null);
-    if (!error) {
+  async function changeRole(row, nextRole) {
+    setBusyMembership(row.membership_id);
+    try {
+      await fetchWithAuth('/.netlify/functions/updateMemberRole', {
+        method: 'POST',
+        body: { membership_id: row.membership_id, new_role: nextRole },
+      });
       await fetchMembers();
       setToast('Rol bijgewerkt');
-      return;
+    } catch (error) {
+      console.warn('[MembersAdmin] update_member_role failed', {
+        org: activeOrgId,
+        membership: row.membership_id,
+        target: row.user_id,
+        nextRole,
+        error,
+      });
+      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
     }
-
-    console.warn('[MembersAdmin] update_member_role failed', {
-      org: activeOrgId,
-      target: userId,
-      nextRole,
-      error,
-    });
-    alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
+    setBusyMembership(null);
   }
 
-  function askRemove(userId, email){ setConfirm({ open:true, userId, email }); }
+  function askRemove(row){
+    setConfirm({ open:true, membershipId: row.membership_id, userId: row.user_id, email: row.email });
+  }
   async function doRemove(){
-    const { userId, email } = confirm;
-    setConfirm({ open:false, userId:null, email:'' });
-    if(!userId) return;
-    setBusyUser(userId);
-    const { error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
-    setBusyUser(null);
-    if (!error) {
+    const { membershipId, email } = confirm;
+    setConfirm({ open:false, membershipId:null, userId:null, email:'' });
+    if(!membershipId) return;
+    setBusyMembership(membershipId);
+    try {
+      await fetchWithAuth('/.netlify/functions/deleteMember', {
+        method: 'POST',
+        body: { membership_id: membershipId },
+      });
       await fetchMembers();
       setToast(`Lid verwijderd: ${email}`);
-      return;
+    } catch (error) {
+      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, membership: membershipId, error });
+      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
     }
-
-    console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
-    alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
+    setBusyMembership(null);
   }
 
   const filtered = useMemo(()=>{
@@ -232,9 +285,9 @@ export default function MembersAdmin() {
               <ul className="divide-y divide-[#f2f4f8]">
                 {filtered.map(row=>{
                   const me = user?.id===row.user_id;
-                  const isBusy = busyUser===row.user_id;
+                  const isBusy = busyMembership===row.membership_id;
                   return (
-                    <li key={row.user_id} className={classNames('grid items-center gap-2 px-4 py-3', GRID_COLS)}>
+                    <li key={row.membership_id || row.user_id} className={classNames('grid items-center gap-2 px-4 py-3', GRID_COLS)}>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <a href={`mailto:${row.email}`} className="truncate text-[16px] font-medium text-[#1c2b49] hover:underline" title={row.email}>
@@ -248,7 +301,7 @@ export default function MembersAdmin() {
                         <label className="sr-only" htmlFor={`role-${row.user_id}`}>Wijzig rol</label>
                         <select
                           id={`role-${row.user_id}`} aria-label={`Rol voor ${row.email}`}
-                          value={row.role} onChange={e=>changeRole(row.user_id, e.target.value)} disabled={isBusy}
+                          value={row.role} onChange={e=>changeRole(row, e.target.value)} disabled={isBusy}
                           className={classNames('h-9 w-full rounded-md border border-[#e5e7eb] bg-white px-3 text-[16px] outline-none','focus:ring-2 focus:ring-[#d6e0ff]')}
                         >
                           {ROLES.map(r=><option key={r} value={r}>{roleLabel[r]}</option>)}
@@ -257,7 +310,7 @@ export default function MembersAdmin() {
 
                       <div className="flex justify-end w-[96px]">
                         {!me ? (
-                          <button type="button" onClick={()=>askRemove(row.user_id, row.email)} disabled={isBusy}
+                          <button type="button" onClick={()=>askRemove(row)} disabled={isBusy}
                             aria-label={`Verwijder ${row.email}`}
                             className="inline-flex h-9 items-center rounded-md border border-[#e5e7eb] px-2 text-sm text-[#3b4252] hover:bg-gray-50" title="Verwijderen">
                             {isBusy ? (
@@ -292,7 +345,7 @@ export default function MembersAdmin() {
         open={confirm.open}
         body={<span>Weet je zeker dat je <strong>{confirm.email}</strong> wilt verwijderen?</span>}
         onConfirm={doRemove}
-        onCancel={()=>setConfirm({ open:false, userId:null, email:'' })}
+        onCancel={()=>setConfirm({ open:false, membershipId:null, userId:null, email:'' })}
       />
     </section>
   );
