@@ -64,7 +64,7 @@ function ConfirmModal({ open, title='Weet je het zeker?', body, confirmText='Ver
 }
 
 export default function MembersAdmin() {
-  const { activeOrgId, user } = useAuth();
+  const { activeOrgId, user, session } = useAuth();
   const { role: userRole, loading: roleLoading } = useMembership();
   const role = String(userRole || '').toUpperCase();
 
@@ -96,27 +96,67 @@ export default function MembersAdmin() {
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
 
-  async function changeRole(userId, nextRole) {
-    setBusyUser(userId);
-    const { error } = await supabase.rpc('update_member_role', {
-      p_org: activeOrgId,
-      p_target: userId,
-      p_role: nextRole,
-    });
-    setBusyUser(null);
-    if (!error) {
-      await fetchMembers();
-      setToast('Rol bijgewerkt');
-      return;
+  async function getAccessToken() {
+    if (session?.access_token) return session.access_token;
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
+  async function callMemberEndpoint(endpoint, payload) {
+    const token = await getAccessToken();
+    if (!token) {
+      throw Object.assign(new Error('Geen toegangstoken beschikbaar'), { code: 'NO_TOKEN' });
     }
 
-    console.warn('[MembersAdmin] update_member_role failed', {
-      org: activeOrgId,
-      target: userId,
-      nextRole,
-      error,
+    const resp = await fetch(`/.netlify/functions/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     });
-    alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
+
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok || (result && typeof result === 'object' && 'error' in result && result.error)) {
+      const message =
+        (result && typeof result === 'object' && result.error && typeof result.error === 'string'
+          ? result.error
+          : result?.error?.message) ||
+        resp.statusText ||
+        'Onbekende fout';
+      const code =
+        (result && typeof result === 'object' && typeof result.code === 'string' && result.code) ||
+        (result?.error && typeof result.error === 'object' && 'code' in result.error
+          ? result.error.code
+          : undefined);
+      throw Object.assign(new Error(message), { code: code ?? resp.status });
+    }
+
+    return result;
+  }
+
+  async function changeRole(userId, nextRole) {
+    setBusyUser(userId);
+    try {
+      await callMemberEndpoint('updateMemberRole', {
+        p_org: activeOrgId,
+        p_target: userId,
+        p_role: nextRole,
+      });
+      await fetchMembers();
+      setToast('Rol bijgewerkt');
+    } catch (error) {
+      console.warn('[MembersAdmin] update_member_role failed', {
+        org: activeOrgId,
+        target: userId,
+        nextRole,
+        error,
+      });
+      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
+    } finally {
+      setBusyUser(null);
+    }
   }
 
   function askRemove(userId, email){ setConfirm({ open:true, userId, email }); }
@@ -125,16 +165,16 @@ export default function MembersAdmin() {
     setConfirm({ open:false, userId:null, email:'' });
     if(!userId) return;
     setBusyUser(userId);
-    const { error } = await supabase.rpc('delete_member', { p_org: activeOrgId, p_target: userId });
-    setBusyUser(null);
-    if (!error) {
+    try {
+      await callMemberEndpoint('deleteMember', { p_org: activeOrgId, p_target: userId });
       await fetchMembers();
       setToast(`Lid verwijderd: ${email}`);
-      return;
+    } catch (error) {
+      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
+      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
+    } finally {
+      setBusyUser(null);
     }
-
-    console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
-    alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
   }
 
   const filtered = useMemo(()=>{
