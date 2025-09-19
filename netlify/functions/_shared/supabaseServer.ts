@@ -1,35 +1,26 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export function buildCorsHeaders(originHeader: string | null) {
-  const origin = originHeader && originHeader.trim() ? originHeader : '*';
-  return { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } as const;
+function getEnv(name: string, alt?: string): string {
+  const v = process.env[name] ?? alt;
+  if (!v) throw new Error(`Missing env ${name}`);
+  return v;
 }
 
-export function supabaseForRequest(authHeader: string | null): SupabaseClient {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
+export function buildCorsHeaders(origin?: string) {
+  const allowOrigin = origin ?? '*';
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization,content-type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  };
+}
 
-  if (!supabaseUrl || !anonKey) {
-    const error = new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars');
-    (error as any).status = 500;
-    (error as any).code = 'SUPABASE_CONFIG_MISSING';
-    throw error;
-  }
-
-  if (!authHeader || !/^Bearer\s+.+/i.test(authHeader)) {
-    const error = new Error('Missing Authorization bearer token');
-    (error as any).status = 401;
-    (error as any).code = 'NO_AUTH_HEADER';
-    throw error;
-  }
-
-  return createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: {
-      headers: {
-        Authorization: authHeader,
-        apikey: anonKey,
-      },
-    },
+export function supabaseForRequest(authHeader?: string): SupabaseClient {
+  // Prefer server envs; fall back to VITE_* if present
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const anon = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !anon) throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars');
+  return createClient(url, anon, {
+    global: { headers: authHeader ? { Authorization: authHeader } : {} },
   });
 }
