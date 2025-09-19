@@ -32,6 +32,12 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem('activeOrgId');
   }, [activeOrgId]);
 
+  useEffect(() => {
+    if (!user) {
+      setActiveOrgId(null);
+    }
+  }, [user]);
+
   // ✅ Auto-heal: kies automatisch een geldige workspace (org) voor de ingelogde user
   useEffect(() => {
     let on = true;

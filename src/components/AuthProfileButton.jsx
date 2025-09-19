@@ -17,7 +17,7 @@ import { useMembership } from '../hooks/useMembership';
  * (Mobiel volgt exact dezelfde regels; "expanded" is dus leidend.)
  */
 export default function AuthProfileButton({ expanded }) {
-  const { session, user } = useAuth();
+  const { session, user, setActiveOrgId } = useAuth();
   const { role } = useMembership();
   const [busy, setBusy] = useState(false);
 
@@ -75,7 +75,8 @@ export default function AuthProfileButton({ expanded }) {
               await supabase.auth.signOut();
             } finally {
               setBusy(false);
-              window.location.replace('/app'); // terug naar hoofdpagina
+              setActiveOrgId(null);
+              window.location.assign('/login');
             }
           }}
           className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[#e4e7f2] text-[12px] hover:bg-gray-50 transition-colors"

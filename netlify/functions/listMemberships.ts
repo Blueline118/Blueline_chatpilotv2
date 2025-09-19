@@ -1,9 +1,19 @@
-import { errorResponse, jsonResponse, optionsResponse, supabaseForRequest } from './_shared';
+import { errorResponse, jsonResponse, optionsResponse } from './_shared/http';
+import { supabaseForRequest } from './_shared/supabaseServer';
+
+function isProfilesJoinError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const message = 'message' in error && typeof (error as any).message === 'string'
+    ? (error as any).message.toLowerCase()
+    : '';
+  return message.includes('profiles') && (message.includes('relationship') || message.includes('join'));
+}
 
 type MembershipRow = {
   org_id: string;
   user_id: string;
   role: string;
+  created_at?: string | null;
   profiles?: { email?: string | null } | null;
 };
 
@@ -21,17 +31,47 @@ export default async function handler(request: Request) {
     return errorResponse(request, 400, 'Query parameter org_id is required', 'BAD_REQUEST');
   }
 
-  const { supabase, error } = supabaseForRequest(request);
-  if (error) return error;
+  const authHeader = request.headers.get('authorization');
+
+  let supabase;
+  try {
+    supabase = supabaseForRequest(authHeader);
+  } catch (err) {
+    const status = typeof (err as any)?.status === 'number' ? (err as any).status : 500;
+    const code = typeof (err as any)?.code === 'string' ? (err as any).code : undefined;
+    return errorResponse(request, status, err, code);
+  }
 
   try {
     const { data, error: dbError } = await supabase
       .from('memberships')
-      .select('org_id, user_id, role, profiles(email)')
+      .select('org_id, user_id, role, created_at, profiles!inner(email)')
       .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
     if (dbError) {
+      if (isProfilesJoinError(dbError)) {
+        const { data: viewData, error: viewError } = await supabase
+          .from('v_org_members')
+          .select('org_id, user_id, role, created_at, email')
+          .eq('org_id', orgId)
+          .order('created_at', { ascending: false });
+
+        if (viewError) {
+          return errorResponse(request, 400, 'profiles join unavailable', 'PROFILES_JOIN_UNAVAILABLE');
+        }
+
+        const items = (viewData ?? []).map((row: any) => ({
+          org_id: row.org_id,
+          user_id: row.user_id,
+          role: row.role,
+          created_at: row.created_at ?? null,
+          email: row.email ?? '',
+        }));
+
+        return jsonResponse(request, 200, { items });
+      }
+
       const status = typeof (dbError as any).status === 'number' ? (dbError as any).status : 400;
       return errorResponse(request, status, dbError, (dbError as any).code);
     }
@@ -40,6 +80,7 @@ export default async function handler(request: Request) {
       org_id: row.org_id,
       user_id: row.user_id,
       role: row.role,
+      created_at: row.created_at ?? null,
       email: row.profiles?.email ?? '',
     }));
 

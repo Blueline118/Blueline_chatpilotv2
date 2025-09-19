@@ -1,4 +1,5 @@
-import { errorResponse, getJsonBody, jsonResponse, optionsResponse, supabaseForRequest } from './_shared';
+import { errorResponse, getJsonBody, jsonResponse, optionsResponse } from './_shared/http';
+import { supabaseForRequest } from './_shared/supabaseServer';
 
 type UpdateMemberRoleBody = {
   p_org?: string;
@@ -25,8 +26,16 @@ export default async function handler(request: Request) {
     );
   }
 
-  const { supabase, error } = supabaseForRequest(request);
-  if (error) return error;
+  const authHeader = request.headers.get('authorization');
+
+  let supabase;
+  try {
+    supabase = supabaseForRequest(authHeader);
+  } catch (err) {
+    const status = typeof (err as any)?.status === 'number' ? (err as any).status : 500;
+    const code = typeof (err as any)?.code === 'string' ? (err as any).code : undefined;
+    return errorResponse(request, status, err, code);
+  }
 
   try {
     const { error: rpcError } = await supabase.rpc('update_member_role', {
