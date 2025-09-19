@@ -8,11 +8,15 @@ import MembersAdmin from '../components/MembersAdmin';
 import RoleBadge from '../components/RoleBadge';
 
 export default function AppHome() {
-  const { user, activeOrgId } = useAuth();
+  const { user, activeOrgId, setActiveOrgId } = useAuth();
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setActiveOrgId(null);
+      window.location.assign('/login');
+    }
   };
 
   return (

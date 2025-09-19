@@ -1,23 +1,14 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' } as const;
 
-function extractBearerToken(headerValue: string | null) {
-  if (!headerValue) return null;
-  const match = headerValue.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  return match[1]?.trim() || null;
-}
-
-export function buildCorsHeaders(request: Request) {
-  const origin = request.headers.get('origin') || '*';
-  return { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } as const;
-}
+import { buildCorsHeaders } from './supabaseServer';
 
 export function jsonResponse(request: Request, status: number, payload: unknown) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...JSON_HEADERS, ...buildCorsHeaders(request) },
+    headers: {
+      ...JSON_HEADERS,
+      ...buildCorsHeaders(request.headers.get('origin')),
+    },
   });
 }
 
@@ -28,10 +19,11 @@ export function optionsResponse(request: Request, methods: string[]) {
       'OPTIONS',
     ])
   );
+
   return new Response(null, {
-    status: 204,
+    status: 200,
     headers: {
-      ...buildCorsHeaders(request),
+      ...buildCorsHeaders(request.headers.get('origin')),
       'Access-Control-Allow-Methods': allow.join(', '),
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
@@ -58,36 +50,17 @@ export function errorResponse(request: Request, status: number, error: unknown, 
   return jsonResponse(request, status, payload);
 }
 
-type SupabaseForRequestResult = { supabase: SupabaseClient; token: string } | { error: Response };
-
-export function supabaseForRequest(request: Request): SupabaseForRequestResult {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) {
-    return {
-      error: jsonResponse(request, 500, {
-        error: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars',
-      }),
-    };
-  }
-
-  const token = extractBearerToken(request.headers.get('authorization'));
-  if (!token) {
-    return { error: errorResponse(request, 401, 'Missing Authorization header') };
-  }
-
-  const supabase = createClient(supabaseUrl, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-
-  return { supabase, token };
-}
-
 export async function getJsonBody<T>(request: Request): Promise<T | null> {
   try {
     return (await request.json()) as T;
   } catch {
     return null;
   }
+}
+
+export function extractBearerToken(headerValue: string | null) {
+  if (!headerValue) return null;
+  const match = headerValue.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  return match[1]?.trim() || null;
 }
