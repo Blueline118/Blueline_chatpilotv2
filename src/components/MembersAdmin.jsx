@@ -1,10 +1,11 @@
 // src/components/MembersAdmin.jsx
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
 import RoleBadge from './RoleBadge';
 import AdminInviteForm from './AdminInviteForm';
+import { authHeader } from '../lib/authHeader';
+import { netlifyJson } from '../lib/netlifyFetch';
 
 const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 const roleLabel = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
@@ -64,7 +65,7 @@ function ConfirmModal({ open, title='Weet je het zeker?', body, confirmText='Ver
 }
 
 export default function MembersAdmin() {
-  const { activeOrgId, user, session } = useAuth();
+  const { activeOrgId, user } = useAuth();
   const { role: userRole, loading: roleLoading } = useMembership();
   const role = String(userRole || '').toUpperCase();
 
@@ -78,82 +79,60 @@ export default function MembersAdmin() {
 
   async function fetchMembers() {
     if (!activeOrgId) return;
-    setLoading(true); setErrMsg('');
-    const { data, error } = await supabase.rpc('get_org_members', { p_org: activeOrgId });
-    if (error) {
-      console.warn('[MembersAdmin] get_org_members failed', { org: activeOrgId, error });
-      setErrMsg(error.message || 'Onbekende fout'); setRows([]);
-    }
-    else {
-      const rows = (data || []).map(r => ({
+    setLoading(true);
+    setErrMsg('');
+    try {
+      const headers = await authHeader();
+      if (!headers.Authorization) {
+        throw new Error('Geen toegangstoken beschikbaar');
+      }
+
+      const response = await netlifyJson(`listMemberships?org_id=${encodeURIComponent(activeOrgId)}`, {
+        method: 'GET',
+        headers,
+      });
+
+      const items = Array.isArray(response?.items) ? response.items : [];
+      const mapped = items.map(r => ({
         user_id: r.user_id,
         role: String(r.role || '').toUpperCase(),
         email: r.email || r.user_id,
       }));
-      setRows(rows);
+      setRows(mapped);
+    } catch (error) {
+      console.warn('[MembersAdmin] listMemberships failed', { org: activeOrgId, error });
+      setErrMsg(error?.message || 'Onbekende fout');
+      setRows([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
-
-  async function getAccessToken() {
-    if (session?.access_token) return session.access_token;
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
-
-  async function callMemberEndpoint(endpoint, payload) {
-    const token = await getAccessToken();
-    if (!token) {
-      throw Object.assign(new Error('Geen toegangstoken beschikbaar'), { code: 'NO_TOKEN' });
-    }
-
-    const resp = await fetch(`/.netlify/functions/${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const result = await resp.json().catch(() => ({}));
-    if (!resp.ok || (result && typeof result === 'object' && 'error' in result && result.error)) {
-      const message =
-        (result && typeof result === 'object' && result.error && typeof result.error === 'string'
-          ? result.error
-          : result?.error?.message) ||
-        resp.statusText ||
-        'Onbekende fout';
-      const code =
-        (result && typeof result === 'object' && typeof result.code === 'string' && result.code) ||
-        (result?.error && typeof result.error === 'object' && 'code' in result.error
-          ? result.error.code
-          : undefined);
-      throw Object.assign(new Error(message), { code: code ?? resp.status });
-    }
-
-    return result;
-  }
 
   async function changeRole(userId, nextRole) {
     setBusyUser(userId);
     try {
-      await callMemberEndpoint('updateMemberRole', {
-        p_org: activeOrgId,
-        p_target: userId,
-        p_role: nextRole,
+      const headers = await authHeader();
+      if (!headers.Authorization) {
+        throw Object.assign(new Error('Geen toegangstoken beschikbaar'), { code: 'NO_TOKEN' });
+      }
+
+      await netlifyJson('updateMemberRole', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ p_org: activeOrgId, p_target: userId, p_role: nextRole }),
       });
       await fetchMembers();
       setToast('Rol bijgewerkt');
     } catch (error) {
-      console.warn('[MembersAdmin] update_member_role failed', {
+      console.warn('[MembersAdmin] updateMemberRole failed', {
         org: activeOrgId,
         target: userId,
         nextRole,
         error,
       });
-      alert('Wijzigen mislukt: ' + (error?.message || 'geen recht'));
+      setToast(`Actie mislukt: ${error?.message || 'geen recht'}`);
+      await fetchMembers();
     } finally {
       setBusyUser(null);
     }
@@ -166,12 +145,22 @@ export default function MembersAdmin() {
     if(!userId) return;
     setBusyUser(userId);
     try {
-      await callMemberEndpoint('deleteMember', { p_org: activeOrgId, p_target: userId });
+      const headers = await authHeader();
+      if (!headers.Authorization) {
+        throw Object.assign(new Error('Geen toegangstoken beschikbaar'), { code: 'NO_TOKEN' });
+      }
+
+      await netlifyJson('deleteMember', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ p_org: activeOrgId, p_target: userId }),
+      });
       await fetchMembers();
       setToast(`Lid verwijderd: ${email}`);
     } catch (error) {
-      console.warn('[MembersAdmin] delete_member failed', { org: activeOrgId, target: userId, error });
-      alert('Verwijderen mislukt: ' + (error?.message || 'geen recht'));
+      console.warn('[MembersAdmin] deleteMember failed', { org: activeOrgId, target: userId, error });
+      setToast(`Actie mislukt: ${error?.message || 'geen recht'}`);
+      await fetchMembers();
     } finally {
       setBusyUser(null);
     }
