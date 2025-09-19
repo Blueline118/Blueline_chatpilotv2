@@ -1,50 +1,59 @@
-import { errorResponse, getJsonBody, jsonResponse, optionsResponse } from './_shared/http';
-import { supabaseForRequest } from './_shared/supabaseServer';
+import type { Handler } from '@netlify/functions';
+import { buildCorsHeaders, supabaseForRequest } from './_shared/supabaseServer';
 
 type DeleteMemberBody = {
   p_org?: string;
   p_target?: string;
 };
 
-export default async function handler(request: Request) {
-  if (request.method === 'OPTIONS') return optionsResponse(request, ['POST']);
+function parseJsonBody<T>(event: Parameters<Handler>[0]): T | null {
+  if (!event.body) return null;
+  try {
+    const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
 
-  if (request.method !== 'POST') {
-    return errorResponse(request, 405, 'Use POST', 'METHOD_NOT_ALLOWED');
+export const handler: Handler = async (event) => {
+  const baseHeaders = buildCorsHeaders(event.headers.origin);
+  const json = (statusCode: number, payload: unknown) => ({
+    statusCode,
+    headers: { ...baseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers: baseHeaders };
   }
 
-  const body = (await getJsonBody<DeleteMemberBody>(request)) ?? {};
+  if (event.httpMethod !== 'POST') {
+    return json(405, { error: 'Use POST' });
+  }
+
+  const body = parseJsonBody<DeleteMemberBody>(event) ?? {};
   const { p_org, p_target } = body;
 
   if (typeof p_org !== 'string' || typeof p_target !== 'string') {
-    return errorResponse(request, 400, 'Body must include p_org (uuid) and p_target (uuid)', 'BAD_REQUEST');
+    return json(400, { error: 'Body must include p_org (uuid) and p_target (uuid)' });
   }
-
-  const authHeader = request.headers.get('authorization');
 
   let supabase;
   try {
-    supabase = supabaseForRequest(authHeader);
-  } catch (err) {
-    const status = typeof (err as any)?.status === 'number' ? (err as any).status : 500;
-    const code = typeof (err as any)?.code === 'string' ? (err as any).code : undefined;
-    return errorResponse(request, status, err, code);
+    supabase = supabaseForRequest(event.headers.authorization);
+  } catch (e: any) {
+    return json(500, { error: e?.message ?? 'Init error' });
   }
 
-  try {
-    const { error: rpcError } = await supabase.rpc('delete_member', {
-      p_org,
-      p_target,
-    });
+  const { error } = await supabase.rpc('delete_member', {
+    p_org,
+    p_target,
+  });
 
-    if (rpcError) {
-      const status = typeof (rpcError as any).status === 'number' ? (rpcError as any).status : 400;
-      return errorResponse(request, status, rpcError, (rpcError as any).code);
-    }
-
-    return jsonResponse(request, 200, { ok: true });
-  } catch (err) {
-    console.error('[deleteMember] unexpected error', err);
-    return errorResponse(request, 500, 'Unexpected server error', 'SERVER_ERROR');
+  if (error) {
+    return json(error.status ?? 400, { error: error.message ?? 'RPC error' });
   }
-}
+
+  return json(200, { ok: true });
+};
