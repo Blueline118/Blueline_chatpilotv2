@@ -1,17 +1,31 @@
 // src/components/AdminInviteForm.jsx
 import { useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { authHeader } from '../lib/authHeader';
+import { netlifyJson } from '../lib/netlifyFetch';
 
 const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 const roleLabel = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
+
+function normalizeRole(value = '') {
+  return String(value || '').trim().toUpperCase();
+}
+
+async function copyToClipboard(value) {
+  try {
+    await navigator.clipboard?.writeText(value);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
 
 /**
  * Uitgelijnd met MembersAdmin (grid-cols-[1fr_200px_96px]).
  * Genereert invite link en kopieert deze direct naar het klembord.
  */
-export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200px_96px]' }) {
+export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200px_96px]', onInviteResult }) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('TEAM');
+  const [role, setRole] = useState('CUSTOMER');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');       // tekstfeedback
@@ -22,32 +36,56 @@ export default function AdminInviteForm({ orgId, gridCols = 'grid-cols-[1fr_200p
     setOk('');
     setLastLink('');
 
+    const cleanedEmail = email.trim();
+
     if (!orgId) { setErr('Geen organisatie gekozen.'); return; }
-    if (!email) { setErr('Vul een e-mailadres in.'); return; }
+    if (!cleanedEmail) { setErr('Vul een e-mailadres in.'); return; }
 
     setBusy(true);
     try {
-      // Vervang de RPC-naam en parameter-namen indien jouw variant anders heet.
-      const { data, error } = await supabase.rpc('create_invite', {
-        p_org: orgId,
-        p_email: email,
-        p_role: role,
+      const headers = await authHeader();
+      if (!headers.Authorization) {
+        throw new Error('Geen toegangstoken beschikbaar.');
+      }
+
+      const nextRole = normalizeRole(role);
+      if (!ROLES.includes(nextRole)) {
+        throw new Error('Onbekende rol.');
+      }
+
+      const body = await netlifyJson('createInvite', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ p_org: orgId, p_email: cleanedEmail, p_role: nextRole }),
       });
-      if (error) throw error;
 
-      const link = String(data ?? '');
-      setLastLink(link);
+      const acceptUrl = typeof body?.acceptUrl === 'string' ? body.acceptUrl : '';
+      if (acceptUrl) {
+        setLastLink(acceptUrl);
+        const copied = await copyToClipboard(acceptUrl);
+        setOk(copied ? 'Invite link gekopieerd.' : 'Invite link gegenereerd. (Kopieer handmatig)');
+      } else {
+        setLastLink('');
+        setOk('Invite verstuurd.');
+      }
 
-      // Probeer direct te kopiëren
-      try {
-        await navigator.clipboard?.writeText(link);
-        setOk('Invite link gegenereerd en gekopieerd.');
-      } catch {
-        setOk('Invite link gegenereerd. (Kopieer handmatig)');
+      if (body?.sent && !acceptUrl) {
+        setOk(`Uitnodiging verstuurd naar ${cleanedEmail}`);
+      } else if (body?.sent) {
+        setOk(`Uitnodiging verstuurd naar ${cleanedEmail} (link ook beschikbaar).`);
+      }
+
+      if (typeof onInviteResult === 'function') {
+        onInviteResult({
+          email: cleanedEmail,
+          role: nextRole,
+          acceptUrl: acceptUrl || null,
+          sent: body?.sent === true,
+        });
       }
 
       setEmail('');
-      setRole('TEAM');
+      setRole('CUSTOMER');
     } catch (e) {
       console.error('[AdminInviteForm] create_invite error:', e);
       setErr(e.message || 'Kon invite niet genereren.');

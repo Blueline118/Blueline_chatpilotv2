@@ -1,7 +1,8 @@
 // src/pages/AcceptInvite.jsx
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { authHeader } from '../lib/authHeader';
+import { netlifyJson } from '../lib/netlifyFetch';
 import { useAuth } from '../providers/AuthProvider';
 
 export default function AcceptInvite() {
@@ -26,15 +27,21 @@ export default function AcceptInvite() {
           return;
         }
 
-        // Invite accepteren
-        const { data, error } = await supabase.rpc('accept_invite', { p_token: token });
-        if (error) throw error;
+        const headers = await authHeader();
+        if (!headers.Authorization) {
+          throw new Error('Geen toegangstoken beschikbaar.');
+        }
 
-        // Zet evt. actieve org in localStorage en ga naar /app
+        const data = await netlifyJson(`acceptInvite?token=${encodeURIComponent(token)}&noRedirect=1`, {
+          method: 'GET',
+          headers,
+        });
+
         if (data?.org_id) {
           try { localStorage.setItem('activeOrgId', data.org_id); } catch {}
         }
-        navigate('/app', { replace: true });
+
+        navigate('/app?accepted=1', { replace: true });
       } catch (e) {
         setState({ busy: false, msg: '', err: e.message || 'Er ging iets mis.' });
       }

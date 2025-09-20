@@ -180,6 +180,15 @@ export default function MembersAdmin() {
 
   const GRID_COLS = 'grid-cols-[1fr_200px_96px]';
 
+  function handleInviteResult(result) {
+    if (!result) return;
+    if (result.sent && result.email) {
+      setToast(`Uitnodiging verstuurd naar ${result.email}`);
+    } else if (result.acceptUrl) {
+      setToast('Invite link aangemaakt.');
+    }
+  }
+
   return (
     <section className="space-y-4">
       {/* Header */}
@@ -312,7 +321,7 @@ export default function MembersAdmin() {
             )}
           </div>
 
-          <AdminInviteForm orgId={activeOrgId} />
+          <AdminInviteForm orgId={activeOrgId} onInviteResult={handleInviteResult} />
         </>
       )}
 
