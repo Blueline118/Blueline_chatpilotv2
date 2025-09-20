@@ -26,6 +26,7 @@ export default function AdminInviteForm({
   const [message, setMessage] = useState('');
   const [copyLink, setCopyLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
 
   async function handleGenerate() {
     setError('');
@@ -54,6 +55,8 @@ export default function AdminInviteForm({
         throw new Error('Geen toegangstoken beschikbaar.');
       }
 
+      const shouldSendEmail = sendEmail;
+
       const res = await fetch('/.netlify/functions/createInvite', {
         method: 'POST',
         headers: {
@@ -64,6 +67,7 @@ export default function AdminInviteForm({
           p_org: targetOrg,
           p_email: cleanedEmail,
           p_role: targetRole,
+          sendEmail: shouldSendEmail,
         }),
       });
 
@@ -74,11 +78,18 @@ export default function AdminInviteForm({
 
       const acceptUrl = typeof body?.acceptUrl === 'string' ? body.acceptUrl : '';
       setCopyLink(acceptUrl);
-      setMessage(
-        acceptUrl
-          ? 'Invite link aangemaakt. Kopieer de link hieronder om te delen.'
-          : 'Invite aangemaakt.'
-      );
+      const emailInfo = body?.email && typeof body.email === 'object' ? body.email : null;
+      if (emailInfo?.attempted) {
+        setMessage(
+          emailInfo.sent
+            ? 'Mail verstuurd.'
+            : 'Link gekopieerd (email niet verstuurd).'
+        );
+      } else if (shouldSendEmail) {
+        setMessage('Link gekopieerd (email niet verstuurd).');
+      } else {
+        setMessage('E-mail overslagen, link gekopieerd.');
+      }
       setEmail('');
       setRole('CUSTOMER');
 
@@ -88,6 +99,8 @@ export default function AdminInviteForm({
           role: targetRole,
           acceptUrl: acceptUrl || null,
           invite: body?.invite,
+          emailInfo,
+          sendEmail: shouldSendEmail,
         });
       }
     } catch (e) {
@@ -168,6 +181,19 @@ export default function AdminInviteForm({
             )}
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 px-4 pb-2 text-sm text-[#3b4252]">
+        <input
+          id="invite-send-email"
+          type="checkbox"
+          className="h-4 w-4 rounded border-[#c7ccd9] text-[#2563eb] focus:ring-[#2563eb]"
+          checked={sendEmail}
+          onChange={(e) => setSendEmail(e.target.checked)}
+        />
+        <label htmlFor="invite-send-email" className="cursor-pointer select-none">
+          Uitnodiging per e-mail versturen
+        </label>
       </div>
 
       {(error || message || copyLink) && (

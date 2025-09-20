@@ -182,8 +182,15 @@ export default function MembersAdmin() {
 
   function handleInviteResult(result) {
     if (!result) return;
-    if (result.sent && result.email) {
-      setToast(`Uitnodiging verstuurd naar ${result.email}`);
+    const emailInfo = result.emailInfo;
+    if (emailInfo?.attempted) {
+      if (emailInfo.sent && result.email) {
+        setToast(`Uitnodiging per e-mail verstuurd naar ${result.email}.`);
+      } else {
+        setToast('E-mail niet verstuurd, link gekopieerd.');
+      }
+    } else if (result.sendEmail === false) {
+      setToast('E-mail overslagen, link gekopieerd.');
     } else if (result.acceptUrl) {
       setToast('Invite link aangemaakt.');
     }

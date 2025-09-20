@@ -9,26 +9,25 @@ export default function AcceptInvite() {
   const [status, setStatus] = useState('Bezig met uitnodiging accepteren...');
 
   useEffect(() => {
-    if (!token) return;
-
     (async () => {
-      try {
-        const k = Object.keys(localStorage).find(
-          (x) => x.startsWith('sb-') && x.endsWith('-auth-token')
+      if (!token) {
+        setStatus('Ongeldige link: token ontbreekt.');
+        return;
+      }
+
+      const k = Object.keys(localStorage).find(
+        (x) => x.startsWith('sb-') && x.endsWith('-auth-token')
+      );
+      const t = k ? JSON.parse(localStorage.getItem(k) || '{}').access_token : null;
+      if (!t) {
+        const next = encodeURIComponent(
+          window.location.pathname + window.location.search
         );
-        const raw = k ? localStorage.getItem(k) : null;
-        let t = null;
-        if (raw) {
-          try {
-            t = JSON.parse(raw).access_token ?? null;
-          } catch {
-            t = null;
-          }
-        }
-        if (!t) {
-          setStatus('Je bent niet ingelogd. Log in en probeer opnieuw.');
-          return;
-        }
+        window.location.assign(`/login?next=${next}`);
+        return;
+      }
+
+      try {
         const res = await fetch(
           `/.netlify/functions/acceptInvite?token=${encodeURIComponent(token)}&noRedirect=1`,
           {
@@ -48,6 +47,5 @@ export default function AcceptInvite() {
     })();
   }, [token, nav]);
 
-  if (!token) return <div>Ongeldige link: token ontbreekt.</div>;
   return <div>{status}</div>;
 }
