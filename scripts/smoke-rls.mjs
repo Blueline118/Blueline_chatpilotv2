@@ -27,6 +27,25 @@ if (missing.length) {
   process.exit(1);
 }
 
+function decodeJwtUserId(token) {
+  try {
+    const segments = token.split('.');
+    if (segments.length < 2) return null;
+    let payload = segments[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (payload.length % 4) payload += '=';
+    const json = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'));
+    return json.sub || json.user_id || json.user?.id || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+const USER_ID = decodeJwtUserId(USER_TOKEN);
+if (!USER_ID) {
+  console.error('Unable to determine user id from USER_ACCESS_TOKEN payload.');
+  process.exit(1);
+}
+
 function urlFor(path) {
   return new URL(path, BASE_URL).toString();
 }
@@ -52,6 +71,12 @@ function logResult(ok, message, details) {
   if (!ok) {
     process.exitCode = 1;
   }
+}
+
+function randomInviteEmail() {
+  const stamp = Date.now().toString(36);
+  const suffix = Math.random().toString(16).slice(2, 8);
+  return `smoke-invite+${stamp}-${suffix}@example.com`;
 }
 
 async function testPreflight() {
@@ -124,12 +149,87 @@ async function testUnauthUpdate() {
   logResult(ok, 'Unauthenticated updateMemberRole denied', `(status ${response.status})`);
 }
 
+async function testAdminCreateInvite() {
+  const inviteEmail = randomInviteEmail();
+  const { response, data } = await requestJson('createInvite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ADMIN_TOKEN}`,
+    },
+    body: JSON.stringify({ p_org: ORG_ID, p_email: inviteEmail, p_role: 'CUSTOMER' }),
+  });
+
+  const acceptUrl = typeof data?.acceptUrl === 'string' ? data.acceptUrl : null;
+  const sent = data?.sent === true;
+  const ok = response.ok && (acceptUrl || sent);
+  const details = ok ? (acceptUrl ? '(acceptUrl ontvangen)' : '(mail verstuurd)') : `status ${response.status}`;
+  logResult(ok, 'Admin createInvite', details);
+  return ok ? { acceptUrl, email: inviteEmail, sent } : null;
+}
+
+async function testUserCreateInviteDenied() {
+  const { response, data } = await requestJson('createInvite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${USER_TOKEN}`,
+    },
+    body: JSON.stringify({ p_org: ORG_ID, p_email: randomInviteEmail(), p_role: 'TEAM' }),
+  });
+
+  const denied = response.status === 401 || response.status === 403 || (data && typeof data.error === 'string');
+  logResult(denied, 'User createInvite denied', `(status ${response.status})`);
+}
+
+async function testAcceptInvite(invite) {
+  if (!invite || !invite.acceptUrl) {
+    logResult(false, 'Accept invite', '(geen invite URL beschikbaar)');
+    return;
+  }
+  let token;
+  try {
+    const url = new URL(invite.acceptUrl);
+    token = url.searchParams.get('token');
+  } catch (error) {
+    token = null;
+  }
+  if (!token) {
+    logResult(false, 'Accept invite', '(token ontbreekt)');
+    return;
+  }
+
+  const { response, data } = await requestJson(`acceptInvite?token=${encodeURIComponent(token)}&noRedirect=1`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${USER_TOKEN}`,
+    },
+  });
+
+  const ok = response.status === 200 && data && data.success === true;
+  logResult(ok, 'Accept invite', ok ? '(200 OK)' : `status ${response.status}`);
+  if (!ok) return;
+
+  const { response: listRes, data: listData } = await requestJson(`listMemberships?org_id=${encodeURIComponent(ORG_ID)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${ADMIN_TOKEN}`,
+    },
+  });
+  const items = Array.isArray(listData?.items) ? listData.items : [];
+  const hasMembership = items.some((item) => item.user_id === USER_ID);
+  logResult(hasMembership, 'Membership exists after accept', hasMembership ? '' : `(status ${listRes.status})`);
+}
+
 async function main() {
   await testPreflight();
   await testAdminList();
   await testAdminUpdate();
   await testUserUpdate();
   await testUnauthUpdate();
+  const invite = await testAdminCreateInvite();
+  await testUserCreateInviteDenied();
+  await testAcceptInvite(invite);
 }
 
 main().catch((err) => {
