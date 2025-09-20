@@ -8,6 +8,7 @@ const USER_TOKEN = process.env.USER_ACCESS_TOKEN;
 const ORG_ID = process.env.ORG_ID;
 const TARGET_USER_ID = process.env.TARGET_USER_ID;
 const TARGET_ROLE = process.env.TARGET_ROLE || 'TEAM';
+const HAS_RESEND = Boolean(process.env.RESEND_API_KEY);
 
 const missing = [];
 if (!ADMIN_TOKEN) missing.push('ADMIN_ACCESS_TOKEN');
@@ -149,23 +150,46 @@ async function testUnauthUpdate() {
   logResult(ok, 'Unauthenticated updateMemberRole denied', `(status ${response.status})`);
 }
 
-async function testAdminCreateInvite() {
+async function testAdminCreateInvite(options = {}) {
+  const { sendEmail = undefined } = options;
   const inviteEmail = randomInviteEmail();
+  const payload = { p_org: ORG_ID, p_email: inviteEmail, p_role: 'CUSTOMER' };
+  if (sendEmail === false) {
+    payload.sendEmail = false;
+  }
+
   const { response, data } = await requestJson('createInvite', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${ADMIN_TOKEN}`,
     },
-    body: JSON.stringify({ p_org: ORG_ID, p_email: inviteEmail, p_role: 'CUSTOMER' }),
+    body: JSON.stringify(payload),
   });
 
   const acceptUrl = typeof data?.acceptUrl === 'string' ? data.acceptUrl : null;
-  const sent = data?.sent === true;
-  const ok = response.ok && (acceptUrl || sent);
-  const details = ok ? (acceptUrl ? '(acceptUrl ontvangen)' : '(mail verstuurd)') : `status ${response.status}`;
-  logResult(ok, 'Admin createInvite', details);
-  return ok ? { acceptUrl, email: inviteEmail, sent } : null;
+  const emailInfo = data && typeof data.email === 'object' ? data.email : null;
+  const label = sendEmail === false ? 'Admin createInvite (sendEmail=false)' : 'Admin createInvite';
+  const ok = response.ok && !!acceptUrl;
+  const mailNote = emailInfo?.attempted
+    ? emailInfo.sent
+      ? 'mail verstuurd'
+      : `mail niet verstuurd (${emailInfo.reason || 'onbekend'})`
+    : 'mail niet geprobeerd';
+  const details = ok ? `(acceptUrl ontvangen, ${mailNote})` : `status ${response.status}`;
+  logResult(ok, label, details);
+
+  if (HAS_RESEND && sendEmail !== false) {
+    const attempted = emailInfo?.attempted === true;
+    const sentOrReason = emailInfo?.sent === true || typeof emailInfo?.reason === 'string';
+    logResult(
+      attempted && sentOrReason,
+      '  ↳ Resend e-mail poging',
+      attempted ? `(sent=${emailInfo?.sent === true}, reason=${emailInfo?.reason || 'n/a'})` : '(niet geprobeerd)'
+    );
+  }
+
+  return ok ? { acceptUrl, email: inviteEmail, emailInfo } : null;
 }
 
 async function testUserCreateInviteDenied() {
@@ -228,6 +252,7 @@ async function main() {
   await testUserUpdate();
   await testUnauthUpdate();
   const invite = await testAdminCreateInvite();
+  await testAdminCreateInvite({ sendEmail: false });
   await testUserCreateInviteDenied();
   await testAcceptInvite(invite);
 }

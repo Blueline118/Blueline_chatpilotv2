@@ -17,5 +17,14 @@ The Netlify functions expect the following environment variables to be available
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
+- `RESEND_API_KEY` – secret Resend token used to send invite e-mails (optional but required for e-mail delivery)
+- `FROM_EMAIL` – from-address for invite e-mails (for example `invites@blueline-chatpilot.netlify.app`)
+- `APP_ORIGIN` – optional override for the application origin when generating invite links
 
 Configure them locally via a `.env` file or export them in your shell before running `netlify dev` or the smoke tests.
+
+On Netlify you can configure these via **Site settings → Environment variables**:
+
+- `RESEND_API_KEY = <your_resend_token>`
+- `FROM_EMAIL = invites@blueline-chatpilot.netlify.app` (or your own domain)
+- `APP_ORIGIN = https://blueline-chatpilot.netlify.app` (optional)

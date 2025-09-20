@@ -1,5 +1,6 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseForRequest, buildCorsHeaders } from './_shared/supabaseServer';
+import { sendInviteEmail } from './_shared/email';
 
 type BodyIn =
   | { p_org?: string; p_email?: string; p_role?: 'ADMIN' | 'TEAM' | 'CUSTOMER' }
@@ -139,12 +140,34 @@ export const handler: Handler = async (event) => {
     const base = process.env.APP_ORIGIN || (hostHeader ? `${scheme}://${hostHeader}` : `${scheme}://localhost`);
     const acceptUrl = `${base}/accept-invite?token=${encodeURIComponent(inv.token)}`;
 
+    const sendEmail = (json as any).sendEmail !== false;
+
+    const mail: { attempted: boolean; sent: boolean; reason?: string } = {
+      attempted: false,
+      sent: false,
+      reason: undefined,
+    };
+
+    if (sendEmail) {
+      mail.attempted = true;
+      const r = await sendInviteEmail({
+        to: inv.email,
+        acceptUrl,
+        brand: 'Blueline Chatpilot',
+      });
+      mail.sent = r.sent;
+      if (!r.sent) {
+        mail.reason = r.reason ?? 'unknown';
+      }
+    }
+
     return {
       statusCode: 200,
       headers: jsonHeaders,
       body: JSON.stringify({
         acceptUrl,
         invite: { id: inv.id, email: inv.email, role: inv.role },
+        email: mail,
       }),
     };
   } catch (e: any) {
