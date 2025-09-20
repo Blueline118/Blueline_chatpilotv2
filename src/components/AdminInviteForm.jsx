@@ -79,16 +79,10 @@ export default function AdminInviteForm({
       const acceptUrl = typeof body?.acceptUrl === 'string' ? body.acceptUrl : '';
       setCopyLink(acceptUrl);
       const emailInfo = body?.email && typeof body.email === 'object' ? body.email : null;
-      if (emailInfo?.attempted) {
-        setMessage(
-          emailInfo.sent
-            ? 'Mail verstuurd.'
-            : 'Link gekopieerd (email niet verstuurd).'
-        );
-      } else if (shouldSendEmail) {
-        setMessage('Link gekopieerd (email niet verstuurd).');
+      if (emailInfo?.attempted && emailInfo.sent) {
+        setMessage('E-mail verstuurd');
       } else {
-        setMessage('E-mail overslagen, link gekopieerd.');
+        setMessage('E-mail niet verstuurd, link gekopieerd');
       }
       setEmail('');
       setRole('CUSTOMER');

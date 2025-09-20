@@ -142,10 +142,10 @@ export const handler: Handler = async (event) => {
 
     const sendEmail = (json as any).sendEmail !== false;
 
-    const mail: { attempted: boolean; sent: boolean; reason?: string } = {
+    const mail: { attempted: boolean; sent: boolean; reason: string | null } = {
       attempted: false,
       sent: false,
-      reason: undefined,
+      reason: null,
     };
 
     if (sendEmail) {
@@ -159,6 +159,8 @@ export const handler: Handler = async (event) => {
       if (!r.sent) {
         mail.reason = r.reason ?? 'unknown';
       }
+    } else {
+      mail.reason = 'disabled';
     }
 
     return {

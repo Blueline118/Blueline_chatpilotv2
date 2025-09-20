@@ -1,51 +1,67 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 export default function AcceptInvite() {
-  const nav = useNavigate();
   const location = useLocation();
   const qs = new URLSearchParams(location.search);
   const token = qs.get('token');
-  const [status, setStatus] = useState('Bezig met uitnodiging accepteren...');
+  const [status, setStatus] = useState(
+    token ? 'Bezig met uitnodiging accepteren...' : 'Ongeldige link: token ontbreekt.'
+  );
 
   useEffect(() => {
-    (async () => {
-      if (!token) {
-        setStatus('Ongeldige link: token ontbreekt.');
-        return;
-      }
+    let cancelled = false;
 
-      const k = Object.keys(localStorage).find(
-        (x) => x.startsWith('sb-') && x.endsWith('-auth-token')
-      );
-      const t = k ? JSON.parse(localStorage.getItem(k) || '{}').access_token : null;
-      if (!t) {
-        const next = encodeURIComponent(
-          window.location.pathname + window.location.search
-        );
-        window.location.assign(`/login?next=${next}`);
-        return;
-      }
+    if (!token) {
+      setStatus('Ongeldige link: token ontbreekt.');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function acceptWithoutLogin() {
+      setStatus('Bezig met uitnodiging accepteren...');
 
       try {
         const res = await fetch(
-          `/.netlify/functions/acceptInvite?token=${encodeURIComponent(token)}&noRedirect=1`,
-          {
-            headers: { Authorization: `Bearer ${t}` },
-          }
+          `/.netlify/functions/acceptInvite?token=${encodeURIComponent(token)}&noRedirect=1`
         );
+
+        if (cancelled) return;
+
+        if (res.status === 401) {
+          const next = encodeURIComponent(
+            window.location.pathname + window.location.search
+          );
+          window.location.assign(`/login?next=${next}`);
+          return;
+        }
+
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setStatus(data?.error || 'Kon uitnodiging niet accepteren.');
           return;
         }
-        setStatus('Uitnodiging geaccepteerd, je wordt doorgestuurd...');
-        nav('/app', { replace: true });
+
+        setStatus('Uitnodiging geaccepteerd. Je wordt doorgestuurd...');
+        const redirectTarget =
+          typeof data?.redirectTo === 'string' && data.redirectTo
+            ? data.redirectTo
+            : '/app?invite=accepted';
+        window.location.assign(redirectTarget);
       } catch (e) {
-        setStatus('Onverwachte fout bij accepteren.');
+        if (!cancelled) {
+          setStatus('Onverwachte fout bij accepteren.');
+        }
       }
-    })();
-  }, [token, nav]);
+    }
+
+    acceptWithoutLogin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, location.pathname, location.search]);
 
   return <div>{status}</div>;
 }
