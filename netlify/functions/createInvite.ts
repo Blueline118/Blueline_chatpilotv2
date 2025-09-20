@@ -1,175 +1,157 @@
 import type { Handler } from '@netlify/functions';
 import { supabaseForRequest, buildCorsHeaders } from './_shared/supabaseServer';
 
-const ROLE_VALUES = new Set(['ADMIN', 'TEAM', 'CUSTOMER']);
-
-function isUuid(value?: string | null): boolean {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value)
-  );
-}
-
-function normalizeRole(role?: string | null): string | null {
-  if (!role) return null;
-  const normalized = role.trim().toUpperCase();
-  return ROLE_VALUES.has(normalized) ? normalized : null;
-}
-
-function isValidEmail(email?: string | null): boolean {
-  if (typeof email !== 'string') return false;
-  const trimmed = email.trim();
-  if (!trimmed) return false;
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed);
-}
-
-function buildAcceptUrl(origin: string, token: string): string {
-  const base = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-  return `${base}/.netlify/functions/acceptInvite?token=${encodeURIComponent(token)}`;
-}
-
-async function sendInviteEmail(to: string, acceptUrl: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.FROM_EMAIL;
-  if (!apiKey || !fromEmail) {
-    return { sent: false };
-  }
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to,
-      subject: 'Je bent uitgenodigd voor Blueline Chatpilot',
-      html: `<!doctype html><html><body><p>Je bent uitgenodigd voor Blueline Chatpilot.</p><p><a href="${acceptUrl}" target="_blank" rel="noreferrer">Accepteer uitnodiging</a></p><p>Of plak deze link in je browser:<br/><code>${acceptUrl}</code></p></body></html>`,
-      text: `Je bent uitgenodigd voor Blueline Chatpilot.\n\nAccepteer uitnodiging: ${acceptUrl}\n`,
-    }),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    const error = new Error('Kon invite e-mail niet versturen');
-    (error as any).details = detail;
-    throw error;
-  }
-
-  return { sent: true };
-}
+type BodyIn =
+  | { p_org?: string; p_email?: string; p_role?: 'ADMIN' | 'TEAM' | 'CUSTOMER' }
+  | { org_id?: string; email?: string; role?: 'ADMIN' | 'TEAM' | 'CUSTOMER' };
 
 export const handler: Handler = async (event) => {
-  const corsHeaders = buildCorsHeaders(event.headers.origin);
+  const headers = buildCorsHeaders(event.headers.origin);
+  const jsonHeaders = { ...headers, 'Content-Type': 'application/json' };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: corsHeaders };
-  }
-
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Use POST' }),
-    };
-  }
-
-  const authHeader = event.headers.authorization;
-  if (!authHeader) {
-    return {
-      statusCode: 401,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Missing Authorization header' }),
-    };
-  }
-
-  let payload: any;
   try {
-    payload = event.body ? JSON.parse(event.body) : {};
-  } catch (error: any) {
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 200, headers };
+    }
+
+    if (event.httpMethod !== 'POST') {
+      return {
+        statusCode: 405,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Use POST' }),
+      };
+    }
+
+    const auth = event.headers.authorization;
+    if (!auth) {
+      return {
+        statusCode: 401,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Missing Authorization header' }),
+      };
+    }
+
+    const raw =
+      event.isBase64Encoded && event.body
+        ? Buffer.from(event.body, 'base64').toString('utf8')
+        : event.body || '{}';
+
+    let json: BodyIn;
+    try {
+      json = JSON.parse(raw) as BodyIn;
+    } catch (error: any) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Invalid JSON body' }),
+      };
+    }
+
+    const p_org_raw = (json as any).p_org ?? (json as any).org_id;
+    const p_email_raw = (json as any).p_email ?? (json as any).email;
+    const p_role_raw = (json as any).p_role ?? (json as any).role;
+
+    const p_org = typeof p_org_raw === 'string' ? p_org_raw : undefined;
+    const p_email = typeof p_email_raw === 'string' ? p_email_raw.trim() : undefined;
+    const p_role =
+      typeof p_role_raw === 'string' ? p_role_raw.trim().toUpperCase() : undefined;
+
+    if (!p_org || !p_email || !p_role) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          error: 'Body must include p_org/org_id, p_email/email, p_role/role',
+        }),
+      };
+    }
+
+    const validRoles = new Set(['ADMIN', 'TEAM', 'CUSTOMER']);
+    if (!validRoles.has(p_role)) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Invalid role' }),
+      };
+    }
+
+    const supabase = supabaseForRequest(auth);
+
+    const { data: me, error: meErr } = await supabase.auth.getUser();
+    if (meErr || !me?.user) {
+      return {
+        statusCode: 401,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Not authenticated' }),
+      };
+    }
+
+    const { data: adminRows, error: adminErr } = await supabase
+      .from('memberships')
+      .select('role')
+      .eq('org_id', p_org)
+      .eq('user_id', me.user.id)
+      .eq('role', 'ADMIN')
+      .limit(1);
+
+    if (adminErr) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: adminErr.message }),
+      };
+    }
+
+    if (!adminRows?.length) {
+      return {
+        statusCode: 403,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Only ADMIN can create invites' }),
+      };
+    }
+
+    const { data: invData, error: invErr } = await supabase.rpc('create_invite', {
+      p_org,
+      p_email,
+      p_role,
+    } as any);
+
+    if (invErr) {
+      return {
+        statusCode: 400,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: invErr.message }),
+      };
+    }
+
+    const inv: any = Array.isArray(invData) ? invData[0] : invData;
+    if (!inv?.token) {
+      return {
+        statusCode: 500,
+        headers: jsonHeaders,
+        body: JSON.stringify({ error: 'Invite resultaat ongeldig' }),
+      };
+    }
+
+    const scheme = (event.headers['x-forwarded-proto'] || 'https') as string;
+    const hostHeader =
+      (event.headers['x-forwarded-host'] || event.headers.host) as string | undefined;
+    const base = process.env.APP_ORIGIN || (hostHeader ? `${scheme}://${hostHeader}` : `${scheme}://localhost`);
+    const acceptUrl = `${base}/accept-invite?token=${encodeURIComponent(inv.token)}`;
+
     return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Invalid JSON body' }),
+      statusCode: 200,
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        acceptUrl,
+        invite: { id: inv.id, email: inv.email, role: inv.role },
+      }),
     };
-  }
-
-  const orgId: string | null = typeof payload?.p_org === 'string' ? payload.p_org : null;
-  const email: string | null = typeof payload?.p_email === 'string' ? payload.p_email.trim() : null;
-  const role = normalizeRole(payload?.p_role);
-
-  if (!isUuid(orgId || undefined)) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'p_org must be a uuid' }) };
-  }
-  if (!isValidEmail(email)) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'p_email must be a valid email' }) };
-  }
-  if (!role) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'p_role must be ADMIN, TEAM of CUSTOMER' }) };
-  }
-
-  let supabase;
-  try {
-    supabase = supabaseForRequest(authHeader);
-  } catch (error: any) {
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: error?.message ?? 'Init failed' }) };
-  }
-
-  const { data, error } = await supabase.rpc('create_invite', {
-    p_org: orgId,
-    p_email: email,
-    p_role: role,
-  });
-
-  if (error) {
-    const msg = error.message ?? 'Kon invite niet aanmaken';
-    const denied = /row level security|permission denied|not authorized|rpc error/i.test(msg);
-    return {
-      statusCode: denied ? 403 : 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: msg }),
-    };
-  }
-
-  const row: any = Array.isArray(data) ? data[0] : data;
-  if (!row || !row.token) {
+  } catch (e: any) {
     return {
       statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Invite resultaat ongeldig' }),
+      headers: jsonHeaders,
+      body: JSON.stringify({ error: e?.message || 'createInvite failure' }),
     };
   }
-
-  const origin = process.env.APP_ORIGIN ?? event.headers.origin ?? 'https://blueline-chatpilot.netlify.app';
-  const acceptUrl = buildAcceptUrl(origin, row.token);
-
-  let sent = false;
-  try {
-    const mailResult = await sendInviteEmail(email!, acceptUrl);
-    sent = mailResult.sent;
-  } catch (mailError: any) {
-    return {
-      statusCode: 502,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: mailError?.message ?? 'Mail versturen mislukt', details: mailError?.details }),
-    };
-  }
-
-  const body = {
-    acceptUrl,
-    sent: sent || undefined,
-    invite: {
-      id: row.id,
-      email: row.email,
-      role: row.role,
-      expires_at: row.expires_at,
-    },
-  };
-
-  return {
-    statusCode: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  };
 };
