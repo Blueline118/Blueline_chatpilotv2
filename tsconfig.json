@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "types": ["@netlify/functions"],
+    "typeRoots": ["./types", "./node_modules/@types"]
+  },
+  "include": ["src", "netlify/functions", "vite-env.d.ts", "types"]
+}
