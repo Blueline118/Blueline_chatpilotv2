@@ -16,49 +16,27 @@ export function buildCorsHeaders(origin?: string) {
 }
 
 /**
- * Client voor requests mét end-user JWT (Authorization header).
- * We forceren het schema naar 'public' en zetten Accept-/Content-Profile.
+ * Client voor verzoeken met de user-JWT (RLS afdwingen).
  */
 export function supabaseForRequest(authHeader?: string): SupabaseClient {
-  // Gebruik server envs; val desnoods terug op VITE_* (preview)
-  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const anon = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+  const url = getEnv('SUPABASE_URL') ?? process.env.VITE_SUPABASE_URL;
+  const anon = getEnv('SUPABASE_ANON_KEY') ?? process.env.VITE_SUPABASE_ANON_KEY;
   if (!url || !anon) throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars');
 
   return createClient(url, anon, {
-    db: { schema: 'public' }, // <<< belangrijk
-    global: {
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-        'Accept-Profile': 'public',
-        'Content-Profile': 'public',
-      },
-    },
+    global: { headers: authHeader ? { Authorization: authHeader } : {} },
+    db: { schema: 'public' }, // forceer public schema
   });
 }
 
 /**
- * Admin client met de service-role key (géén end-user JWT nodig).
- * Alleen server-side gebruiken (Netlify Functions).
+ * Enkele, unieke export: service-role client voor server-side acties (geen RLS).
  */
 export function supabaseAdmin(): SupabaseClient {
   const url = getEnv('SUPABASE_URL');
-  const key = getEnv('SUPABASE_SERVICE_ROLE_KEY'); // moet in Netlify env staan
-
+  const key = getEnv('SUPABASE_SERVICE_ROLE_KEY');
   return createClient(url, key, {
-    db: { schema: 'public' }, // <<< belangrijk
-    global: {
-      headers: {
-        'Accept-Profile': 'public',
-        'Content-Profile': 'public',
-      },
-    },
+    auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: 'public' }, // forceer public schema
   });
-}
-
-export function supabaseAdmin(): SupabaseClient {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars');
-  return createClient(url, key, { auth: { persistSession: false } });
 }
