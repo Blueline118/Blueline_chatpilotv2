@@ -16,23 +16,20 @@ type InviteRow = {
 type SupabaseAdminClient = ReturnType<typeof supabaseAdmin>;
 type MinimalUser = { id: string; email?: string | null };
 
-async function getAuthUserByEmail(admin: SupabaseAdminClient, email: string): Promise<MinimalUser | null> {
+async function getAuthUserByEmail(
+  admin: SupabaseAdminClient,
+  email: string
+): Promise<MinimalUser | null> {
   const normalized = email.trim().toLowerCase();
-  const { data, error } = await admin
-    .schema('auth')
-    .from('users')
-    .select('id,email')
-    .eq('email', normalized)
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await admin.auth.admin.getUserByEmail(normalized);
 
-  if (error && error.code !== 'PGRST116') {
+  if (error && !error.message?.toLowerCase().includes('user not found')) {
     throw new Error(error.message);
   }
 
-  if (!data) return null;
+  if (!data?.user) return null;
 
-  return { id: data.id, email: data.email } as MinimalUser;
+  return { id: data.user.id, email: data.user.email };
 }
 
 async function ensureAuthUser(admin: SupabaseAdminClient, email: string): Promise<MinimalUser> {

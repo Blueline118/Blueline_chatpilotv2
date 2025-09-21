@@ -1,0 +1,29 @@
+export interface HandlerEvent {
+  rawUrl: string;
+  rawQuery: string | null;
+  path: string;
+  httpMethod: string;
+  headers: Record<string, string | undefined>;
+  queryStringParameters?: Record<string, string | undefined> | null;
+  body?: string | null;
+  isBase64Encoded?: boolean;
+}
+
+export interface HandlerContext {
+  functionName: string;
+  clientContext?: unknown;
+  identity?: unknown;
+}
+
+export interface HandlerResponse {
+  statusCode: number;
+  headers?: Record<string, string | undefined>;
+  multiValueHeaders?: Record<string, string[]>;
+  body?: string;
+  isBase64Encoded?: boolean;
+}
+
+export type Handler = (
+  event: HandlerEvent,
+  context: HandlerContext
+) => Promise<HandlerResponse> | HandlerResponse;
