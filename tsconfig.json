@@ -2,12 +2,14 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "Node",
+    "strict": true,
+    "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "types": ["@netlify/functions"],
+    "lib": ["ES2020", "DOM"],
+    "types": ["node"],                 // 🔑 alleen Node types expliciet
     "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["src", "netlify/functions", "vite-env.d.ts", "types"]
+  "include": ["src", "netlify/**/*.ts", "vite-env.d.ts", "types/**/*.d.ts"]
 }
