@@ -1,3 +1,4 @@
+// netlify/functions/acceptInvite.ts
 import type { Handler } from '@netlify/functions';
 import { buildCorsHeaders, supabaseAdmin } from './_shared/supabaseServer';
 
@@ -10,95 +11,62 @@ type InviteRow = {
   accepted_at?: string | null;
   used_at?: string | null;
   expires_at?: string | null;
-  [key: string]: unknown;
 };
 
-type SupabaseAdminClient = ReturnType<typeof supabaseAdmin>;
-type MinimalUser = { id: string; email?: string | null };
-
-async function getAuthUserByEmail(
-  admin: SupabaseAdminClient,
-  email: string
-): Promise<MinimalUser | null> {
-  const normalized = email.trim().toLowerCase();
-  const { data, error } = await admin.auth.admin.getUserByEmail(normalized);
-
-  if (error && !error.message?.toLowerCase().includes('user not found')) {
-    throw new Error(error.message);
-  }
-
-  if (!data?.user) return null;
-
-  return { id: data.user.id, email: data.user.email };
+function json(status: number, headers: Record<string,string>, body: unknown) {
+  return { statusCode: status, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+function redirect(headers: Record<string,string>, to: string) {
+  return { statusCode: 302, headers: { ...headers, Location: to } };
+}
+function buildRedirectLocation(event: Parameters<Handler>[0]) {
+  const scheme = (event.headers['x-forwarded-proto'] || 'https') as string;
+  const host = (event.headers['x-forwarded-host'] || event.headers.host) as string | undefined;
+  const base = process.env.APP_ORIGIN || (host ? `${scheme}://${host}` : `${scheme}://localhost`);
+  return `${base}/app?invite=accepted`;
 }
 
-async function ensureAuthUser(admin: SupabaseAdminClient, email: string): Promise<MinimalUser> {
+// --- helpers: user lookup/creation via auth.users (service-role)
+async function getAuthUserByEmail(admin: ReturnType<typeof supabaseAdmin>, email: string) {
+  const normalized = email.trim().toLowerCase();
+  const { data, error } = await admin
+    .schema('auth')
+    .from('users')
+    .select('id,email')
+    .eq('email', normalized)
+    .limit(1)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') throw new Error(error.message);
+  return data ? { id: data.id as string, email: data.email as string | null } : null;
+}
+
+async function ensureAuthUser(admin: ReturnType<typeof supabaseAdmin>, email: string) {
   const normalized = email.trim().toLowerCase();
   const existing = await getAuthUserByEmail(admin, normalized);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
 
   const { data, error } = await admin.auth.admin.createUser({
     email: normalized,
     email_confirm: false,
   });
-
-  if (error) {
-    if (error.message?.toLowerCase().includes('already registered')) {
-      const retry = await getAuthUserByEmail(admin, normalized);
-      if (retry) return retry;
-    }
-    throw new Error(error.message || 'Kon gebruiker niet aanmaken');
-  }
-
-  if (!data?.user) {
-    throw new Error('Gebruiker niet aangemaakt');
-  }
-
+  if (error || !data?.user) throw new Error(error?.message || 'Kon gebruiker niet aanmaken');
   return { id: data.user.id, email: data.user.email };
 }
 
-function buildRedirectLocation(event: Parameters<Handler>[0]) {
-  const scheme = (event.headers['x-forwarded-proto'] || 'https') as string;
-  const hostHeader = (event.headers['x-forwarded-host'] || event.headers.host) as
-    | string
-    | undefined;
-  const base =
-    process.env.APP_ORIGIN || (hostHeader ? `${scheme}://${hostHeader}` : `${scheme}://localhost`);
-  return `${base}/app?invite=accepted`;
-}
-
 export const handler: Handler = async (event) => {
-  const headers = buildCorsHeaders(event.headers.origin);
-  const jsonHeaders = { ...headers, 'Content-Type': 'application/json' };
-
+  const cors = buildCorsHeaders(event.headers.origin);
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 200, headers };
-    }
-
-    if (event.httpMethod !== 'GET') {
-      return {
-        statusCode: 405,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Use GET' }),
-      };
-    }
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors };
+    if (event.httpMethod !== 'GET')   return json(405, cors, { error: 'Use GET' });
 
     const token = event.queryStringParameters?.token;
     const noRedirect = event.queryStringParameters?.noRedirect === '1';
-
-    if (!token) {
-      return {
-        statusCode: 400,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Ontbrekende token parameter' }),
-      };
-    }
+    if (!token) return json(400, cors, { error: 'Ontbrekende token parameter' });
 
     const admin = supabaseAdmin();
 
+    // 1) Invite ophalen
     const { data: invite, error: inviteErr } = await admin
       .from('invites')
       .select('*')
@@ -106,151 +74,59 @@ export const handler: Handler = async (event) => {
       .limit(1)
       .maybeSingle();
 
-    if (inviteErr) {
-      return {
-        statusCode: 400,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: inviteErr.message }),
-      };
+    if (inviteErr)           return json(400, cors, { error: inviteErr.message });
+    if (!invite)             return json(400, cors, { error: 'Uitnodiging niet gevonden of ongeldig' });
+
+    const inv = invite as InviteRow;
+
+    // Al gebruikt?
+    const usageField = ('accepted_at' in inv) ? 'accepted_at' : (('used_at' in inv) ? 'used_at' : null);
+    if (usageField && (inv as any)[usageField]) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
+
+    // Verlopen?
+    if (inv.expires_at) {
+      const exp = new Date(inv.expires_at);
+      if (Number.isFinite(exp.getTime()) && exp.getTime() < Date.now()) {
+        return json(410, cors, { error: 'Uitnodiging is verlopen' });
+      }
     }
 
-    if (!invite) {
-      return {
-        statusCode: 400,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Uitnodiging niet gevonden of ongeldig' }),
-      };
-    }
+    // 2) auth user zekerstellen
+    const user = await ensureAuthUser(admin, inv.email);
 
-    const inviteRow = invite as InviteRow;
-    const hasAcceptedAt = Object.prototype.hasOwnProperty.call(inviteRow, 'accepted_at');
-    const hasUsedAt = Object.prototype.hasOwnProperty.call(inviteRow, 'used_at');
-    const usageField: 'accepted_at' | 'used_at' | null = hasAcceptedAt
-      ? 'accepted_at'
-      : hasUsedAt
-        ? 'used_at'
-        : null;
-    const alreadyUsedValue = usageField ? (inviteRow as any)[usageField] : null;
-
-    if (alreadyUsedValue) {
-      return {
-        statusCode: 409,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Uitnodiging is al gebruikt' }),
-      };
-    }
-
-    const expiresAtValue = Object.prototype.hasOwnProperty.call(inviteRow, 'expires_at')
-      ? inviteRow.expires_at
-      : null;
-    const expiresAt = expiresAtValue ? new Date(expiresAtValue as string) : null;
-    if (expiresAt && Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() < Date.now()) {
-      return {
-        statusCode: 410,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Uitnodiging is verlopen' }),
-      };
-    }
-
-    const user = await ensureAuthUser(admin, inviteRow.email);
-
-    const { error: membershipErr } = await admin
+    // 3) Membership upsert
+    const { error: upsertErr } = await admin
       .from('memberships')
-      .upsert(
-        { org_id: inviteRow.org_id, user_id: user.id, role: inviteRow.role },
-        { onConflict: 'org_id,user_id' }
-      );
+      .upsert({ org_id: inv.org_id, user_id: user.id, role: inv.role }, { onConflict: 'org_id,user_id' });
 
-    if (membershipErr) {
-      return {
-        statusCode: 500,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: membershipErr.message }),
-      };
-    }
+    if (upsertErr) return json(500, cors, { error: upsertErr.message });
 
-    const timestamp = new Date().toISOString();
-    let markedUsed = false;
-
+    // 4) Invite markeren als gebruikt (of weggooien als die kolommen er niet zijn)
+    const nowIso = new Date().toISOString();
     if (usageField) {
-      let updateQuery = admin
+      const { data: updated, error: updErr } = await admin
         .from('invites')
-        .update({ [usageField]: timestamp })
-        .eq('id', inviteRow.id)
-        .is(usageField, null);
-
-      const { data: updateRows, error: updateErr } = await updateQuery.select('id');
-
-      if (updateErr) {
-        return {
-          statusCode: 500,
-          headers: jsonHeaders,
-          body: JSON.stringify({ error: updateErr.message }),
-        };
-      }
-
-      if (!updateRows || updateRows.length === 0) {
-        return {
-          statusCode: 409,
-          headers: jsonHeaders,
-          body: JSON.stringify({ error: 'Uitnodiging is al gebruikt' }),
-        };
-      }
-
-      markedUsed = true;
-    } else {
-      const { data: deletedRows, error: deleteErr } = await admin
-        .from('invites')
-        .delete()
-        .eq('id', inviteRow.id)
+        .update({ [usageField]: nowIso })
+        .eq('id', inv.id)
+        .is(usageField, null)
         .select('id');
 
-      if (deleteErr) {
-        return {
-          statusCode: 500,
-          headers: jsonHeaders,
-          body: JSON.stringify({ error: deleteErr.message }),
-        };
-      }
+      if (updErr)            return json(500, cors, { error: updErr.message });
+      if (!updated?.length)  return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
+    } else {
+      const { data: deld, error: delErr } = await admin
+        .from('invites')
+        .delete()
+        .eq('id', inv.id)
+        .select('id');
 
-      if (!deletedRows || deletedRows.length === 0) {
-        return {
-          statusCode: 409,
-          headers: jsonHeaders,
-          body: JSON.stringify({ error: 'Uitnodiging is al gebruikt' }),
-        };
-      }
-
-      markedUsed = true;
+      if (delErr)            return json(500, cors, { error: delErr.message });
+      if (!deld?.length)     return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
     }
 
-    if (!markedUsed) {
-      return {
-        statusCode: 500,
-        headers: jsonHeaders,
-        body: JSON.stringify({ error: 'Kon uitnodiging niet afronden' }),
-      };
-    }
-
-    const redirectTo = buildRedirectLocation(event);
-
-    if (noRedirect) {
-      return {
-        statusCode: 200,
-        headers: jsonHeaders,
-        body: JSON.stringify({ success: true, redirectTo }),
-      };
-    }
-
-    return {
-      statusCode: 302,
-      headers: { ...headers, Location: redirectTo },
-    };
-  } catch (error: any) {
-    return {
-      statusCode: 500,
-      headers: jsonHeaders,
-      body: JSON.stringify({ error: error?.message || 'acceptInvite failure' }),
-    };
+    const to = buildRedirectLocation(event);
+    return noRedirect ? json(200, cors, { success: true, redirectTo: to }) : redirect(cors, to);
+  } catch (e: any) {
+    return json(500, cors, { error: e?.message || 'acceptInvite failure' });
   }
 };
