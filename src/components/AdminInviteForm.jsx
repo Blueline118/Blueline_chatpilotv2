@@ -18,6 +18,8 @@ export default function AdminInviteForm({
   orgId,
   gridCols = 'grid-cols-[1fr_200px_96px]',
   onInviteResult,
+  sendEmail: sendEmailProp,
+  onSendEmailChange,
 }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('CUSTOMER');
@@ -26,7 +28,17 @@ export default function AdminInviteForm({
   const [message, setMessage] = useState('');
   const [copyLink, setCopyLink] = useState('');
   const [copied, setCopied] = useState(false);
-  const [sendEmail, setSendEmail] = useState(true);
+  const [sendEmailState, setSendEmailState] = useState(true);
+  const isSendEmailControlled = typeof sendEmailProp === 'boolean';
+  const effectiveSendEmail = isSendEmailControlled ? sendEmailProp : sendEmailState;
+
+  function updateSendEmail(next) {
+    if (isSendEmailControlled) {
+      onSendEmailChange?.(next);
+    } else {
+      setSendEmailState(next);
+    }
+  }
 
   async function handleGenerate() {
     setError('');
@@ -55,7 +67,7 @@ export default function AdminInviteForm({
         throw new Error('Geen toegangstoken beschikbaar.');
       }
 
-      const shouldSendEmail = sendEmail;
+      const shouldSendEmail = effectiveSendEmail;
 
       const res = await fetch('/.netlify/functions/createInvite', {
         method: 'POST',
@@ -182,8 +194,8 @@ export default function AdminInviteForm({
           id="invite-send-email"
           type="checkbox"
           className="h-4 w-4 rounded border-[#c7ccd9] text-[#2563eb] focus:ring-[#2563eb]"
-          checked={sendEmail}
-          onChange={(e) => setSendEmail(e.target.checked)}
+          checked={effectiveSendEmail}
+          onChange={(e) => updateSendEmail(e.target.checked)}
         />
         <label htmlFor="invite-send-email" className="cursor-pointer select-none">
           Uitnodiging per e-mail versturen
