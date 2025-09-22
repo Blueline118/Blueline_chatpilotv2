@@ -53,10 +53,23 @@ export default function AcceptInvite() {
     return raw ? raw.trim() : '';
   }, [location.search]);
 
+
   const loginWithNext = useMemo(
     () => `/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
     [location.pathname, location.search]
+
+  const [status, setStatus] = useState(() => (token ? 'loading' : 'missing'));
+  const [message, setMessage] = useState(() =>
+    token ? 'Bezig met accepteren…' : 'Deze uitnodiging is ongeldig of verlopen.'
+
   );
+  const [hadJwt, setHadJwt] = useState(false);
+  const [errorKind, setErrorKind] = useState(null);
+
+  const loginHref = useMemo(() => {
+    const nextTarget = `${location.pathname}${location.search}`;
+    return `/login?next=${encodeURIComponent(nextTarget)}`;
+  }, [location.pathname, location.search]);
 
   const [token, setToken] = useState('');
   const [status, setStatus] = useState('loading');
@@ -65,6 +78,7 @@ export default function AcceptInvite() {
   useEffect(() => {
     let resolvedToken = '';
     let tokenSource = '';
+
 
     if (urlToken) {
       resolvedToken = urlToken;
@@ -87,6 +101,21 @@ export default function AcceptInvite() {
 
     if (tokenSource && process.env.NODE_ENV !== 'production') {
       console.info(`accept: token source = ${tokenSource}`);
+
+    setErrorKind(null);
+    setHadJwt(false);
+
+    if (!token) {
+      setStatus('missing');
+      setMessage('Deze uitnodiging is ongeldig of verlopen.');
+      setHadJwt(false);
+      setErrorKind('invalid');
+      return () => {
+        if (redirectTimer) {
+          clearTimeout(redirectTimer);
+        }
+      };
+
     }
 
     setToken(resolvedToken);
@@ -135,6 +164,18 @@ export default function AcceptInvite() {
       setMessage('Bezig met accepteren…');
 
       try {
+
+
+        const accessToken = await getAccessToken();
+        if (isCancelled) return;
+        setHadJwt(Boolean(accessToken));
+        const headers = { 'Content-Type': 'application/json' };
+
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+        }
+
+
         const response = await fetch('/.netlify/functions/invites-accept', {
           method: 'POST',
           headers: {
@@ -156,12 +197,17 @@ export default function AcceptInvite() {
           hasCompleted = true;
           setStatus('success');
           setMessage('Uitnodiging geaccepteerd. Even geduld…');
+
           sessionStorage.removeItem('pendingInviteToken');
+
+          setErrorKind(null);
+
           redirectTimer = window.setTimeout(() => {
             navigate(MEMBERS_ROUTE, { replace: true });
           }, 1200);
           return;
         }
+
 
         if ((response.status === 401 || response.status === 403) && allowRetry) {
           const waitMs = 600 + Math.floor(Math.random() * 201);
@@ -174,12 +220,19 @@ export default function AcceptInvite() {
             return;
           }
           await acceptWithSession(data.session, false, true);
+
+        if (response.status === 401 || response.status === 403) {
+          setStatus('unauthorized');
+          setMessage('Log in om de uitnodiging te accepteren.');
+          setErrorKind('unauthorized');
+
           return;
         }
 
         if (response.status === 400 || response.status === 410) {
           setStatus('error');
           setMessage('Deze uitnodiging is ongeldig of verlopen.');
+
         } else {
           const errorMessage = await extractErrorMessage(response);
           setStatus('error');
@@ -192,6 +245,22 @@ export default function AcceptInvite() {
         }
       } finally {
         isProcessing = false;
+
+          setErrorKind('invalid');
+          return;
+        }
+
+        const errorMessage = await extractErrorMessage(response);
+        if (isCancelled) return;
+        setStatus('error');
+        setMessage(errorMessage);
+        setErrorKind('generic');
+      } catch (error) {
+        if (isCancelled) return;
+        setStatus('error');
+        setMessage(DEFAULT_ERROR);
+        setErrorKind('generic');
+
       }
     };
 
@@ -225,9 +294,16 @@ export default function AcceptInvite() {
     };
   }, [token, navigate]);
 
+
   const showLoginCta =
     status === 'error' && message === 'Log in om de uitnodiging te accepteren.';
   const showDashboardCta = status === 'error' && message !== 'Log in om de uitnodiging te accepteren.';
+
+  const showLoginCta = status === 'unauthorized' || status === 'error';
+  const showDashboardCta = status === 'missing' || status === 'error';
+  const showWrongAccountHint = hadJwt && errorKind === 'generic';
+  const hasActions = showLoginCta || showDashboardCta;
+
 
   return (
     <div
@@ -252,14 +328,30 @@ export default function AcceptInvite() {
         }}
       >
         <h1 style={{ marginBottom: 16, fontSize: 24 }}>Uitnodiging accepteren…</h1>
-        <p style={{ marginBottom: showLoginCta || showDashboardCta ? 24 : 0 }}>{message}</p>
+        <p
+          style={{
+            marginBottom: showWrongAccountHint ? 12 : hasActions ? 24 : 0,
+          }}
+        >
+          {message}
+        </p>
+        {showWrongAccountHint && (
+          <p style={{ marginBottom: hasActions ? 24 : 0 }}>
+            Ben je ingelogd met het juiste e-mailadres? Log eventueel uit en probeer opnieuw.
+          </p>
+        )}
 
         {(showLoginCta || showDashboardCta) && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {showLoginCta && (
+
               <button
                 type="button"
                 onClick={() => window.location.assign(loginWithNext)}
+
+              <a
+                href={loginHref}
+
                 style={{
                   padding: '10px 16px',
                   borderRadius: 8,
@@ -267,10 +359,14 @@ export default function AcceptInvite() {
                   background: '#1d4ed8',
                   color: '#fff',
                   cursor: 'pointer',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 Opnieuw inloggen
-              </button>
+              </a>
             )}
             {showDashboardCta && (
               <button
