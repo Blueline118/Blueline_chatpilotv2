@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getAccessToken } from '../lib/getAccessToken';
+import { supabase } from '../lib/supabaseClient';
 
 const MEMBERS_ROUTE = '/app/members';
 const DASHBOARD_ROUTE = '/app';
-const LOGIN_WITH_NEXT = `/login?next=${encodeURIComponent(MEMBERS_ROUTE)}`;
 const DEFAULT_ERROR = 'Er ging iets mis. Probeer later opnieuw.';
 
 async function extractErrorMessage(response) {
@@ -48,95 +47,187 @@ export default function AcceptInvite() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const token = useMemo(() => {
+  const urlToken = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const raw = params.get('token');
     return raw ? raw.trim() : '';
   }, [location.search]);
 
-  const [status, setStatus] = useState(() => (token ? 'loading' : 'missing'));
-  const [message, setMessage] = useState(() =>
-    token ? 'Bezig met accepteren…' : 'Geen geldige invite-link.'
+  const loginWithNext = useMemo(
+    () => `/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`,
+    [location.pathname, location.search]
   );
 
-  useEffect(() => {
-    let isCancelled = false;
-    let redirectTimer;
+  const [token, setToken] = useState('');
+  const [status, setStatus] = useState('loading');
+  const [message, setMessage] = useState('Bezig met accepteren…');
 
-    if (!token) {
-      setStatus('missing');
-      setMessage('Geen geldige invite-link.');
-      return () => {
-        if (redirectTimer) {
-          clearTimeout(redirectTimer);
-        }
-      };
+  useEffect(() => {
+    let resolvedToken = '';
+    let tokenSource = '';
+
+    if (urlToken) {
+      resolvedToken = urlToken;
+      tokenSource = 'url';
+      sessionStorage.setItem('pendingInviteToken', resolvedToken);
+    } else {
+      const stored = sessionStorage.getItem('pendingInviteToken');
+      if (stored && stored.trim()) {
+        resolvedToken = stored.trim();
+        tokenSource = 'sessionStorage';
+      }
     }
 
-    const acceptInvite = async () => {
+    if (!resolvedToken) {
+      setToken('');
+      setStatus('error');
+      setMessage('Geen geldige invite-link.');
+      return;
+    }
+
+    if (tokenSource && process.env.NODE_ENV !== 'production') {
+      console.info(`accept: token source = ${tokenSource}`);
+    }
+
+    setToken(resolvedToken);
+    setStatus('loading');
+    setMessage('Bezig met accepteren…');
+  }, [urlToken]);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+    let hasCompleted = false;
+    let isProcessing = false;
+    let redirectTimer;
+
+    const ensureLoginMessage = () => {
+      if (isCancelled || hasCompleted) return;
+      setStatus('error');
+      setMessage('Log in om de uitnodiging te accepteren.');
+    };
+
+    const acceptWithSession = async (
+      session,
+      allowRetry = true,
+      bypassProcessingCheck = false
+    ) => {
+      if (isCancelled || hasCompleted) {
+        return;
+      }
+
+      const accessToken = session?.access_token;
+
+      if (!accessToken) {
+        ensureLoginMessage();
+        return;
+      }
+
+      if (!bypassProcessingCheck && isProcessing) {
+        return;
+      }
+
+      isProcessing = true;
       setStatus('loading');
       setMessage('Bezig met accepteren…');
 
       try {
-        const accessToken = await getAccessToken();
-        const headers = { 'Content-Type': 'application/json' };
-
-        if (accessToken) {
-          headers.Authorization = `Bearer ${accessToken}`;
-        }
-
         const response = await fetch('/.netlify/functions/invites-accept', {
           method: 'POST',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({ token }),
         });
 
-        if (isCancelled) return;
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('accept: response status', response.status);
+        }
+
+        if (isCancelled || hasCompleted) {
+          return;
+        }
 
         if (response.ok) {
+          hasCompleted = true;
           setStatus('success');
           setMessage('Uitnodiging geaccepteerd. Even geduld…');
+          sessionStorage.removeItem('pendingInviteToken');
           redirectTimer = window.setTimeout(() => {
             navigate(MEMBERS_ROUTE, { replace: true });
           }, 1200);
           return;
         }
 
-        if (response.status === 401 || response.status === 403) {
-          setStatus('unauthorized');
-          setMessage('Log in om de uitnodiging te accepteren.');
+        if ((response.status === 401 || response.status === 403) && allowRetry) {
+          const waitMs = 600 + Math.floor(Math.random() * 201);
+          await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+          if (isCancelled || hasCompleted) {
+            return;
+          }
+          const { data } = await supabase.auth.getSession();
+          if (isCancelled || hasCompleted) {
+            return;
+          }
+          await acceptWithSession(data.session, false, true);
           return;
         }
 
         if (response.status === 400 || response.status === 410) {
           setStatus('error');
           setMessage('Deze uitnodiging is ongeldig of verlopen.');
-          return;
+        } else {
+          const errorMessage = await extractErrorMessage(response);
+          setStatus('error');
+          setMessage(errorMessage);
         }
-
-        const errorMessage = await extractErrorMessage(response);
-        if (isCancelled) return;
-        setStatus('error');
-        setMessage(errorMessage);
       } catch (error) {
-        if (isCancelled) return;
-        setStatus('error');
-        setMessage(DEFAULT_ERROR);
+        if (!isCancelled && !hasCompleted) {
+          setStatus('error');
+          setMessage(DEFAULT_ERROR);
+        }
+      } finally {
+        isProcessing = false;
       }
     };
 
-    acceptInvite();
+    const syncSessionAndAccept = async (allowRetry = true) => {
+      const { data } = await supabase.auth.getSession();
+      if (isCancelled || hasCompleted) {
+        return;
+      }
+      await acceptWithSession(data.session, allowRetry);
+    };
+
+    syncSessionAndAccept(true);
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isCancelled || hasCompleted) {
+        return;
+      }
+      if (!session?.access_token) {
+        ensureLoginMessage();
+        return;
+      }
+      acceptWithSession(session, true);
+    });
 
     return () => {
       isCancelled = true;
       if (redirectTimer) {
         clearTimeout(redirectTimer);
       }
+      sub?.subscription.unsubscribe();
     };
   }, [token, navigate]);
 
-  const showLoginCta = status === 'missing' || status === 'unauthorized' || status === 'error';
-  const showDashboardCta = status === 'missing' || status === 'error';
+  const showLoginCta =
+    status === 'error' && message === 'Log in om de uitnodiging te accepteren.';
+  const showDashboardCta = status === 'error' && message !== 'Log in om de uitnodiging te accepteren.';
 
   return (
     <div
@@ -168,7 +259,7 @@ export default function AcceptInvite() {
             {showLoginCta && (
               <button
                 type="button"
-                onClick={() => window.location.assign(LOGIN_WITH_NEXT)}
+                onClick={() => window.location.assign(loginWithNext)}
                 style={{
                   padding: '10px 16px',
                   borderRadius: 8,
