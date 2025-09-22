@@ -90,6 +90,7 @@ export default function MembersAdmin() {
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [invitesError, setInvitesError] = useState('');
   const [busyInvite, setBusyInvite] = useState(null);
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
 
   async function fetchMembers() {
     if (!activeOrgId) return;
@@ -222,8 +223,20 @@ export default function MembersAdmin() {
     setInvitesError('');
     setBusyInvite({ token: busyKey, action: 'resend' });
     try {
-      await resendInvite(activeOrgId, email);
-      setToast('Nieuwe invite verstuurd. Link 7 dagen geldig.');
+      const shouldSendEmail = Boolean(sendInviteEmail);
+      const result = await resendInvite(activeOrgId, email, { sendEmail: shouldSendEmail });
+      let toastMessage = '';
+      let invitesMessage = '';
+      if (shouldSendEmail && result?.emailed === false) {
+        toastMessage = 'Invite aangemaakt, maar e-mail verzenden mislukt. Kopieer de link handmatig.';
+        invitesMessage = toastMessage;
+      } else if (result?.emailed) {
+        toastMessage = 'Nieuwe invite per e-mail verzonden. Link 7 dagen geldig.';
+      } else {
+        toastMessage = 'Nieuwe invite aangemaakt. Kopieer de link handmatig.';
+      }
+      setInvitesError(invitesMessage);
+      setToast(toastMessage);
       await fetchInvites();
     } catch (error) {
       console.warn('[MembersAdmin] resendInvite failed', { org: activeOrgId, email, error });
@@ -496,7 +509,12 @@ export default function MembersAdmin() {
             )}
           </div>
 
-          <AdminInviteForm orgId={activeOrgId} onInviteResult={handleInviteResult} />
+          <AdminInviteForm
+            orgId={activeOrgId}
+            onInviteResult={handleInviteResult}
+            sendEmail={sendInviteEmail}
+            onSendEmailChange={setSendInviteEmail}
+          />
         </>
       )}
 

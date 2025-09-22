@@ -59,14 +59,26 @@ async function api(path: string, init: RequestInit = {}) {
   }
 }
 
-export async function resendInvite(orgId: string, email: string): Promise<{ token: string }> {
+interface ResendInviteOptions {
+  sendEmail?: boolean;
+}
+
+export async function resendInvite(
+  orgId: string,
+  email: string,
+  opts?: ResendInviteOptions
+): Promise<{ token: string; emailed?: boolean }> {
   const response = await api('/.netlify/functions/invites-resend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ org_id: orgId, email }),
+    body: JSON.stringify({
+      org_id: orgId,
+      email,
+      send_email: opts?.sendEmail ?? false,
+    }),
   });
 
-  return response.json() as Promise<{ token: string }>;
+  return response.json() as Promise<{ token: string; emailed?: boolean }>;
 }
 
 export async function revokeInvite(token: string): Promise<void> {
