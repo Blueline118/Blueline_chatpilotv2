@@ -4,7 +4,6 @@ import { getAccessToken } from '../lib/getAccessToken';
 
 const MEMBERS_ROUTE = '/app/members';
 const DASHBOARD_ROUTE = '/app';
-const LOGIN_WITH_NEXT = `/login?next=${encodeURIComponent(MEMBERS_ROUTE)}`;
 const DEFAULT_ERROR = 'Er ging iets mis. Probeer later opnieuw.';
 
 async function extractErrorMessage(response) {
@@ -56,16 +55,28 @@ export default function AcceptInvite() {
 
   const [status, setStatus] = useState(() => (token ? 'loading' : 'missing'));
   const [message, setMessage] = useState(() =>
-    token ? 'Bezig met accepteren…' : 'Geen geldige invite-link.'
+    token ? 'Bezig met accepteren…' : 'Deze uitnodiging is ongeldig of verlopen.'
   );
+  const [hadJwt, setHadJwt] = useState(false);
+  const [errorKind, setErrorKind] = useState(null);
+
+  const loginHref = useMemo(() => {
+    const nextTarget = `${location.pathname}${location.search}`;
+    return `/login?next=${encodeURIComponent(nextTarget)}`;
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     let isCancelled = false;
     let redirectTimer;
 
+    setErrorKind(null);
+    setHadJwt(false);
+
     if (!token) {
       setStatus('missing');
-      setMessage('Geen geldige invite-link.');
+      setMessage('Deze uitnodiging is ongeldig of verlopen.');
+      setHadJwt(false);
+      setErrorKind('invalid');
       return () => {
         if (redirectTimer) {
           clearTimeout(redirectTimer);
@@ -79,6 +90,8 @@ export default function AcceptInvite() {
 
       try {
         const accessToken = await getAccessToken();
+        if (isCancelled) return;
+        setHadJwt(Boolean(accessToken));
         const headers = { 'Content-Type': 'application/json' };
 
         if (accessToken) {
@@ -96,6 +109,7 @@ export default function AcceptInvite() {
         if (response.ok) {
           setStatus('success');
           setMessage('Uitnodiging geaccepteerd. Even geduld…');
+          setErrorKind(null);
           redirectTimer = window.setTimeout(() => {
             navigate(MEMBERS_ROUTE, { replace: true });
           }, 1200);
@@ -105,12 +119,14 @@ export default function AcceptInvite() {
         if (response.status === 401 || response.status === 403) {
           setStatus('unauthorized');
           setMessage('Log in om de uitnodiging te accepteren.');
+          setErrorKind('unauthorized');
           return;
         }
 
         if (response.status === 400 || response.status === 410) {
           setStatus('error');
           setMessage('Deze uitnodiging is ongeldig of verlopen.');
+          setErrorKind('invalid');
           return;
         }
 
@@ -118,10 +134,12 @@ export default function AcceptInvite() {
         if (isCancelled) return;
         setStatus('error');
         setMessage(errorMessage);
+        setErrorKind('generic');
       } catch (error) {
         if (isCancelled) return;
         setStatus('error');
         setMessage(DEFAULT_ERROR);
+        setErrorKind('generic');
       }
     };
 
@@ -135,8 +153,10 @@ export default function AcceptInvite() {
     };
   }, [token, navigate]);
 
-  const showLoginCta = status === 'missing' || status === 'unauthorized' || status === 'error';
+  const showLoginCta = status === 'unauthorized' || status === 'error';
   const showDashboardCta = status === 'missing' || status === 'error';
+  const showWrongAccountHint = hadJwt && errorKind === 'generic';
+  const hasActions = showLoginCta || showDashboardCta;
 
   return (
     <div
@@ -161,14 +181,24 @@ export default function AcceptInvite() {
         }}
       >
         <h1 style={{ marginBottom: 16, fontSize: 24 }}>Uitnodiging accepteren…</h1>
-        <p style={{ marginBottom: showLoginCta || showDashboardCta ? 24 : 0 }}>{message}</p>
+        <p
+          style={{
+            marginBottom: showWrongAccountHint ? 12 : hasActions ? 24 : 0,
+          }}
+        >
+          {message}
+        </p>
+        {showWrongAccountHint && (
+          <p style={{ marginBottom: hasActions ? 24 : 0 }}>
+            Ben je ingelogd met het juiste e-mailadres? Log eventueel uit en probeer opnieuw.
+          </p>
+        )}
 
         {(showLoginCta || showDashboardCta) && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {showLoginCta && (
-              <button
-                type="button"
-                onClick={() => window.location.assign(LOGIN_WITH_NEXT)}
+              <a
+                href={loginHref}
                 style={{
                   padding: '10px 16px',
                   borderRadius: 8,
@@ -176,10 +206,14 @@ export default function AcceptInvite() {
                   background: '#1d4ed8',
                   color: '#fff',
                   cursor: 'pointer',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
                 Opnieuw inloggen
-              </button>
+              </a>
             )}
             {showDashboardCta && (
               <button
