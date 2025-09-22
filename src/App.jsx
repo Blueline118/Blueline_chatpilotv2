@@ -5,6 +5,7 @@ import Protected from './components/Protected';
 import Login from './pages/Login';
 import AppHome from './pages/AppHome';
 import AuthCallback from './pages/AuthCallback'; // ← import
+import AcceptInvite from './pages/AcceptInvite';
 
 export default function App() {
   return (
@@ -13,8 +14,17 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback" element={<AuthCallback />} /> {/* ← nieuw */}
+          <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route
             path="/app"
+            element={
+              <Protected>
+                <AppHome />
+              </Protected>
+            }
+          />
+          <Route
+            path="/app/members"
             element={
               <Protected>
                 <AppHome />
