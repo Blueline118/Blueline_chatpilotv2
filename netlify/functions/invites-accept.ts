@@ -1,1 +1,1 @@
-﻿export { handler } from "./acceptInvite";
+export { handler } from './acceptInvite';
