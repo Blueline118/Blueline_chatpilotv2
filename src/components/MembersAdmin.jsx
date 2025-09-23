@@ -6,6 +6,8 @@ import RoleBadge from './RoleBadge';
 import AdminInviteForm from './AdminInviteForm';
 import { authHeader } from '../lib/authHeader';
 import { netlifyJson } from '../lib/netlifyFetch';
+import { supabase } from '../lib/supabaseClient';
+import { resendInvite, revokeInvite } from '../lib/invitesApi';
 
 const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
 const roleLabel = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
@@ -14,6 +16,14 @@ function classNames(...xs) { return xs.filter(Boolean).join(' '); }
 function VisuallyHidden({ children }) {
   return <span style={{position:'absolute',left:-9999,top:'auto',width:1,height:1,overflow:'hidden'}}>{children}</span>;
 }
+
+function formatDateTime(value){ if(!value) return null; const d=new Date(value); if(Number.isNaN(d.getTime())) return null; return d.toLocaleString('nl-NL',{dateStyle:'short',timeStyle:'short'}); }
+
+function isInviteOpen(invite){ if(!invite || invite.used_at || invite.revoked_at) return false; if(!invite.expires_at) return true; const expiresAt=new Date(invite.expires_at).getTime(); return Number.isNaN(expiresAt)?true:expiresAt>Date.now(); }
+
+function normalizeInviteError(error){ const raw=typeof error?.message==='string'?error.message:''; if(raw && /limit/i.test(raw)) return 'Je hebt het limiet voor uitnodigingen bereikt. Probeer het later opnieuw.'; return raw || 'Er ging iets mis. Probeer later opnieuw.'; }
+
+function inviteKey(invite){ if(!invite) return ''; const token=invite.token ?? invite.id; if(token) return token; const email=invite.email ? String(invite.email).trim().toLowerCase() : ''; if(email) return email; return invite.created_at ?? ''; }
 
 // CSV helpers
 function csvEscape(v=''){const s=String(v??'');return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;}
@@ -76,6 +86,11 @@ export default function MembersAdmin() {
   const [q, setQ] = useState('');
   const [toast, setToast] = useState('');
   const [confirm, setConfirm] = useState({ open: false, userId: null, email: '' });
+  const [invites, setInvites] = useState([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [invitesError, setInvitesError] = useState('');
+  const [busyInvite, setBusyInvite] = useState(null);
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
 
   async function fetchMembers() {
     if (!activeOrgId) return;
@@ -108,6 +123,34 @@ export default function MembersAdmin() {
     }
   }
   useEffect(()=>{ fetchMembers(); /* eslint-disable-next-line */ },[activeOrgId]);
+
+  async function fetchInvites() {
+    if (!activeOrgId || role !== 'ADMIN') {
+      setInvites([]);
+      setInvitesError('');
+      return;
+    }
+    setInvitesLoading(true);
+    setInvitesError('');
+    try {
+      const { data, error } = await supabase
+        .from('invites')
+        .select('id,org_id,email,role,token,created_at,expires_at,used_at,revoked_at')
+        .eq('org_id', activeOrgId)
+        .order('created_at', { ascending: false });
+      if (error) {
+        throw error;
+      }
+      setInvites(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.warn('[MembersAdmin] listInvites failed', { org: activeOrgId, error });
+      setInvitesError(error?.message || 'Onbekende fout');
+      setInvites([]);
+    } finally {
+      setInvitesLoading(false);
+    }
+  }
+  useEffect(()=>{ fetchInvites(); /* eslint-disable-next-line */ },[activeOrgId, role]);
 
   async function changeRole(userId, nextRole) {
     setBusyUser(userId);
@@ -166,11 +209,70 @@ export default function MembersAdmin() {
     }
   }
 
+  async function handleResend(invite) {
+    const email = invite?.email ? String(invite.email).trim().toLowerCase() : '';
+    if (!email) {
+      setInvitesError('Geen e-mailadres beschikbaar voor deze invite.');
+      return;
+    }
+    if (!activeOrgId) {
+      setInvitesError('Geen organisatie beschikbaar.');
+      return;
+    }
+    const busyKey = inviteKey(invite) || email;
+    setInvitesError('');
+    setBusyInvite({ token: busyKey, action: 'resend' });
+    try {
+      const shouldSendEmail = Boolean(sendInviteEmail);
+      const result = await resendInvite(activeOrgId, email, { sendEmail: shouldSendEmail });
+      let toastMessage = '';
+      let invitesMessage = '';
+      if (shouldSendEmail && result?.emailed === false) {
+        toastMessage = 'Invite aangemaakt, maar e-mail verzenden mislukt. Kopieer de link handmatig.';
+        invitesMessage = toastMessage;
+      } else if (result?.emailed) {
+        toastMessage = 'Nieuwe invite per e-mail verzonden. Link 7 dagen geldig.';
+      } else {
+        toastMessage = 'Nieuwe invite aangemaakt. Kopieer de link handmatig.';
+      }
+      setInvitesError(invitesMessage);
+      setToast(toastMessage);
+      await fetchInvites();
+    } catch (error) {
+      console.warn('[MembersAdmin] resendInvite failed', { org: activeOrgId, email, error });
+      setInvitesError(normalizeInviteError(error));
+    } finally {
+      setBusyInvite(null);
+    }
+  }
+
+  async function handleRevoke(invite) {
+    const token = invite?.token;
+    if (!token) {
+      setInvitesError('Geen invite token gevonden.');
+      return;
+    }
+    setInvitesError('');
+    const busyKey = inviteKey(invite) || token;
+    setBusyInvite({ token: busyKey, action: 'revoke' });
+    try {
+      await revokeInvite(token);
+      setToast('Invite ongeldig gemaakt.');
+      await fetchInvites();
+    } catch (error) {
+      console.warn('[MembersAdmin] revokeInvite failed', { token, error });
+      setInvitesError(normalizeInviteError(error));
+    } finally {
+      setBusyInvite(null);
+    }
+  }
+
   const filtered = useMemo(()=>{
     const s=q.trim().toLowerCase(); if(!s) return rows;
     return rows.filter(r => (r.email||'').toLowerCase().includes(s));
   },[rows,q]);
   const hasSearch = q.trim().length>0;
+  const openInvites = useMemo(()=>invites.filter(isInviteOpen),[invites]);
 
   function exportCsv(){
     const csv=rowsToCsv(filtered);
@@ -194,6 +296,7 @@ export default function MembersAdmin() {
     } else if (result.acceptUrl) {
       setToast('Invite link aangemaakt.');
     }
+    fetchInvites();
   }
 
   return (
@@ -328,7 +431,90 @@ export default function MembersAdmin() {
             )}
           </div>
 
-          <AdminInviteForm orgId={activeOrgId} onInviteResult={handleInviteResult} />
+          <div className="overflow-hidden rounded-xl border border-[#eef1f6] bg-white shadow-sm">
+            <div className="border-b border-[#f2f4f8] px-4 py-2 text-xs font-medium text-[#81848b]">
+              Openstaande uitnodigingen
+            </div>
+            <div className="px-4 pt-3 text-[12px] text-[#6b7280]">Link 7 dagen geldig.</div>
+            {invitesError && (
+              <div className="px-4 pt-2 text-sm text-rose-700">Fout: {invitesError}</div>
+            )}
+            {invitesLoading ? (
+              <div className="px-4 py-6 text-sm text-[#6b7280]">Uitnodigingen laden…</div>
+            ) : openInvites.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-[#6b7280]">Geen openstaande uitnodigingen.</div>
+            ) : (
+              <ul className="divide-y divide-[#f2f4f8] pt-2">
+                {openInvites.map((invite, index) => {
+                  const baseKey = inviteKey(invite);
+                  const emailKey = invite?.email ? String(invite.email).trim().toLowerCase() : '';
+                  const itemKey = baseKey || emailKey || invite?.created_at || `invite-${index}`;
+                  const isBusy = busyInvite?.token === itemKey;
+                  const busyAction = isBusy ? busyInvite?.action : null;
+                  const canResend = Boolean(invite?.email && activeOrgId);
+                  const canRevoke = Boolean(invite?.token);
+                  const expiresLabel = formatDateTime(invite?.expires_at);
+                  return (
+                    <li key={itemKey} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[15px] font-medium text-[#1c2b49]" title={invite?.email ?? '—'}>
+                            {invite?.email ?? '—'}
+                          </span>
+                          {invite?.role && <RoleBadge role={invite.role} />}
+                        </div>
+                        <div className="text-[12px] text-[#6b7280]">
+                          {expiresLabel ? `Verloopt op ${expiresLabel}` : 'Vervaldatum onbekend'}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleResend(invite)}
+                          disabled={!canResend || isBusy}
+                          aria-busy={isBusy && busyAction === 'resend'}
+                          className="inline-flex h-9 items-center rounded-md border border-[#e5e7eb] px-3 text-sm text-[#1d4ed8] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          title={canResend ? undefined : 'Geen e-mailadres beschikbaar'}
+                        >
+                          {isBusy && busyAction === 'resend' ? (
+                            <svg className="h-[18px] w-[18px] animate-spin" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" stroke="#9aa0a6" strokeWidth="2" fill="none" />
+                              <path d="M22 12a10 10 0 0 1-10 10" stroke="#3b82f6" strokeWidth="2" fill="none" />
+                            </svg>
+                          ) : (
+                            'Opnieuw sturen'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRevoke(invite)}
+                          disabled={!canRevoke || isBusy}
+                          aria-busy={isBusy && busyAction === 'revoke'}
+                          className="inline-flex h-9 items-center rounded-md border border-[#e5e7eb] px-3 text-sm text-[#b91c1c] hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isBusy && busyAction === 'revoke' ? (
+                            <svg className="h-[18px] w-[18px] animate-spin" viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" stroke="#fca5a5" strokeWidth="2" fill="none" />
+                              <path d="M22 12a10 10 0 0 1-10 10" stroke="#b91c1c" strokeWidth="2" fill="none" />
+                            </svg>
+                          ) : (
+                            'Ongeldig maken'
+                          )}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <AdminInviteForm
+            orgId={activeOrgId}
+            onInviteResult={handleInviteResult}
+            sendEmail={sendInviteEmail}
+            onSendEmailChange={setSendInviteEmail}
+          />
         </>
       )}
 

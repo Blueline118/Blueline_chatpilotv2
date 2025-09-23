@@ -1,0 +1,9 @@
+--- /dev/null	2025-09-22 08:58:43.334847071 +0000
++++ src/lib/getAccessToken.ts	2025-09-22 09:54:02.471811491 +0000
+@@ -0,0 +1,6 @@
++import { supabase } from './supabaseClient';
++
++export async function getAccessToken() {
++  const { data } = await supabase.auth.getSession();
++  return data.session?.access_token ?? null;
++}

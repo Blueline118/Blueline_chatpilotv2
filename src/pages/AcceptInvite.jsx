@@ -14,9 +14,7 @@ export default function AcceptInvite() {
 
   // Token bewaren over login round-trip
   useEffect(() => {
-    if (tokenFromUrl) {
-      sessionStorage.setItem('pendingInviteToken', tokenFromUrl);
-    }
+    if (tokenFromUrl) sessionStorage.setItem('pendingInviteToken', tokenFromUrl);
   }, [tokenFromUrl]);
 
   // Fallback uit sessionStorage als URL 'm kwijt is (na callback)
@@ -26,12 +24,11 @@ export default function AcceptInvite() {
     token ? 'Bezig met uitnodiging accepteren…' : 'Ongeldige link: token ontbreekt.'
   );
 
-  // Automatisch proberen te accepteren zodra we een sessie hebben
+  // Luister op login events (na magic link); zodra sessie klaar is → accepteren
   useEffect(() => {
-    const sub = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+    const sub = supabase.auth.onAuthStateChange((_evt, sess) => {
       const t = token || sessionStorage.getItem('pendingInviteToken');
-      if (!t || !sess?.access_token) return;
-      await acceptWithSession(t, sess.access_token);
+      if (t && sess?.access_token) acceptWithSession(t, sess.access_token);
     });
     return () => sub.data?.subscription?.unsubscribe?.();
   }, [token]);
@@ -39,13 +36,11 @@ export default function AcceptInvite() {
   // Eerste poging bij binnenkomst
   useEffect(() => {
     let cancelled = false;
-
     async function run() {
       if (!token) {
         setStatus('Ongeldige link: token ontbreekt.');
         return;
       }
-
       setStatus('Bezig met uitnodiging accepteren…');
 
       // Hebben we al een sessie?
@@ -53,39 +48,30 @@ export default function AcceptInvite() {
       const access = data?.session?.access_token;
 
       if (!access) {
-        // Niet ingelogd → naar login sturen met next= huidige url
+        // Niet ingelogd → naar login sturen met next = huidige URL
         const next = encodeURIComponent(window.location.pathname + window.location.search);
         setStatus('Inloggen vereist om de uitnodiging te accepteren…');
         window.location.assign(`/login?next=${next}`);
         return;
       }
 
-      if (!cancelled) {
-        await acceptWithSession(token, access);
-      }
+      if (!cancelled) await acceptWithSession(token, access);
     }
-
     run();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [token, location.pathname, location.search]);
 
   async function acceptWithSession(inviteToken, accessToken) {
     try {
       const res = await fetch('/.netlify/functions/invites-accept', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ token: inviteToken, noRedirect: true }),
       });
 
-      // 401/403 race: heel kort wachten en 1x opnieuw proberen
+      // 401/403 race: wacht kort en probeer 1x opnieuw
       if (res.status === 401 || res.status === 403) {
-        await new Promise((r) => setTimeout(r, 700));
+        await new Promise(r => setTimeout(r, 700));
         const { data: d2 } = await supabase.auth.getSession();
         const access2 = d2?.session?.access_token;
         if (!access2) {
@@ -94,10 +80,7 @@ export default function AcceptInvite() {
         }
         const res2 = await fetch('/.netlify/functions/invites-accept', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${access2}`,
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${access2}` },
           body: JSON.stringify({ token: inviteToken, noRedirect: true }),
         });
         if (!res2.ok) {
@@ -105,7 +88,6 @@ export default function AcceptInvite() {
           setStatus(err2?.error || 'Kon uitnodiging niet accepteren.');
           return;
         }
-        // success
         await onAccepted();
         return;
       }
@@ -125,18 +107,11 @@ export default function AcceptInvite() {
   async function onAccepted() {
     setStatus('Uitnodiging geaccepteerd. Je wordt doorgestuurd…');
     sessionStorage.removeItem('pendingInviteToken');
-    // Kleine delay voor UX, daarna naar leden
-    setTimeout(() => {
-      window.location.assign('/app/members');
-    }, 1200);
+    setTimeout(() => { window.location.assign('/app/members'); }, 1200);
   }
 
   async function safeJson(res) {
-    try {
-      return await res.json();
-    } catch {
-      return null;
-    }
+    try { return await res.json(); } catch { return null; }
   }
 
   return <div>{status}</div>;
