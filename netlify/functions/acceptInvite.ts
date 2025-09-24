@@ -6,30 +6,38 @@ type InviteRow = {
   id: string;
   org_id: string;
   email: string;
-  role: string;
-  token: string;
+  role: string; // enum role_type in DB
+  token: string; // uuid string
   used_at?: string | null;
-  accepted_at?: string | null;    // back-compat veldnaam
+  revoked_at?: string | null;
+  accepted_at?: string | null; // back-compat
   expires_at?: string | null;
 };
 
-// kleine helpers voor nette JSON / redirect responses
+type JsonBody = { token?: string | null; noRedirect?: boolean | number | string | null };
+
+/* ---------- kleine helpers ---------- */
 function json(status: number, headers: Record<string, string>, body: unknown) {
-  return {
-    statusCode: status,
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  };
+  return { statusCode: status, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 function redirect(headers: Record<string, string>, to: string) {
   return { statusCode: 302, headers: { ...headers, Location: to } };
 }
-function buildRedirectLocation(event: Parameters<Handler>[0]) {
+function getAppOrigin(event: Parameters<Handler>[0]) {
   const scheme = (event.headers['x-forwarded-proto'] || 'https') as string;
-  const host =
-    (event.headers['x-forwarded-host'] || event.headers.host) as string | undefined;
-  const base = process.env.APP_ORIGIN || (host ? `${scheme}://${host}` : `${scheme}://localhost`);
-  return `${base}/app?invite=accepted`;
+  const host = (event.headers['x-forwarded-host'] || event.headers.host) as string | undefined;
+  return process.env.APP_ORIGIN || (host ? `${scheme}://${host}` : `${scheme}://localhost`);
+}
+function buildRedirectLocation(event: Parameters<Handler>[0]) {
+  // stuur ledenomgeving in: /app/members
+  return `${getAppOrigin(event)}/app/members`;
+}
+async function readJson(event: Parameters<Handler>[0]): Promise<JsonBody> {
+  try {
+    return event.body ? (JSON.parse(event.body) as JsonBody) : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -39,16 +47,14 @@ function buildRedirectLocation(event: Parameters<Handler>[0]) {
 async function findUserByEmail(admin: ReturnType<typeof supabaseAdmin>, email: string) {
   const target = email.trim().toLowerCase();
   let page = 1;
-  const perPage = 200; // redelijke batch
+  const perPage = 200;
   for (;;) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
     if (error) throw new Error(error.message);
     if (!data?.users?.length) return null;
-
     const hit = data.users.find((u) => u.email?.toLowerCase() === target);
     if (hit) return { id: hit.id, email: hit.email ?? null };
-
-    if (data.users.length < perPage) return null; // laatste pagina
+    if (data.users.length < perPage) return null;
     page += 1;
     if (page > 50) return null; // safety stop
   }
@@ -56,44 +62,58 @@ async function findUserByEmail(admin: ReturnType<typeof supabaseAdmin>, email: s
 
 async function ensureAuthUser(admin: ReturnType<typeof supabaseAdmin>, email: string) {
   const normalized = email.trim().toLowerCase();
-
-  // 1) bestaat al?
   const existing = await findUserByEmail(admin, normalized);
   if (existing) return existing;
 
-  // 2) aanmaken
   const { data, error } = await admin.auth.admin.createUser({
     email: normalized,
     email_confirm: false,
   });
 
-  // sommige Supabase versies geven “already registered”
   if (error) {
+    // race: bestond net al
     const again = await findUserByEmail(admin, normalized);
     if (again) return again;
     throw new Error(error.message || 'Kon gebruiker niet aanmaken');
   }
-
   if (!data?.user) throw new Error('Gebruiker niet aangemaakt');
   return { id: data.user.id, email: data.user.email ?? null };
 }
 
+/* ---------- main handler ---------- */
 export const handler: Handler = async (event) => {
   const cors = buildCorsHeaders(event.headers.origin);
-  try {
-    if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors };
-    if (event.httpMethod !== 'GET') return json(405, cors, { error: 'Use GET' });
 
-    const token = event.queryStringParameters?.token;
-    const noRedirect = event.queryStringParameters?.noRedirect === '1';
+  try {
+    // CORS preflight
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 200, headers: cors };
+    }
+
+    // Ondersteun GET ?token= en POST { token }
+    let token: string | null;
+    let noRedirectFlag = false;
+
+    if (event.httpMethod === 'GET') {
+      token = event.queryStringParameters?.token ?? null;
+      const nr = event.queryStringParameters?.noRedirect;
+      noRedirectFlag = nr === '1' || nr === 'true' || nr === 'yes';
+    } else if (event.httpMethod === 'POST') {
+      const body = await readJson(event);
+      token = body.token ?? null;
+      const nr = body.noRedirect;
+      noRedirectFlag = nr === true || nr === 1 || nr === '1' || nr === 'true' || nr === 'yes';
+    } else {
+      return json(405, cors, { error: 'Use GET or POST' });
+    }
+
     if (!token) return json(400, cors, { error: 'Ontbrekende token parameter' });
 
+    // Pak invite uit public schema
     const admin = supabaseAdmin();
-
-    // ✅ Lees de invite uit *public* (géén auth schema meer!)
     const { data: invite, error: inviteErr } = await admin
       .from('invites')
-      .select('*')
+      .select('id, org_id, email, role, token, used_at, revoked_at, accepted_at, expires_at')
       .eq('token', token)
       .limit(1)
       .maybeSingle();
@@ -103,11 +123,12 @@ export const handler: Handler = async (event) => {
 
     const row = invite as InviteRow;
 
-    // al gebruikt?
-    const used = row.used_at ?? row.accepted_at ?? null;
-    if (used) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
+    // statuschecks
+    const alreadyUsed = row.used_at ?? row.accepted_at ?? null;
+    if (alreadyUsed) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
 
-    // verlopen?
+    if (row.revoked_at) return json(410, cors, { error: 'Uitnodiging is ongeldig gemaakt' });
+
     if (row.expires_at) {
       const exp = new Date(row.expires_at);
       if (Number.isFinite(exp.getTime()) && exp.getTime() < Date.now()) {
@@ -115,17 +136,20 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    // ✅ Zoek of maak auth-user via Admin API (geen PostgREST)
+    // ensure auth user exists
     const user = await ensureAuthUser(admin, row.email);
 
-    // ✅ Upsert membership (public schema)
+    // membership upsert (org_id + user_id uniek)
     const { error: upsertErr } = await admin
       .from('memberships')
-      .upsert({ org_id: row.org_id, user_id: user.id, role: row.role }, { onConflict: 'org_id,user_id' });
+      .upsert(
+        { org_id: row.org_id, user_id: user.id, role: row.role },
+        { onConflict: 'org_id,user_id' },
+      );
 
     if (upsertErr) return json(500, cors, { error: upsertErr.message });
 
-    // ✅ Markeer invite als gebruikt (public schema)
+    // mark invite used (idempotent guard: only when used_at is null)
     const stamp = new Date().toISOString();
     const { data: updated, error: updErr } = await admin
       .from('invites')
@@ -138,8 +162,9 @@ export const handler: Handler = async (event) => {
     if (!updated || updated.length === 0) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
 
     const to = buildRedirectLocation(event);
-    return noRedirect ? json(200, cors, { success: true, redirectTo: to }) : redirect(cors, to);
+    return noRedirectFlag ? json(200, cors, { success: true, redirectTo: to }) : redirect(cors, to);
   } catch (e: any) {
+    // compacte foutrespons
     return json(500, cors, { error: e?.message ?? 'acceptInvite failure' });
   }
 };
