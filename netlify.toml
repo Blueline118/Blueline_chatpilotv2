@@ -5,6 +5,12 @@
 [functions]
   directory = "netlify/functions"
 
+  # 👇 Specifieke SPA-rewrite voor de accept-invite route
+[[redirects]]
+  from = "/accept-invite"
+  to = "/index.html"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
