@@ -10,8 +10,7 @@ type InviteRow = {
   token: string; // uuid string
   used_at?: string | null;
   revoked_at?: string | null;
-  accepted_at?: string | null; // back-compat
-  expires_at?: string | null;
+    expires_at?: string | null;
 };
 
 type JsonBody = { token?: string | null; noRedirect?: boolean | number | string | null };
@@ -113,7 +112,7 @@ export const handler: Handler = async (event) => {
     const admin = supabaseAdmin();
     const { data: invite, error: inviteErr } = await admin
       .from('invites')
-      .select('id, org_id, email, role, token, used_at, revoked_at, accepted_at, expires_at')
+      .select('id, org_id, email, role, token, used_at, revoked_at, expires_at')
       .eq('token', token)
       .limit(1)
       .maybeSingle();
@@ -124,7 +123,7 @@ export const handler: Handler = async (event) => {
     const row = invite as InviteRow;
 
     // statuschecks
-    const alreadyUsed = row.used_at ?? row.accepted_at ?? null;
+    const alreadyUsed = row.used_at ?? null;
     if (alreadyUsed) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
 
     if (row.revoked_at) return json(410, cors, { error: 'Uitnodiging is ongeldig gemaakt' });
