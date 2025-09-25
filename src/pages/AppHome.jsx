@@ -5,6 +5,7 @@ import { useAuth } from '../providers/AuthProvider';
 import WorkspaceSwitcher from '../components/WorkspaceSwitcher';
 import ChatList from '../components/ChatList';
 import MembersAdmin from '../components/MembersAdmin';
+import PermissionGate from '../components/PermissionGate';
 import RoleBadge from '../components/RoleBadge';
 
 export default function AppHome() {
@@ -52,7 +53,9 @@ export default function AppHome() {
 
       <ChatList />
 
-      <MembersAdmin />
+      <PermissionGate perm="org:admin">
+  <MembersAdmin />
+</PermissionGate>
     </div>
   );
 }
