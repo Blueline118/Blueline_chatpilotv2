@@ -5,12 +5,18 @@
 [functions]
   directory = "netlify/functions"
 
-  # 👇 Specifieke SPA-rewrite voor de accept-invite route
+# ✅ Expliciete SPA rewrites
 [[redirects]]
   from = "/accept-invite"
   to = "/index.html"
   status = 200
 
+[[redirects]]
+  from = "/auth/callback"
+  to = "/index.html"
+  status = 200
+
+# ✅ Catch-all (laatste regel)
 [[redirects]]
   from = "/*"
   to = "/index.html"
