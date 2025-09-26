@@ -1,4 +1,4 @@
-export const DEFAULT_AFTER_LOGIN = '/app/members';
+export const DEFAULT_AFTER_LOGIN = '/app';
 
 export function resolveNextPath(raw) {
   if (!raw) return null;
@@ -8,8 +8,8 @@ export function resolveNextPath(raw) {
   } catch {
     decoded = raw;
   }
-  if (!decoded.startsWith('/')) {
-    return null;
+  if (!decoded || !decoded.startsWith('/')) {
+    return DEFAULT_AFTER_LOGIN;
   }
-  return decoded;
+  return decoded || DEFAULT_AFTER_LOGIN;
 }

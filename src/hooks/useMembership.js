@@ -1,96 +1,69 @@
 // src/hooks/useMembership.js
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-
-const LS_KEY = 'blueline.activeOrgId';
+import { useAuth } from '../providers/AuthProvider';
 
 export function useMembership() {
-  const [loading, setLoading] = useState(true);
-  const [activeOrgId, setActiveOrgId] = useState(() => {
-    try { return localStorage.getItem(LS_KEY) || null; } catch { return null; }
-  });
+  const { user, activeOrgId, setActiveOrgId } = useAuth();
   const [memberships, setMemberships] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // laad memberships van ingelogde user (RLS haalt dat al af)
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    async function loadMemberships() {
+      if (!user?.id) {
+        if (!cancelled) {
+          setMemberships([]);
+          setError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
       setLoading(true);
       setError(null);
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const userId = sessionData?.session?.user?.id || null;
-        if (!userId) {
-          setMemberships([]);
-          setLoading(false);
-          return;
-        }
 
-        const { data, error: rlsErr } = await supabase
+      try {
+        const { data, error: fetchError } = await supabase
           .from('memberships')
           .select('org_id, role')
-          .order('created_at', { ascending: true }); // oudste eerst
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true });
 
-        if (rlsErr) throw rlsErr;
+        if (fetchError) throw fetchError;
         if (cancelled) return;
 
-        setMemberships(Array.isArray(data) ? data : []);
+        const rows = Array.isArray(data) ? data : [];
+        setMemberships(rows);
       } catch (e) {
-        if (!cancelled) setError(e?.message || 'Kon memberships niet laden');
+        if (!cancelled) {
+          setMemberships([]);
+          setError(e?.message || 'Kon memberships niet laden');
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    })();
+    }
 
+    loadMemberships();
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.id]);
 
-  // kies automatisch een org als er precies 1 is of als de huidige niet (meer) bestaat
   useEffect(() => {
-    if (loading) return;
-
-    const has = (orgId) => memberships.some(m => m.org_id === orgId);
-    if (!memberships.length) {
-      // geen lid van iets
-      if (activeOrgId) {
-        setActiveOrgId(null);
-        try { localStorage.removeItem(LS_KEY); } catch {}
-      }
-      return;
+    if (!activeOrgId && memberships.length > 0) {
+      setActiveOrgId(memberships[0].org_id);
     }
+  }, [activeOrgId, memberships, setActiveOrgId]);
 
-    // als niets gekozen is: kies de enige, of de eerste
-    if (!activeOrgId) {
-      const pick = memberships.length === 1 ? memberships[0].org_id : memberships[0].org_id;
-      setActiveOrgId(pick);
-      try { localStorage.setItem(LS_KEY, pick); } catch {}
-      return;
-    }
-
-    // gekozen org bestaat niet meer? corrigeer
-    if (!has(activeOrgId)) {
-      const pick = memberships[0].org_id;
-      setActiveOrgId(pick);
-      try { localStorage.setItem(LS_KEY, pick); } catch {}
-    }
-  }, [loading, memberships, activeOrgId]);
-
-  // expose rol van de actieve org (of null)
   const role = useMemo(() => {
     if (!activeOrgId) return null;
-    const m = memberships.find(x => x.org_id === activeOrgId);
-    return m?.role ?? null;
+    const row = memberships.find((m) => m.org_id === activeOrgId);
+    return row?.role ?? null;
   }, [activeOrgId, memberships]);
 
-  // helper om expliciet te wisselen (mocht je later een switcher bouwen)
-  const setActive = (orgId) => {
-    setActiveOrgId(orgId || null);
-    try {
-      if (orgId) localStorage.setItem(LS_KEY, orgId);
-      else localStorage.removeItem(LS_KEY);
-    } catch {}
-  };
-
-  return { loading, error, activeOrgId, role, memberships, setActiveOrgId: setActive };
+  return { orgId: activeOrgId, role, loading, error };
 }

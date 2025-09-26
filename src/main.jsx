@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './providers/AuthProvider';
 import BluelineChatpilot from './components/BluelineChatpilot';
+import MembersAdmin from './components/MembersAdmin';
 
 // Optioneel/indien aanwezig in je project:
 import Login from './pages/Login';
@@ -23,15 +24,14 @@ root.render(
         {/* Hoofd-app */}
         <Route path="/app" element={<BluelineChatpilot />} />
 
-        {/* Members: NIET rechtstreeks naar <MembersAdmin /> maar via dezelfde layout */}
         <Route
-  path="/members"
-  element={
-    <Protected perm={null}>
-      <BluelineChatpilot />
-    </Protected>
-  }
-/>
+          path="/members"
+          element={(
+            <Protected perm="org:admin">
+              <MembersAdmin />
+            </Protected>
+          )}
+        />
 
 
         {/* Overige (optioneel, laat staan als je deze routes gebruikt) */}
