@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
+import { supabase } from '../lib/supabaseClient';
+
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
@@ -284,6 +286,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             </button>
           </div>
 
+
           {/* --- Ledenbeheer (icoon/label, werkt ook ingeklapt) --- */}
           <PermissionGate perm="org:admin">
             <NavLink
@@ -302,6 +305,14 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
               {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
             </NavLink>
           </PermissionGate>
+
+          {/* --- Ledenbeheer (alleen zichtbaar voor ADMIN) --- */}
+          {/**
+           * We bepalen lokaal of de gebruiker ADMIN is (eerste membership).
+           * Dit is een UI-gate; autorisatie blijft via RLS/Netlify Functions gewaarborgd.
+           */}
+          <AdminMembersLink expanded={expanded} />
+
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
@@ -360,6 +371,52 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         </div>
       )}
     </>
+  );
+}
+
+/******************** Admin-members nav link (met rol-check) ********************/
+function useIsAdmin() {
+  const [role, setRole] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const userId = u?.user?.id;
+        if (!userId) { if (!cancelled) setRole(null); return; }
+        const { data } = await supabase
+          .from('memberships')
+          .select('role')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle();
+        if (!cancelled) setRole(data?.role || null);
+      } catch { if (!cancelled) setRole(null); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  return role === 'ADMIN';
+}
+
+function AdminMembersLink({ expanded }) {
+  const isAdmin = useIsAdmin();
+  if (!isAdmin) return null;
+  return (
+    <NavLink
+      to="/members"
+      title="Ledenbeheer"
+      className={({ isActive }) => [
+        "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
+        expanded ? "justify-start" : "justify-center",
+        isActive ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+      ].join(' ')}
+    >
+      {/* people/users icon */}
+      <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
+        <path fill="currentColor" d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0" />
+      </svg>
+      {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
+    </NavLink>
   );
 }
 
@@ -457,13 +514,13 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
-const navigate = useNavigate();
-function goToChatRoute() {
-  if (location.pathname.startsWith('/members')) {
-    navigate('/app'); // of je chatroute (bijv. '/')
-  }
-}
+  const navigate = useNavigate();
 
+  function goToChatRoute() {
+    if (location.pathname.startsWith('/members')) {
+      navigate('/app'); // of je chatroute (bijv. '/')
+    }
+  }
 
   // Layout state (sidebar moet altijd zichtbaar blijven, open/closed)
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -497,6 +554,14 @@ function goToChatRoute() {
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const copiedTimer = useRef(null);
+
+  // Admin route guard: als user geen ADMIN is en toch op /members landt, stuur terug naar /app
+  const isAdmin = useIsAdmin();
+  useEffect(() => {
+    if (isMembers && isAdmin === false) {
+      navigate('/app', { replace: true });
+    }
+  }, [isMembers, isAdmin, navigate]);
 
   // Init hero + rotaties
   useEffect(() => {
@@ -571,45 +636,43 @@ function goToChatRoute() {
   const backToChatMobile = () => setMobileView("chat");
 
   function handleNewChat() {
-  // maak nieuwe chatId
-  const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-  currentChatIdRef.current = newId;
+    // maak nieuwe chatId
+    const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    currentChatIdRef.current = newId;
 
-  // reset lijst en input
-  setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
-  setInput("");
-  setIsTyping(false);
+    // reset lijst en input
+    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    setInput("");
+    setIsTyping(false);
 
-  // ga (indien nodig) naar chatroute (weg uit /members)
-  goToChatRoute();
+    // ga (indien nodig) naar chatroute (weg uit /members)
+    goToChatRoute();
 
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
-
-
+    // focus op input
+    requestAnimationFrame(() => inputRef.current?.focus?.());
+  }
 
   // Recall & delete
   function loadChat(chatId) {
-  const uid = uidRef.current;
-  const thread = getThread(uid, chatId);
+    const uid = uidRef.current;
+    const thread = getThread(uid, chatId);
 
-  // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
-  currentChatIdRef.current = chatId;
+    // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
+    currentChatIdRef.current = chatId;
 
-  if (Array.isArray(thread) && thread.length) {
-    setMessages(thread);
-  } else {
-    // toon hero als placeholder
-    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    if (Array.isArray(thread) && thread.length) {
+      setMessages(thread);
+    } else {
+      // toon hero als placeholder
+      setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    }
+
+    // verlaat /members en ga naar chatroute
+    goToChatRoute();
+
+    // focus op input
+    requestAnimationFrame(() => inputRef.current?.focus?.());
   }
-
-  // verlaat /members en ga naar chatroute
-  goToChatRoute();
-
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
 
   function handleDeleteChat(chatId) {
     const uid = uidRef.current;
@@ -692,14 +755,18 @@ function goToChatRoute() {
         <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className={cx("mx-auto w-full px-4 md:px-5", containerMaxW)}>
             {isMembers ? (
-              // ===== /members: MembersAdmin binnen de layout, gecentreerd (max-w-960) =====
+              // ===== /members: alleen als ADMIN, anders redirect via effect =====
               <div className="py-5">
+
                 <PermissionGate
                   perm="org:admin"
                   fallback={<Navigate to="/app" replace />}
                 >
                   <MembersAdmin />
                 </PermissionGate>
+
+                {isAdmin ? <MembersAdmin /> : null}
+
               </div>
             ) : (
               // ===== Andere routes: Chat gecentreerd (max-w-760) =====
@@ -835,12 +902,12 @@ function goToChatRoute() {
 
       {/* Mobile off-canvas sidebar */}
       <MobileSidebar
-  open={mobileMenuOpen}
-  onClose={() => setMobileMenuOpen(false)}
-  onNewChat={() => { handleNewChat(); setMobileMenuOpen(false); }}
-  onToggleFeed={openNewsfeedMobile}
-  feedOpen={feedOpen}
-/>
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        onNewChat={() => { handleNewChat(); setMobileMenuOpen(false); }}
+        onToggleFeed={openNewsfeedMobile}
+        feedOpen={feedOpen}
+      />
 
     </div>
   );
