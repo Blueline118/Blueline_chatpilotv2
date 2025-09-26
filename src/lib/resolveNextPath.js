@@ -1,4 +1,4 @@
-export const DEFAULT_AFTER_LOGIN = '/app/members';
+export const DEFAULT_AFTER_LOGIN = '/app';
 
 export function resolveNextPath(raw) {
   if (!raw) return null;

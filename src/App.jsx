@@ -6,6 +6,22 @@ import Login from './pages/Login';
 import AppHome from './pages/AppHome';
 import AuthCallback from './pages/AuthCallback'; // ← import
 import AcceptInvite from './pages/AcceptInvite';
+import { usePermission } from './hooks/usePermission';
+
+function AdminOnly({ children }) {
+  const { allowed, loading, error } = usePermission('org:admin');
+
+  if (loading) return null;
+  if (error) {
+    console.warn('[AdminOnlyRoute] has_permission failed', error);
+    return <Navigate to="/app" replace />;
+  }
+  if (!allowed) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return children;
+}
 
 export default function App() {
   return (
@@ -24,10 +40,12 @@ export default function App() {
             }
           />
           <Route
-            path="/app/members"
+            path="/members"
             element={
               <Protected>
-                <AppHome />
+                <AdminOnly>
+                  <AppHome />
+                </AdminOnly>
               </Protected>
             }
           />
