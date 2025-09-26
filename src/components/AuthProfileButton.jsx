@@ -1,5 +1,5 @@
 // src/components/AuthProfileButton.jsx
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
@@ -18,7 +18,7 @@ import { useMembership } from '../hooks/useMembership';
  */
 export default function AuthProfileButton({ expanded }) {
   const { session, user, setActiveOrgId } = useAuth();
-  const { role } = useMembership();
+  const { role, loading: roleLoading } = useMembership();
   const [busy, setBusy] = useState(false);
 
   // --- UITGELOGD ---
@@ -62,7 +62,7 @@ export default function AuthProfileButton({ expanded }) {
         </div>
         <div className="min-w-0">
           <div className="text-sm font-medium text-[#194297] truncate">{user?.email}</div>
-          <div className="text-[11px] text-[#66676b]">Rol: {role ?? '—'}</div>
+          <div className="text-[11px] text-[#66676b]">Rol: {roleLoading ? '…' : (role ?? '—')}</div>
         </div>
       </div>
 
