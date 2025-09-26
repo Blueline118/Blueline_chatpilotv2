@@ -54,7 +54,34 @@ export default function AcceptInvite() {
         body: JSON.stringify({ token: inviteToken, noRedirect: true }),
       });
 
+
       // 401/403 → (nog) niet ingelogd
+
+
+      // 200 => succes, 409 => al gebruikt (behandel als soft success)
+      if (res.status === 200) {
+        const data = await res.json().catch(() => ({}));
+        const to = typeof data?.redirectTo === 'string' ? data.redirectTo : '/app';
+        setStatus('Uitnodiging geaccepteerd. Doorgaan…');
+        sessionStorage.removeItem('pendingInviteToken');
+        window.location.assign(to);
+        return;
+      }
+
+      if (res.status === 409) {
+        setStatus('Uitnodiging was al gebruikt. Doorgaan…');
+        sessionStorage.removeItem('pendingInviteToken');
+        setTimeout(() => window.location.assign('/app'), 300);
+        return;
+      }
+
+      if (res.status === 401) {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        setStatus('Log in om de uitnodiging te accepteren.');
+        window.location.assign(`/login?next=${next}`);
+
+      // Race-conditie: sessie nét niet klaar → korte retry (exact 1x)
+
       if (res.status === 401 || res.status === 403) {
         setStatus('Inloggen vereist om uitnodiging te accepteren…');
         redirectToLogin();
@@ -70,12 +97,17 @@ export default function AcceptInvite() {
       }
 
       if (!res.ok) {
+
         let msg = 'Kon uitnodiging niet accepteren.';
         try {
           const data = await res.json();
           if (data?.error) msg = data.error;
         } catch (e) {}
         setStatus(msg);
+
+        const err = await safeJson(res);
+        setStatus(err?.error || 'Kon uitnodiging niet accepteren.');
+
         return;
       }
 

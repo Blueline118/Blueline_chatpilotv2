@@ -1,5 +1,5 @@
 import type { Handler } from '@netlify/functions';
-import { buildCorsHeaders, supabaseForRequest } from './_shared/supabaseServer';
+import { buildCorsHeaders, supabaseAdmin, supabaseForRequest } from './_shared/supabaseServer';
 
 interface BodyIn {
   org_id?: string;
@@ -72,6 +72,14 @@ export const handler: Handler = async (event) => {
       return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: 'Supabase init failed' }) };
     }
 
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) {
+      console.warn(
+        JSON.stringify({ fn: FN, stage: 'auth-getUser', err: userErr.message, org_id: orgId, email })
+      );
+    }
+    const actorId = userData?.user?.id ?? null;
+
     const { data, error } = await supabase.rpc('resend_invite', {
       p_org_id: orgId,
       p_email: email,
@@ -88,6 +96,22 @@ export const handler: Handler = async (event) => {
     if (!token || typeof token !== 'string') {
       console.error(JSON.stringify({ fn: FN, stage: 'rpc', err: 'invalid-return', data }));
       return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: 'Invalid RPC response' }) };
+    }
+
+    const admin = supabaseAdmin();
+    const tokenSuffix = token.slice(-6);
+    try {
+      await admin.rpc('audit_log_event', {
+        p_org: orgId,
+        p_actor: actorId,
+        p_action: 'invite_resend',
+        p_target: { email, token_suffix: tokenSuffix },
+        p_meta: { previous_revoked: true },
+      });
+    } catch (error: any) {
+      console.warn(
+        JSON.stringify({ fn: FN, stage: 'audit-log', err: error?.message ?? 'rpc-failed', org_id: orgId, email })
+      );
     }
 
     if (sendEmailFlag) {

@@ -1,10 +1,12 @@
 import type { Handler } from '@netlify/functions';
-import { buildCorsHeaders, supabaseForRequest } from './_shared/supabaseServer';
+import { buildCorsHeaders, supabaseAdmin, supabaseForRequest } from './_shared/supabaseServer';
 
 interface BodyIn {
   token?: string;
   p_token?: string;
 }
+
+const FN = 'invites-revoke';
 
 export const handler: Handler = async (event) => {
   const cors = buildCorsHeaders(event.headers.origin);
@@ -32,7 +34,7 @@ export const handler: Handler = async (event) => {
     try {
       body = JSON.parse(rawBody) as BodyIn;
     } catch (error: any) {
-      console.error(JSON.stringify({ op: 'invites-revoke', error: error?.message ?? 'parse-failed' }));
+      console.error(JSON.stringify({ fn: FN, stage: 'parse', err: error?.message ?? 'parse-failed' }));
       return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: 'Invalid JSON body' }) };
     }
 
@@ -45,19 +47,62 @@ export const handler: Handler = async (event) => {
     try {
       supabase = supabaseForRequest(auth);
     } catch (error: any) {
-      console.error(JSON.stringify({ op: 'invites-revoke', error: error?.message ?? 'init-failed' }));
+      console.error(JSON.stringify({ fn: FN, stage: 'supabase_init', err: error?.message ?? 'init-failed' }));
       return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: 'Supabase init failed' }) };
     }
 
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    if (userErr) {
+      console.warn(JSON.stringify({ fn: FN, stage: 'auth-getUser', err: userErr.message }));
+    }
+    const actorId = userData?.user?.id ?? null;
+
     const { error } = await supabase.rpc('revoke_invite', { p_token: token });
     if (error) {
-      console.error(JSON.stringify({ op: 'invites-revoke', error: error.message, token }));
+      console.error(JSON.stringify({ fn: FN, stage: 'rpc', err: error.message, token }));
       return { statusCode: 400, headers: jsonHeaders, body: JSON.stringify({ error: error.message }) };
+    }
+
+    const admin = supabaseAdmin();
+    let orgId: string | null = null;
+    let email: string | null = null;
+    try {
+      const { data: inviteRow, error: inviteErr } = await admin
+        .from('invites')
+        .select('org_id, email, token')
+        .eq('token', token)
+        .maybeSingle();
+      if (inviteErr) {
+        console.warn(JSON.stringify({ fn: FN, stage: 'lookup', err: inviteErr.message, token }));
+      }
+      if (inviteRow) {
+        orgId = inviteRow.org_id ?? null;
+        email = (inviteRow as any).email ?? null;
+      }
+    } catch (err: any) {
+      console.warn(JSON.stringify({ fn: FN, stage: 'lookup', err: err?.message ?? 'lookup-failed', token }));
+    }
+
+    if (orgId) {
+      const tokenSuffix = token.slice(-6);
+      try {
+        await admin.rpc('audit_log_event', {
+          p_org: orgId,
+          p_actor: actorId,
+          p_action: 'invite_revoked',
+          p_target: { email: email ?? undefined, token_suffix: tokenSuffix },
+          p_meta: { manual: true },
+        });
+      } catch (err: any) {
+        console.warn(JSON.stringify({ fn: FN, stage: 'audit-log', err: err?.message ?? 'rpc-failed', org: orgId, token }));
+      }
+    } else {
+      console.warn(JSON.stringify({ fn: FN, stage: 'audit-skip', err: 'missing-org', token }));
     }
 
     return { statusCode: 200, headers: jsonHeaders, body: JSON.stringify({ success: true }) };
   } catch (error: any) {
-    console.error(JSON.stringify({ op: 'invites-revoke', error: error?.message ?? 'unknown' }));
+    console.error(JSON.stringify({ fn: FN, stage: 'handler', err: error?.message ?? 'unknown' }));
     return { statusCode: 500, headers: jsonHeaders, body: JSON.stringify({ error: 'Unexpected error' }) };
   }
 };

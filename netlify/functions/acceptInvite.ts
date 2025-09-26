@@ -10,7 +10,7 @@ type InviteRow = {
   token: string; // uuid string
   used_at?: string | null;
   revoked_at?: string | null;
-    expires_at?: string | null;
+  expires_at?: string | null;
 };
 
 type JsonBody = { token?: string | null; noRedirect?: boolean | number | string | null };
@@ -146,7 +146,12 @@ export const handler: Handler = async (event) => {
         { onConflict: 'org_id,user_id' },
       );
 
-    if (upsertErr) return json(500, cors, { error: upsertErr.message });
+    if (upsertErr) {
+      console.error(
+        JSON.stringify({ fn: 'acceptInvite', stage: 'upsert-membership', err: upsertErr.message, org: row.org_id, email: row.email })
+      );
+      return json(500, cors, { error: upsertErr.message });
+    }
 
     // mark invite used (idempotent guard: only when used_at is null)
     const stamp = new Date().toISOString();
@@ -157,13 +162,33 @@ export const handler: Handler = async (event) => {
       .is('used_at', null)
       .select('id');
 
-    if (updErr) return json(500, cors, { error: updErr.message });
+    if (updErr) {
+      console.error(
+        JSON.stringify({ fn: 'acceptInvite', stage: 'after-upsert', err: updErr.message, org: row.org_id, email: row.email })
+      );
+      return json(500, cors, { error: updErr.message });
+    }
     if (!updated || updated.length === 0) return json(409, cors, { error: 'Uitnodiging is al gebruikt' });
+
+    const tokenSuffix = typeof row.token === 'string' ? row.token.slice(-6) : null;
+    try {
+      await admin.rpc('audit_log_event', {
+        p_org: row.org_id,
+        p_actor: user.id,
+        p_action: 'invite_accepted',
+        p_target: { email: row.email, token_suffix: tokenSuffix },
+        p_meta: { source: 'function', fn: 'acceptInvite' },
+      });
+    } catch (error: any) {
+      console.warn(
+        JSON.stringify({ fn: 'acceptInvite', stage: 'audit-log', err: error?.message ?? 'rpc-failed', org: row.org_id, email: row.email })
+      );
+    }
 
     const to = buildRedirectLocation(event);
     return noRedirectFlag ? json(200, cors, { success: true, redirectTo: to }) : redirect(cors, to);
   } catch (e: any) {
-    // compacte foutrespons
+    console.error(JSON.stringify({ fn: 'acceptInvite', stage: 'handler', err: e?.message ?? 'acceptInvite failure' }));
     return json(500, cors, { error: e?.message ?? 'acceptInvite failure' });
   }
 };
