@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './providers/AuthProvider';
 import BluelineChatpilot from './components/BluelineChatpilot';
+import { usePermission } from './hooks/usePermission';
 
 // Optioneel/indien aanwezig in je project:
 import Login from './pages/Login';
@@ -14,6 +15,21 @@ import Protected from './components/Protected.jsx';
 
 import './index.css';
 
+function AdminOnly({ children }) {
+  const { allowed, loading, error } = usePermission('org:admin');
+
+  if (loading) return null;
+  if (error) {
+    console.warn('[AdminOnly] has_permission failed', error);
+    return <Navigate to="/app" replace />;
+  }
+  if (!allowed) {
+    return <Navigate to="/app" replace />;
+  }
+
+  return children;
+}
+
 const root = createRoot(document.getElementById('root'));
 
 root.render(
@@ -21,17 +37,26 @@ root.render(
     <AuthProvider>
       <Routes>
         {/* Hoofd-app */}
-        <Route path="/app" element={<BluelineChatpilot />} />
+        <Route
+          path="/app"
+          element={(
+            <Protected>
+              <BluelineChatpilot />
+            </Protected>
+          )}
+        />
 
         {/* Members: NIET rechtstreeks naar <MembersAdmin /> maar via dezelfde layout */}
         <Route
-  path="/members"
-  element={
-    <Protected perm={null}>
-      <BluelineChatpilot />
-    </Protected>
-  }
-/>
+          path="/members"
+          element={(
+            <Protected>
+              <AdminOnly>
+                <BluelineChatpilot />
+              </AdminOnly>
+            </Protected>
+          )}
+        />
 
 
         {/* Overige (optioneel, laat staan als je deze routes gebruikt) */}
