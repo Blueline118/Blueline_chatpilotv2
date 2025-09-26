@@ -1,108 +1,90 @@
 // src/hooks/useMembership.js
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 
-const ACTIVE_ORG_KEY = 'activeOrgId';
-
-async function fetchFirstMembership(userId) {
-  const { data, error } = await supabase
-    .from('memberships')
-    .select('org_id, role, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .limit(1);
-  if (error) throw error;
-  return Array.isArray(data) && data.length ? data[0] : null;
-}
-
-async function fetchRole(userId, orgId) {
-  const { data, error } = await supabase
-    .from('memberships')
-    .select('role')
-    .eq('user_id', userId)
-    .eq('org_id', orgId)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.role ?? null;
-}
-
 /**
  * useMembership
- * - Bepaalt een actieve org (volgorde: meegegeven orgId → sessionStorage → eerste membership)
- * - Haalt de rol op voor die org
- * - Slaat activeOrgId op in sessionStorage zodat de UI consistent blijft
+ * - Leest memberships voor de huidige gebruiker (RLS-proof).
+ * - Stelt (indien nog leeg) automatisch een actieve org in via AuthProvider.
+ * - Geeft de rol + activeOrgId terug voor UI.
+ *
+ * Return shape:
+ * { role, activeOrgId, loading, error }
  */
-export function useMembership(orgIdFromProps = null) {
-  const { user } = useAuth();
-  const [orgId, setOrgId] = useState(null);
+export function useMembership() {
+  const { user, activeOrgId, setActiveOrgId } = useAuth?.() ?? {};
   const [role, setRole] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // init orgId keuze
   useEffect(() => {
-    if (!user) {
-      setOrgId(null);
-      setRole(null);
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
 
-    (async () => {
+    async function run() {
       try {
         setLoading(true);
-        setError('');
+        setError(null);
 
-        // 1) Use explicit orgId if provided
-        let chosenOrg = orgIdFromProps;
-
-        // 2) Else, from sessionStorage
-        if (!chosenOrg) {
-          const stored = sessionStorage.getItem(ACTIVE_ORG_KEY);
-          if (stored) chosenOrg = stored;
+        // Bepaal user-id (val terug op supabase.auth.getUser voor zekerheid)
+        let uid = user?.id ?? null;
+        if (!uid) {
+          const { data } = await supabase.auth.getUser();
+          uid = data?.user?.id ?? null;
         }
-
-        // 3) Else, pick first membership
-        if (!chosenOrg) {
-          const first = await fetchFirstMembership(user.id);
-          if (first) chosenOrg = first.org_id;
-        }
-
-        if (!chosenOrg) {
-          // user heeft geen memberships
+        if (!uid) {
+          // niet ingelogd
           if (!cancelled) {
-            setOrgId(null);
             setRole(null);
             setLoading(false);
           }
           return;
         }
 
-        sessionStorage.setItem(ACTIVE_ORG_KEY, chosenOrg);
+        // Haal memberships op voor deze user
+        const { data: rows, error: qErr } = await supabase
+          .from('memberships')
+          .select('org_id, role, created_at')
+          .eq('user_id', uid)
+          .order('created_at', { ascending: true });
 
-        const r = await fetchRole(user.id, chosenOrg);
+        if (qErr) throw qErr;
 
-        if (!cancelled) {
-          setOrgId(chosenOrg);
-          setRole(r);
-          setLoading(false);
+        const list = Array.isArray(rows) ? rows : [];
+        const first = list[0] || null;
+
+        // Als er nog geen actieve org gekozen is: kies de eerste
+        if (!activeOrgId && first?.org_id) {
+          setActiveOrgId?.(first.org_id);
         }
+
+        // Zet rol o.b.v. actieve org (of fallback: eerste)
+        let effectiveRole = null;
+        if (activeOrgId) {
+          const hit = list.find((m) => m.org_id === activeOrgId) || null;
+          effectiveRole = hit?.role ?? null;
+        } else {
+          effectiveRole = first?.role ?? null;
+        }
+
+        if (!cancelled) setRole(effectiveRole);
       } catch (e) {
         if (!cancelled) {
-          setError(e?.message || 'Kon membership niet ophalen');
-          setOrgId(null);
+          setError(e?.message || String(e));
           setRole(null);
-          setLoading(false);
         }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    })();
+    }
 
+    run();
     return () => { cancelled = true; };
-  }, [user, orgIdFromProps]);
+    // herhaal wanneer user-id of activeOrgId wijzigt
+  }, [user?.id, activeOrgId, setActiveOrgId]);
 
-  const isAdmin = useMemo(() => role === 'ADMIN', [role]);
-
-  return { orgId, role, isAdmin, loading, error };
+  return { role, activeOrgId: activeOrgId ?? null, loading, error };
 }
+
+// (optioneel) default export voor gemak in sommige imports
+export default useMembership;
