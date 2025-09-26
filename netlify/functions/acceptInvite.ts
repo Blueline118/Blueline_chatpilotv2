@@ -28,8 +28,8 @@ function getAppOrigin(event: Parameters<Handler>[0]) {
   return process.env.APP_ORIGIN || (host ? `${scheme}://${host}` : `${scheme}://localhost`);
 }
 function buildRedirectLocation(event: Parameters<Handler>[0]) {
-  // stuur ledenomgeving in: /app/members
-  return `${getAppOrigin(event)}/app/members`;
+  // stuur standaard naar hoofdapp
+  return `${getAppOrigin(event)}/app`;
 }
 async function readJson(event: Parameters<Handler>[0]): Promise<JsonBody> {
   try {

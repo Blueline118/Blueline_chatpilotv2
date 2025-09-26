@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import AppHome from './pages/AppHome';
 import AuthCallback from './pages/AuthCallback'; // ← import
 import AcceptInvite from './pages/AcceptInvite';
+import MembersAdmin from './components/MembersAdmin';
 
 export default function App() {
   return (
@@ -24,10 +25,10 @@ export default function App() {
             }
           />
           <Route
-            path="/app/members"
+            path="/members"
             element={
-              <Protected>
-                <AppHome />
+              <Protected perm="org:admin">
+                <MembersAdmin />
               </Protected>
             }
           />
