@@ -39,6 +39,29 @@ export default function AcceptInvite() {
         body: JSON.stringify({ token: inviteToken, noRedirect: true }),
       });
 
+
+      // 200 => succes, 409 => al gebruikt (behandel als soft success)
+      if (res.status === 200) {
+        const data = await res.json().catch(() => ({}));
+        const to = typeof data?.redirectTo === 'string' ? data.redirectTo : '/app';
+        setStatus('Uitnodiging geaccepteerd. Doorgaan…');
+        sessionStorage.removeItem('pendingInviteToken');
+        window.location.assign(to);
+        return;
+      }
+
+      if (res.status === 409) {
+        setStatus('Uitnodiging was al gebruikt. Doorgaan…');
+        sessionStorage.removeItem('pendingInviteToken');
+        setTimeout(() => window.location.assign('/app'), 300);
+        return;
+      }
+
+      if (res.status === 401) {
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        setStatus('Log in om de uitnodiging te accepteren.');
+        window.location.assign(`/login?next=${next}`);
+
       // Race-conditie: sessie nét niet klaar → korte retry (exact 1x)
       if (res.status === 401 || res.status === 403) {
         await new Promise((r) => setTimeout(r, 700));
@@ -68,6 +91,7 @@ export default function AcceptInvite() {
       if (!res.ok) {
         const err = await safeJson(res);
         setStatus(err?.error || 'Kon uitnodiging niet accepteren.');
+
         return;
       }
 
