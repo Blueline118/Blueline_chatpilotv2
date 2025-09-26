@@ -44,7 +44,7 @@ export default function AcceptInvite() {
       // 200 => succes, 409 => al gebruikt (behandel als soft success)
       if (res.status === 200) {
         const data = await res.json().catch(() => ({}));
-        const to = typeof data?.redirectTo === 'string' ? data.redirectTo : '/app/members';
+        const to = typeof data?.redirectTo === 'string' ? data.redirectTo : '/app';
         setStatus('Uitnodiging geaccepteerd. Doorgaan…');
         sessionStorage.removeItem('pendingInviteToken');
         window.location.assign(to);
@@ -54,7 +54,7 @@ export default function AcceptInvite() {
       if (res.status === 409) {
         setStatus('Uitnodiging was al gebruikt. Doorgaan…');
         sessionStorage.removeItem('pendingInviteToken');
-        setTimeout(() => window.location.assign('/app/members'), 300);
+        setTimeout(() => window.location.assign('/app'), 300);
         return;
       }
 
