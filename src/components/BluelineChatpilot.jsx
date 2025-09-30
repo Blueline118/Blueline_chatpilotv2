@@ -9,6 +9,7 @@ import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
 import AuthProfileButton from './AuthProfileButton';
 import MembersAdmin from './MembersAdmin';
 import SidebarNewsFeed from "./SidebarNewsFeed";
+import PermissionGate from './PermissionGate';
 
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
@@ -304,7 +305,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
     ) : null
   }
 </PermissionGate>
-
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
