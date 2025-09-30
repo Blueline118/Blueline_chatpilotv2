@@ -1,132 +1,96 @@
 // src/hooks/useMembership.js
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 const LS_KEY = 'blueline.activeOrgId';
 
-function readStoredOrg() {
-  try {
-    return localStorage.getItem(LS_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredOrg(value) {
-  try {
-    if (value) localStorage.setItem(LS_KEY, value);
-    else localStorage.removeItem(LS_KEY);
-  } catch {}
-}
-
-function pickOrgId(current, list) {
-  if (!Array.isArray(list) || list.length === 0) {
-    return null;
-  }
-
-  const hasCurrent = current && list.some((m) => m?.org_id === current);
-  if (hasCurrent) {
-    return current;
-  }
-
-  const first = list.find((m) => m && m.org_id);
-  return first ? first.org_id : null;
-}
-
 export function useMembership() {
-  const [memberships, setMemberships] = useState([]);
-  const [orgId, setOrgId] = useState(() => readStoredOrg());
   const [loading, setLoading] = useState(true);
+  const [activeOrgId, setActiveOrgId] = useState(() => {
+    try { return localStorage.getItem(LS_KEY) || null; } catch { return null; }
+  });
+  const [memberships, setMemberships] = useState([]);
   const [error, setError] = useState(null);
 
+  // laad memberships van ingelogde user (RLS haalt dat al af)
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
-      if (cancelled) return;
+    (async () => {
       setLoading(true);
       setError(null);
-
       try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
+        const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData?.session?.user?.id || null;
         if (!userId) {
-          if (cancelled) return;
           setMemberships([]);
-          setOrgId((prev) => {
-            if (prev !== null) writeStoredOrg(null);
-            return null;
-          });
           setLoading(false);
           return;
         }
 
-        const { data, error: membershipsError } = await supabase
+        const { data, error: rlsErr } = await supabase
           .from('memberships')
           .select('org_id, role')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true }); // oudste eerst
 
-        if (membershipsError) throw membershipsError;
+        if (rlsErr) throw rlsErr;
         if (cancelled) return;
 
-        const list = Array.isArray(data) ? data : [];
-        setMemberships(list);
-        setOrgId((prev) => {
-          const next = pickOrgId(prev, list);
-          if (next !== prev) {
-            writeStoredOrg(next);
-          }
-          return next;
-        });
-        setLoading(false);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err?.message || 'Kon memberships niet laden');
-        setMemberships([]);
-        setOrgId((prev) => {
-          if (prev !== null) writeStoredOrg(null);
-          return null;
-        });
-        setLoading(false);
+        setMemberships(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (!cancelled) setError(e?.message || 'Kon memberships niet laden');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // kies automatisch een org als er precies 1 is of als de huidige niet (meer) bestaat
+  useEffect(() => {
+    if (loading) return;
+
+    const has = (orgId) => memberships.some(m => m.org_id === orgId);
+    if (!memberships.length) {
+      // geen lid van iets
+      if (activeOrgId) {
+        setActiveOrgId(null);
+        try { localStorage.removeItem(LS_KEY); } catch {}
+      }
+      return;
     }
 
-    load();
-    const { data: authSub } = supabase.auth.onAuthStateChange(() => {
-      load();
-    });
+    // als niets gekozen is: kies de enige, of de eerste
+    if (!activeOrgId) {
+      const pick = memberships.length === 1 ? memberships[0].org_id : memberships[0].org_id;
+      setActiveOrgId(pick);
+      try { localStorage.setItem(LS_KEY, pick); } catch {}
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-      authSub?.subscription?.unsubscribe();
-    };
-  }, []);
+    // gekozen org bestaat niet meer? corrigeer
+    if (!has(activeOrgId)) {
+      const pick = memberships[0].org_id;
+      setActiveOrgId(pick);
+      try { localStorage.setItem(LS_KEY, pick); } catch {}
+    }
+  }, [loading, memberships, activeOrgId]);
 
-  const setActive = useCallback((nextOrgId) => {
-    setOrgId((prev) => {
-      const normalized = nextOrgId || null;
-      if (prev === normalized) return prev;
-      writeStoredOrg(normalized);
-      return normalized;
-    });
-  }, []);
-
+  // expose rol van de actieve org (of null)
   const role = useMemo(() => {
-    if (!orgId) return null;
-    const match = memberships.find((m) => m?.org_id === orgId);
-    return match?.role ?? null;
-  }, [orgId, memberships]);
+    if (!activeOrgId) return null;
+    const m = memberships.find(x => x.org_id === activeOrgId);
+    return m?.role ?? null;
+  }, [activeOrgId, memberships]);
 
-  return {
-    loading,
-    error,
-    orgId,
-    activeOrgId: orgId,
-    role,
-    memberships,
-    setActiveOrgId: setActive,
+  // helper om expliciet te wisselen (mocht je later een switcher bouwen)
+  const setActive = (orgId) => {
+    setActiveOrgId(orgId || null);
+    try {
+      if (orgId) localStorage.setItem(LS_KEY, orgId);
+      else localStorage.removeItem(LS_KEY);
+    } catch {}
   };
+
+  return { loading, error, activeOrgId, role, memberships, setActiveOrgId: setActive };
 }
