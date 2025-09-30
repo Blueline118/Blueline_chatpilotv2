@@ -286,23 +286,42 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
           </div>
 
           {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
-          <PermissionGate perm="org:admin">
-            <NavLink
-              to="/members"
-              title="Ledenbeheer"
-              className={({ isActive }) => [
-                "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
-                expanded ? "justify-start" : "justify-center",
-                isActive ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
-              ].join(' ')}
-            >
-              {/* people/users icon */}
-              <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
-                <path fill="currentColor" d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0" />
-              </svg>
-              {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
-            </NavLink>
-          </PermissionGate>
+<PermissionGate perm="org:admin">
+  {({ allowed }) =>
+    allowed && (
+      <NavLink
+        to="/members"
+        title="Ledenbeheer"
+        className={({ isActive }) =>
+          [
+            "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
+            expanded ? "justify-start" : "justify-center",
+            isActive
+              ? "bg-[#e8efff] text-[#194297]"
+              : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]",
+          ].join(" ")
+        }
+      >
+        {/* people/users icon */}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          className="shrink-0"
+        >
+          <path
+            fill="currentColor"
+            d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
+          />
+        </svg>
+        {expanded && (
+          <span className="text-[14px] font-medium">Ledenbeheer</span>
+        )}
+      </NavLink>
+    )
+  }
+</PermissionGate>
+
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
