@@ -149,12 +149,12 @@ results.push(await runTest('team can read org members', async () => {
 // ADMIN update test
 results.push(await runTest('admin can update team role', async () => {
   const client = await getUserClient('ADMIN')
-  const { error } = await client.rpc('update_member_role', {
-    p_org: ORG_ID,
-    p_target: USERS.TEAM.id,
+  const { error } = await client.rpc('admin_update_member_role', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.TEAM.id,
     p_role: 'TEAM',
   })
-  if (error) throw new Error(`update_member_role failed: ${error.message}`)
+  if (error) throw new Error(`admin_update_member_role failed: ${error.message}`)
 
   const membership = await findMembership(USERS.TEAM.id)
   if (!membership) throw new Error('TEAM membership missing after update')
@@ -165,13 +165,13 @@ results.push(await runTest('admin can update team role', async () => {
 // CUSTOMER delete test
 results.push(await runTest('customer cannot delete members', async () => {
   const client = await getUserClient('CUSTOMER')
-  const resp = await client.rpc('delete_member', {
-    p_org: ORG_ID,
-    p_target: USERS.TEAM.id,
+  const resp = await client.rpc('admin_delete_member', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.TEAM.id,
   })
   if (!resp.error) {
     await ensureBaselineData()
-    throw new Error('delete_member succeeded for customer')
+    throw new Error('admin_delete_member succeeded for customer')
   }
   return `Denied with: ${resp.error.message}`
 }))
@@ -179,11 +179,11 @@ results.push(await runTest('customer cannot delete members', async () => {
 // ADMIN delete test
 results.push(await runTest('admin can delete members', async () => {
   const client = await getUserClient('ADMIN')
-  const { error } = await client.rpc('delete_member', {
-    p_org: ORG_ID,
-    p_target: USERS.TEAM.id,
+  const { error } = await client.rpc('admin_delete_member', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.TEAM.id,
   })
-  if (error) throw new Error(`delete_member failed: ${error.message}`)
+  if (error) throw new Error(`admin_delete_member failed: ${error.message}`)
 
   const membership = await findMembership(USERS.TEAM.id)
   if (membership) throw new Error('TEAM membership still exists after delete')

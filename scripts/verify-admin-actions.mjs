@@ -128,25 +128,25 @@ let success = true;
 // Step A: admin updates team member role
 try {
   const adminClient = await createSessionClient(USERS.admin);
-  const { error } = await adminClient.rpc('update_member_role', {
-    p_org: ORG_ID,
-    p_target: USERS.team,
+  const { error } = await adminClient.rpc('admin_update_member_role', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.team,
     p_role: 'TEAM',
   });
   if (error) throw error;
   await assertMembershipRole(USERS.team, 'TEAM');
-  logPass('ADMIN update_member_role');
+  logPass('ADMIN admin_update_member_role');
 } catch (error) {
   success = false;
-  logFail('ADMIN update_member_role', error);
+  logFail('ADMIN admin_update_member_role', error);
 }
 
 // Step B: customer forbidden to update
 try {
   const customerClient = await createSessionClient(USERS.customer);
-  const { error } = await customerClient.rpc('update_member_role', {
-    p_org: ORG_ID,
-    p_target: USERS.team,
+  const { error } = await customerClient.rpc('admin_update_member_role', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.team,
     p_role: 'TEAM',
   });
   if (!error) {
@@ -156,18 +156,18 @@ try {
   if (status !== 403 && error.code !== '42501') {
     throw Object.assign(new Error('Unexpected error response'), formatFailure(error));
   }
-  logPass('CUSTOMER update_member_role blocked', `${error.code ?? error.status}: ${error.message}`);
+  logPass('CUSTOMER admin_update_member_role blocked', `${error.code ?? error.status}: ${error.message}`);
 } catch (error) {
   success = false;
-  logFail('CUSTOMER update_member_role blocked', error);
+  logFail('CUSTOMER admin_update_member_role blocked', error);
 }
 
 // Step C: admin deletes customer member
 try {
   const adminClient = await createSessionClient(USERS.admin);
-  const { error } = await adminClient.rpc('delete_member', {
-    p_org: ORG_ID,
-    p_target: USERS.customer,
+  const { error } = await adminClient.rpc('admin_delete_member', {
+    p_org_id: ORG_ID,
+    p_member_id: USERS.customer,
   });
   if (error) throw error;
   const { data, error: lookupError } = await serviceClient
@@ -183,7 +183,7 @@ try {
     throw Object.assign(new Error('Customer membership still present after delete'), { code: 'NOTDELETED' });
   }
   await restoreMembership(USERS.customer, 'CUSTOMER');
-  logPass('ADMIN delete_member', 'Membership removed and restored');
+  logPass('ADMIN admin_delete_member', 'Membership removed and restored');
 } catch (error) {
   success = false;
   try {
@@ -191,7 +191,7 @@ try {
   } catch (restoreError) {
     logFail('RESTORE membership fallback', restoreError);
   }
-  logFail('ADMIN delete_member', error);
+  logFail('ADMIN admin_delete_member', error);
 }
 
 if (!success) process.exit(1);

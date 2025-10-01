@@ -4,17 +4,29 @@ import { useAuth } from '../providers/AuthProvider';
 import { useMembership } from '../hooks/useMembership';
 import RoleBadge from './RoleBadge';
 import AdminInviteForm from './AdminInviteForm';
-import { authHeader } from '../lib/authHeader';
-import { netlifyJson } from '../lib/netlifyFetch';
 import { supabase } from '../lib/supabaseClient';
 import { resendInvite, revokeInvite } from '../lib/invitesApi';
+import { deleteMember, updateMemberRole, MEMBER_ROLES } from '../services/members';
+import { warn, error as logError } from '../lib/log';
 
-const ROLES = ['ADMIN', 'TEAM', 'CUSTOMER'];
+const ROLES = MEMBER_ROLES;
 const ROLE_LABEL = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
 const LS_KEY = 'blueline.activeOrgId';
 
 function classNames(...values) {
   return values.filter(Boolean).join(' ');
+}
+
+function toLogError(error) {
+  if (!error) return null;
+  if (typeof error === 'object') {
+    return {
+      message: error.message ?? String(error),
+      code: error.code ?? error.status ?? null,
+      details: error.details ?? undefined,
+    };
+  }
+  return { message: String(error) };
 }
 
 function VisuallyHidden({ children }) {
@@ -97,6 +109,10 @@ async function loadMembersForOrg(supabaseClient, orgId) {
   const { data, error } = await supabaseClient.rpc('list_org_members', { p_org: orgId });
 
   if (error) {
+    logError('members_admin.fetch_members_failed', {
+      orgId,
+      error: toLogError(error),
+    });
     throw error;
   }
 
@@ -233,7 +249,7 @@ export default function MembersAdmin() {
       setRows(normalizeMembers(data));
       setErrMsg('');
     } catch (error) {
-      console.warn('[MembersAdmin] loadMembersForOrg failed', { orgId: activeOrgId, error });
+      warn('members_admin.reload_members_failed', { orgId: activeOrgId, error: toLogError(error) });
       setErrMsg(error?.message || 'Kon ledenlijst niet laden');
       setRows([]);
     }
@@ -271,7 +287,7 @@ export default function MembersAdmin() {
       })
       .catch((error) => {
         if (cancelled) return;
-        console.warn('[MembersAdmin] loadMembersForOrg effect failed', { orgId: activeOrgId, error });
+        warn('members_admin.load_members_effect_failed', { orgId: activeOrgId, error: toLogError(error) });
         setErrMsg(error?.message || 'Kon ledenlijst niet laden');
         setRows([]);
       })
@@ -304,7 +320,7 @@ export default function MembersAdmin() {
       }
       setInvites(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.warn('[MembersAdmin] listInvites failed', { orgId: activeOrgId, error });
+      warn('members_admin.list_invites_failed', { orgId: activeOrgId, error: toLogError(error) });
       setInvitesError(error?.message || 'Onbekende fout');
       setInvites([]);
     } finally {
@@ -332,19 +348,11 @@ export default function MembersAdmin() {
     }
     setBusyUser(userId);
     try {
-      const headers = await authHeader();
-      if (!headers.Authorization) {
-        throw new Error('Geen toegangstoken beschikbaar');
-      }
-      await netlifyJson('deleteMember', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ p_org: activeOrgId, p_target: userId }),
-      });
+      await deleteMember(activeOrgId, userId);
       setToast(`Lid verwijderd: ${email}`);
       await refreshAfterMutation();
     } catch (error) {
-      console.warn('[MembersAdmin] deleteMember failed', { orgId: activeOrgId, target: userId, error });
+      logError('members_admin.delete_member_failed', { orgId: activeOrgId, target: userId, error: toLogError(error) });
       setToast(`Actie mislukt: ${error?.message || 'geen recht'}`);
       await refreshAfterMutation();
     } finally {
@@ -358,23 +366,15 @@ export default function MembersAdmin() {
     }
     setBusyUser(userId);
     try {
-      const headers = await authHeader();
-      if (!headers.Authorization) {
-        throw new Error('Geen toegangstoken beschikbaar');
-      }
-      await netlifyJson('updateMemberRole', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ p_org: activeOrgId, p_target: userId, p_role: nextRole }),
-      });
+      await updateMemberRole(activeOrgId, userId, nextRole);
       setToast('Rol bijgewerkt');
       await refreshAfterMutation();
     } catch (error) {
-      console.warn('[MembersAdmin] updateMemberRole failed', {
+      logError('members_admin.update_member_role_failed', {
         orgId: activeOrgId,
         target: userId,
         nextRole,
-        error,
+        error: toLogError(error),
       });
       setToast(`Actie mislukt: ${error?.message || 'geen recht'}`);
       await refreshAfterMutation();
@@ -414,7 +414,7 @@ export default function MembersAdmin() {
       setToast(toastMessage);
       await fetchInvites();
     } catch (error) {
-      console.warn('[MembersAdmin] resendInvite failed', { orgId: activeOrgId, email, error });
+      warn('members_admin.resend_invite_failed', { orgId: activeOrgId, email, error: toLogError(error) });
       setInvitesError(normalizeInviteError(error));
     } finally {
       setBusyInvite(null);
@@ -439,7 +439,7 @@ export default function MembersAdmin() {
       setToast('Invite ongeldig gemaakt.');
       await fetchInvites();
     } catch (error) {
-      console.warn('[MembersAdmin] revokeInvite failed', { token, error });
+      warn('members_admin.revoke_invite_failed', { token, error: toLogError(error) });
       setInvitesError(normalizeInviteError(error));
     } finally {
       setBusyInvite(null);
