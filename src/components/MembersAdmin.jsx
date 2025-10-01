@@ -94,8 +94,7 @@ async function loadMembersForOrg(supabaseClient, orgId) {
   if (!orgId) return [];
 
   // Roept de SECURITY DEFINER RPC aan; RPC controleert zelf of caller ADMIN is
-  const { data, error } = await supabaseClient
-    .rpc('list_org_members', { p_org: orgId });
+  const { data, error } = await supabaseClient.rpc('list_org_members', { p_org: orgId });
 
   if (error) {
     throw error;
