@@ -46,9 +46,9 @@ export const handler: Handler = async (event) => {
     return json(500, { error: e?.message ?? 'Init error' });
   }
 
-  const { error } = await supabase.rpc('delete_member', {
-    p_org,
-    p_target,
+  const { error } = await supabase.rpc('admin_delete_member', {
+    p_org_id: p_org,
+    p_member_id: p_target,
   });
 
   if (error) {
