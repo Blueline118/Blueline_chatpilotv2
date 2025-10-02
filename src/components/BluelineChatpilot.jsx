@@ -1,4 +1,4 @@
-// change: Members link visible only for authenticated ADMIN; removed blocking wrappers
+// change: Members link is now only visible to authenticated ADMIN and fully clickable
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -103,7 +103,7 @@ function CopyButton({ id, text, onCopied, isCopied }) {
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
       {isCopied ? (
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z"/></svg>
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M9 16.2l-3.5-3.5a1 1 010-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z"/></svg>
       ) : (
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z"/></svg>
       )}
@@ -233,7 +233,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         aria-expanded={expanded}
       >
         {/* Toggle */}
-        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}> 
+        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}>
           <button
             type="button"
             onClick={onToggleSidebar}
@@ -292,20 +292,29 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             <NavLink
               to="/app/members"
               title="Ledenbeheer"
-              className={({ isActive }) => [
-                "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
-                expanded ? "justify-start" : "justify-center",
-                isActive
-                  ? "bg-[#e8efff] text-[#194297]"
-                  : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]",
-              ].join(' ')}
+              className={({ isActive }) =>
+                cx(
+                  "group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
+                  expanded ? "justify-start" : "justify-center",
+                  isActive
+                    ? "bg-[#e8efff] text-[#194297]"
+                    : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+                )
+              }
             >
-              {/* people/users icon */}
-              <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
-                <path
-                  fill="currentColor"
-                  d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
-                />
+              <svg
+                viewBox="0 0 24 24"
+                className="w-5 h-5 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" />
+                <path d="M8 12a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" />
+                <path d="M2 19v-1c0-2.21 3.58-4 8-4" />
+                <path d="M14 14c4.42 0 8 1.79 8 4v1" />
               </svg>
               {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
             </NavLink>
@@ -596,7 +605,6 @@ function goToChatRoute() {
 }
 
 
-
   // Recall & delete
   function loadChat(chatId) {
   const uid = uidRef.current;
@@ -720,7 +728,7 @@ function goToChatRoute() {
                     {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
                       const isUser = m.role === "user";
                       return (
-                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
+                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
                           <div className={cx(
                             "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
                             isUser
@@ -728,7 +736,7 @@ function goToChatRoute() {
                               : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
                           )}>{m.text}</div>
                           {!isUser && (
-                            <div className="-mt-1 ml-2 self:end"> 
+                            <div className="-mt-1 ml-2 self:end">
                               <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
                             </div>
                           )}
