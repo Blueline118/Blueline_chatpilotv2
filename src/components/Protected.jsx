@@ -38,15 +38,16 @@ export default function Protected({
   }
 
   // 2) Membership gating (optional)
-  if (requireMembership) {
-    if (membershipsLoading || memberships === undefined) {
-      return null; // wait until memberships known
-    }
-    const hasAny = Array.isArray(memberships) && memberships.length > 0;
-    if (!hasAny) {
-      return <Navigate to="/app" replace />;
-    }
+if (requireMembership) {
+  if (membershipsLoading || memberships === undefined) {
+    return null; // wachten tot bekend
   }
+  const hasAny = Array.isArray(memberships) && memberships.length > 0;
+  if (!hasAny) {
+    // << wijziging: stuur naar /no-access i.p.v. /app
+    return <Navigate to="/no-access" replace />;
+  }
+}
 
   // 3) Permission gating (wait for result; don't redirect while loading)
   if (perm) {

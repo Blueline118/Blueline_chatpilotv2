@@ -7,6 +7,7 @@ import AppHome from './pages/AppHome';
 import AuthCallback from './pages/AuthCallback';
 import AcceptInvite from './pages/AcceptInvite';
 import MembersAdmin from './components/MembersAdmin';
+import NoAccess from './pages/NoAccess';
 
 /**
  * Minimal, sync-only guard for ADMIN access.
@@ -60,6 +61,9 @@ export default function App() {
     </ProtectedAdmin>
   }
 />
+
+// ...
+<Route path="/no-access" element={<NoAccess />} />
 
 <Route path="/app/members" element={<Navigate to="/members" replace />} />
 
