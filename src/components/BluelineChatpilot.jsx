@@ -1,4 +1,4 @@
-// change: align sidebar gating with auth context
+// change: deterministic gate for Members link; removed PermissionGate wrapper
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -112,6 +112,51 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
+/******************** Members nav item ********************/
+function MembersNavItem() {
+  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
+  const [canMembers, setCanMembers] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!activeOrgId || roleForActiveOrg === 'ADMIN') {
+      setCanMembers(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setCanMembers(false);
+
+    hasPermission(activeOrgId, 'members.read')
+      .then((result) => {
+        if (!cancelled) {
+          setCanMembers(Boolean(result));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCanMembers(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrgId, hasPermission, roleForActiveOrg]);
+
+  const showMembers = roleForActiveOrg === 'ADMIN' || canMembers;
+
+  if (!showMembers) return null;
+
+  return (
+    <NavLink to="/app/members" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition">
+      <span>Ledenbeheer</span>
+    </NavLink>
+  );
+}
+
 /******************** Sidebar (desktop) ********************/
 function RecentChatMenu({ chatId, onDelete }) {
   const [open, setOpen] = React.useState(false);
@@ -158,21 +203,17 @@ function RecentChatMenu({ chatId, onDelete }) {
         type="button"
         aria-label="Meer opties"
         title="Meer opties"
+        className="text-[#65676a] hover:text-[#194297]"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => {
-            const next = !v;
-            if (next) {
-              // vertel andere menus dat deze open gaat
-              window.dispatchEvent(new CustomEvent("recent-menu-open", { detail: idRef.current }));
-            }
-            return next;
-          });
+          setOpen((v) => !v);
+          window.dispatchEvent(new CustomEvent("recent-menu-open", { detail: idRef.current }));
         }}
-        className="h-6 w-6 grid place-items-center rounded hover:bg-gray-200 text-[#66676b]"
       >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="12" cy="19" r="2" />
         </svg>
       </button>
 
@@ -205,34 +246,6 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
 
-  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
-  const isAdmin = roleForActiveOrg === 'ADMIN';
-  const [membersGateReady, setMembersGateReady] = React.useState(false);
-  const [canSeeMembers, setCanSeeMembers] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (!isAdmin || !activeOrgId) {
-      setCanSeeMembers(false);
-      setMembersGateReady(true);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setMembersGateReady(false);
-    hasPermission(activeOrgId, 'members.read').then((result) => {
-      if (cancelled) return;
-      setCanSeeMembers(Boolean(result));
-      setMembersGateReady(true);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrgId, hasPermission, isAdmin]);
-
   // Tooltip (fixed gepositioneerd: geen horizontale scrollbar)
   const [tip, setTip] = React.useState({ text: "", x: 0, y: 0, show: false });
   function showTip(e, text) {
@@ -258,23 +271,23 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         style={{ width: sidebarWidth }}
         aria-expanded={expanded}
       >
-        {/* Toggle */}
-        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}> 
+        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
+          {/* Toggle button */}
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="h-6 w-6 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
-            aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
-            title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+            className={cx(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
+              expanded ? "justify-start text-[#66676b] hover:bg-gray-100" : "justify-center text-[#66676b] hover:bg-gray-100"
+            )}
+            aria-expanded={expanded}
           >
-            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <line x1="12" y1="4" x2="12" y2="20" />
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 19V9"/><path d="M15 19V5"/><path d="M9 19v-6"/><path d="M3 19v-2"/>
             </svg>
+            {expanded && <span className="whitespace-nowrap">Sidebar {expanded ? "inklappen" : "uitklappen"}</span>}
           </button>
-        </div>
 
-        <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
           {/* Nieuwe chat */}
           <div className="relative">
             <button
@@ -313,29 +326,8 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             </button>
           </div>
 
-          {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
-          {membersGateReady && isAdmin && canSeeMembers && (
-            <NavLink
-              to="/app/members"
-              title="Ledenbeheer"
-              className={({ isActive }) => [
-                "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
-                expanded ? "justify-start" : "justify-center",
-                isActive
-                  ? "bg-[#e8efff] text-[#194297]"
-                  : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]",
-              ].join(' ')}
-            >
-              {/* people/users icon */}
-              <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
-                <path
-                  fill="currentColor"
-                  d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
-                />
-              </svg>
-              {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
-            </NavLink>
-          )}
+          {/* --- Ledenbeheer --- */}
+          <MembersNavItem />
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
@@ -362,304 +354,322 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
                           title={raw}
                         >
                           <div className="text-[13px] text-[#194297] truncate">{label}</div>
+                          <div className="text-[11px] text-[#66676b] truncate">{new Date(c.updatedAt || c.createdAt || Date.now()).toLocaleString()}</div>
                         </button>
-                        <div className="ml-2 flex-shrink-0 relative">
-                          <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
-                        </div>
+                        <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
                       </div>
                     </li>
                   );
                 })}
-                {!recent?.length && (
-                  <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
-                )}
               </ul>
             </div>
           )}
-        </nav>
-
-        {/* Profiel onderaan (desktop sidebar) */}
-        <div className="mt-auto p-3 border-t border-gray-200">
-          <AuthProfileButton expanded={expanded} />
         </div>
+
+        {/* Tooltip */}
+        {tip.show && !expanded && createPortal(
+          <div
+            className="fixed z-[2000] pointer-events-none rounded-md bg-[#194297] text-white text-[12px] px-2 py-1 shadow-lg"
+            style={{ top: tip.y, left: tip.x, transform: "translateY(-50%)" }}
+          >
+            {tip.text}
+          </div>,
+          document.body
+        )}
       </aside>
-
-      {/* Tooltip renderer (fixed): subtiel en klein maar leesbaar */}
-      {tip.show && !expanded && (
-        <div
-          className="fixed z-50 px-2 py-1 rounded-md text-[11px] leading-none bg-white border border-gray-200 shadow-sm text-[#194297]"
-          style={{ left: tip.x, top: tip.y, transform: "translateY(-50%)" }}
-        >
-          {tip.text}
-        </div>
-      )}
     </>
   );
 }
 
-/******************** Mobile Drawer (hamburger) ********************/
+/******************** Mobile sidebar ********************/
 function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
-  return (
-    <div className={cx(
-      "md:hidden fixed inset-0 z-50 transition-opacity",
-      open ? "opacity-100" : "opacity-0 pointer-events-none"
-    )}>
-      {/* Scrim */}
-      <div
-        className={cx("absolute inset-0 bg-black/30 transition-opacity", open ? "opacity-100" : "opacity-0")}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      {/* Panel */}
+  const overlayRef = React.useRef(null);
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose?.();
+    }
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    function onClick(e) {
+      if (e.target === overlayRef.current) onClose?.();
+    }
+    if (open) {
+      overlayRef.current?.addEventListener("click", onClick);
+    }
+    return () => overlayRef.current?.removeEventListener("click", onClick);
+  }, [open, onClose]);
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      className={cx(
+        "fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity",
+        open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}
+    >
       <aside
         className={cx(
-          "absolute left-0 top-0 h-full w-[86vw] max-w-[360px]",
-          "bg-[#fbfbfd] text-[#1f2937] border-r border-[#e5e7eb]",
-          "shadow-xl transition-transform duration-300",
+          "absolute inset-y-0 left-0 w-72 bg-white shadow-xl border-r border-gray-200",
+          "transform transition-transform duration-300 ease-out",
           open ? "translate-x-0" : "-translate-x-full"
         )}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Zijmenu"
       >
-        {/* Header */}
-        <div className="h-14 flex items-center justify-between px-3 border-b border-[#eef1f6]">
-          <div className="flex items-center gap-2 text-[#194297] font-semibold text-sm">
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <line x1="12" y1="4" x2="12" y2="20" />
-            </svg>
-            Menu
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[14px] font-semibold text-[#194297]">Menu</h2>
+            <button type="button" className="text-[#66676b]" onClick={onClose} aria-label="Sluiten">
+              <svg viewBox="0 0 24 24" className="w-5 h-5" stroke="currentColor" fill="none" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
+
           <button
             type="button"
+            onClick={() => { onNewChat?.(); onClose?.(); }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] bg-[#194297] text-white"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            <span className="whitespace-nowrap">Nieuwe chat</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { onToggleFeed?.(); onClose?.(); }}
+            className={cx(
+              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px]",
+              feedOpen ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-gray-100"
+            )}
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+            </svg>
+            <span className="whitespace-nowrap">Insights</span>
+          </button>
+
+          <NavLink
+            to="/app/members"
             onClick={onClose}
-            className="h-8 w-8 grid place-items-center rounded-md text-gray-500 hover:text-gray-700"
-            aria-label="Sluiten"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#66676b] hover:bg-gray-100"
           >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6L6 18" />
+            <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
+              <path
+                fill="currentColor"
+                d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
+              />
             </svg>
-          </button>
-        </div>
-
-        {/* Acties */}
-        <nav className="px-2 py-2">
-          <button
-            type="button"
-            onClick={() => { onNewChat?.(); onClose(); }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#194297] hover:bg-gray-100"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
-            </svg>
-            <span className="text-[13px] font-medium">Nieuwe chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { onToggleFeed?.(); onClose(); }}
-            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[#1f2937] hover:bg-gray-100"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 10l12-5v14L3 14z" />
-              <path d="M15 5l6-2v18l-6-2" />
-            </svg>
-            <span className="text-[13px]">Insights</span>
-          </button>
-        </nav>
-
-        {/* Live feed */}
-        {feedOpen && (
-          <div className="px-3 pb-2">
-            <SidebarNewsFeed limit={3} />
-          </div>
-        )}
-
-        {/* Profiel onderaan (mobiele drawer open = full) */}
-        <div className="mt-auto absolute bottom-0 left-0 right-0 p-3 border-t border-[#eef1f6] bg-[#fbfbfd]">
-          <AuthProfileButton expanded={true} />
+            <span className="whitespace-nowrap">Ledenbeheer</span>
+          </NavLink>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
-/******************** Main ********************/
+/******************** Chat layout ********************/
 function BluelineChatpilotInner() {
-  const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+  const navigate = useNavigate();
   const location = useLocation();
-  const isMembers = location.pathname.startsWith('/members');
-const navigate = useNavigate();
-function goToChatRoute() {
-  if (location.pathname.startsWith('/members')) {
-    navigate('/app'); // of je chatroute (bijv. '/')
-  }
-}
+  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
 
-
-  // Layout state (sidebar moet altijd zichtbaar blijven, open/closed)
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState("chat"); // "chat" | "newsfeed"
 
-  // Recente chats/threads
   const [recent, setRecent] = useState([]);
-  const uidRef = useRef(null);
-  const currentChatIdRef = useRef(null);
-
-  // Chat state
-  const [messageType, setMessageType] = useState(loaded.messageType || "Social Media");
-  const tone = "Automatisch"; // geen UI-pills
-  const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
+  const [messageType, setMessageType] = useState(safeLoad().messageType || "Social Media");
+  const [tone, setTone] = useState(safeLoad().tone || "Automatisch");
+  const [profileKey, setProfileKey] = useState(safeLoad().profileKey || "default");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-
   const [messages, setMessages] = useState([]);
   const [heroTitle, setHeroTitle] = useState(timeWord()); // dagdeel prefix
   const [heroSub, setHeroSub] = useState(SUB_ROTATIONS[0]);
-
+  const [activeChatId, setActiveChatId] = useState(null);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
 
-  // Send-button fade + 200ms hide delay
-  const [showSend, setShowSend] = useState(false);
-  const [showSendDelayed, setShowSendDelayed] = useState(false);
-
-  const listRef = useRef(null);
   const inputRef = useRef(null);
+  const listRef = useRef(null);
   const copiedTimer = useRef(null);
 
-  // Init hero + rotaties
+  // Rotatie hero-sub
   useEffect(() => {
-    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
-    const i = setInterval(() => {
-      setHeroTitle(timeWord());
-      setHeroSub(SUB_ROTATIONS[Math.floor(Math.random() * SUB_ROTATIONS.length)]);
-    }, 7000);
-    return () => clearInterval(i);
+    const interval = setInterval(() => {
+      setHeroSub((prev) => {
+        const idx = SUB_ROTATIONS.indexOf(prev);
+        const next = (idx + 1) % SUB_ROTATIONS.length;
+        return SUB_ROTATIONS[next];
+      });
+    }, 4000);
+    return () => clearInterval(interval);
   }, []);
 
+  // Load recent
+  useEffect(() => {
+    fetchRecentChats().then(setRecent);
+  }, []);
+
+  // Load active chat from URL
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const chatId = params.get("chat");
+    if (!chatId) {
+      setActiveChatId(null);
+      setMessages([]);
+      setInput("");
+      return;
+    }
+    getThread(chatId).then((thread) => {
+      if (thread) {
+        setActiveChatId(chatId);
+        setMessages(thread.messages || []);
+        setMessageType(thread.meta?.messageType || "Social Media");
+        setTone(thread.meta?.tone || "Automatisch");
+        setProfileKey(thread.meta?.profileKey || "default");
+      }
+    });
+  }, [location.search]);
+
+  // Watch message input -> show send button
+  const [showSend, setShowSend] = useState(false);
+  const [showSendDelayed, setShowSendDelayed] = useState(false);
   useEffect(() => { setShowSend(input.trim().length > 0); }, [input]);
   useEffect(() => { if (showSend) setShowSendDelayed(true); else { const t = setTimeout(() => setShowSendDelayed(false), 200); return () => clearTimeout(t); } }, [showSend]);
   useEffect(() => { listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { if (inputRef.current) autoresizeTextarea(inputRef.current); return () => copiedTimer.current && clearTimeout(copiedTimer.current); }, []);
   useEffect(() => { safeSave({ messageType, tone, profileKey }); }, [messageType, tone, profileKey]);
 
-  // Init anonId + recents + start chatId
   useEffect(() => {
-    uidRef.current = getAnonId();
-    setRecent(fetchRecentChats(uidRef.current));
-    if (!currentChatIdRef.current) currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-  }, []);
-
-  const onInputChange = (e) => { setInput(e.target.value); autoresizeTextarea(e.target); };
-
-  async function handleSend(e) {
-    e?.preventDefault();
-    const trimmed = (input || "").trim();
-    if (!trimmed) return;
-    // verwijder hero zodra eerste user message komt
-    setMessages((prev) => prev.filter((m) => m.text !== "__hero__"));
-    setMessages((prev) => [...prev, { role: "user", text: trimmed, meta: { type: messageType, tone, profileKey } }]);
-    setInput(""); if (inputRef.current) autoresizeTextarea(inputRef.current);
-    setIsTyping(true);
-    try {
-      const r = await fetch("/.netlify/functions/generate-gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone, profileKey }),
-      });
-      const data = await r.json();
-      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
-
-      // Opslaan in thread + recents
-      const chatId = currentChatIdRef.current;
-      const uid = uidRef.current;
-      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
-      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
-      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
-      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
-    } catch {
-      const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
-      const chatId = currentChatIdRef.current;
-      const uid = uidRef.current;
-      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
-      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
-      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
-      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
-    } finally { setIsTyping(false); }
-  }
-
-  function handleCopied(id) {
-    setCopiedId(id);
-    if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    copiedTimer.current = setTimeout(() => setCopiedId(null), 1400);
-  }
-
-  const openNewsfeedMobile = () => { setMobileView("newsfeed"); setMobileMenuOpen(false); };
-  const backToChatMobile = () => setMobileView("chat");
+    const key = activeChatId;
+    if (!key) return;
+    saveRecentChat(key, {
+      id: key,
+      title: messages[0]?.content?.slice(0, 40) || "Chat",
+      updatedAt: Date.now(),
+    }).then(fetchRecentChats).then(setRecent);
+  }, [messages, activeChatId]);
 
   function handleNewChat() {
-  // maak nieuwe chatId
-  const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-  currentChatIdRef.current = newId;
-
-  // reset lijst en input
-  setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
-  setInput("");
-  setIsTyping(false);
-
-  // ga (indien nodig) naar chatroute (weg uit /members)
-  goToChatRoute();
-
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
-
-
-
-  // Recall & delete
-  function loadChat(chatId) {
-  const uid = uidRef.current;
-  const thread = getThread(uid, chatId);
-
-  // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
-  currentChatIdRef.current = chatId;
-
-  if (Array.isArray(thread) && thread.length) {
-    setMessages(thread);
-  } else {
-    // toon hero als placeholder
-    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    const newId = crypto.randomUUID();
+    setActiveChatId(newId);
+    setMessages([]);
+    setInput("");
+    setMessageType("Social Media");
+    setTone("Automatisch");
+    setProfileKey("default");
+    navigate(`?chat=${newId}`);
   }
 
-  // verlaat /members en ga naar chatroute
-  goToChatRoute();
+  function handleSend() {
+    const trimmed = input.trim();
+    if (!trimmed) return;
 
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: trimmed,
+      createdAt: Date.now(),
+    };
 
-  function handleDeleteChat(chatId) {
-    const uid = uidRef.current;
-    deleteThread(uid, chatId);
-    setRecent(deleteRecentChat(uid, chatId));
-    if (currentChatIdRef.current === chatId) {
-      currentChatIdRef.current = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-      setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    const fakeAssistant = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: generateAssistantReply(trimmed, messageType, tone),
+      createdAt: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, fakeAssistant]);
+    setInput("");
+    setIsTyping(false);
+    setHeroTitle(timeWord());
+
+    if (inputRef.current) {
+      inputRef.current.style.height = "0px";
+      inputRef.current.style.height = "52px";
+    }
+
+    const chatId = activeChatId || crypto.randomUUID();
+    if (!activeChatId) {
+      setActiveChatId(chatId);
+      navigate(`?chat=${chatId}`, { replace: true });
+    }
+
+    appendToThread(chatId, {
+      messages: [userMessage, fakeAssistant],
+      meta: { messageType, tone, profileKey },
+    });
+
+    saveRecentChat(chatId, {
+      id: chatId,
+      title: trimmed.slice(0, 40),
+      updatedAt: Date.now(),
+    }).then(fetchRecentChats).then(setRecent);
+  }
+
+  async function handleDeleteChat(chatId) {
+    await deleteThread(chatId);
+    await deleteRecentChat(chatId);
+    setRecent(await fetchRecentChats());
+    if (activeChatId === chatId) {
+      navigate(`?`, { replace: true });
+      setActiveChatId(null);
+      setMessages([]);
+      setInput("");
     }
   }
 
-  const containerMaxW = isMembers ? 'max-w-[960px]' : 'max-w-[760px]';
+  function onInputChange(e) {
+    setInput(e.target.value);
+    setIsTyping(e.target.value.trim().length > 0);
+  }
+
+  function onCopy(messageId, text) {
+    setCopiedId(messageId);
+    copyToClipboard(text);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  function openNewsfeedMobile() {
+    setMobileView((prev) => prev === "chat" ? "newsfeed" : "chat");
+  }
+
+  const showMembersLink = roleForActiveOrg === 'ADMIN';
+  const [canSeeMembers, setCanSeeMembers] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!activeOrgId || roleForActiveOrg === 'ADMIN') {
+      setCanSeeMembers(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setCanSeeMembers(false);
+
+    hasPermission(activeOrgId, 'members.read').then((result) => {
+      if (!cancelled) {
+        setCanSeeMembers(Boolean(result));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrgId, hasPermission, roleForActiveOrg]);
 
   return (
-    <div className="fixed inset-0 bg-white text-[#65676a]">
-      {/* Desktop sidebar — blijft zichtbaar (open/closed), ook op /members */}
+    <div className="min-h-screen bg-[#f2f5fb] flex">
+      {/* Desktop sidebar */}
       <AppSidebar
         open={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
@@ -667,126 +677,150 @@ function goToChatRoute() {
         feedOpen={feedOpen}
         onNewChat={handleNewChat}
         recent={recent}
-        loadChat={loadChat}
+        loadChat={(chatId) => navigate(`?chat=${chatId}`)}
         onDeleteChat={handleDeleteChat}
       />
 
-      {/* Handle wanneer sidebar dicht is (klein knopje) */}
-      {!sidebarOpen && (
-        <button
-          type="button"
-          onClick={() => setSidebarOpen(true)}
-          className="hidden md:flex fixed left-0 top-3 h-8 w-8 rounded-r-full bg-white border border-gray-200 shadow-sm text-[#66676b] hover:text-[#194297] items-center justify-center"
-          aria-label="Zijbalk tonen"
-          title="Zijbalk tonen"
-        >
-          <svg viewBox="0 0 24 24" className="w-4.5 h-4.5" fill="currentColor">
-            <circle cx="12" cy="8" r="1.25"/><circle cx="12" cy="16" r="1.25"/>
-          </svg>
-        </button>
-      )}
+      {/* Content */}
+      <div className="flex-1 flex flex-col md:ml-[56px] lg:ml-[256px] transition-[margin] duration-300 ease-out">
+        {/* Top bar */}
+        <header className="sticky top-0 z-20 bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+            <button
+              type="button"
+              className="md:hidden text-[#194297]"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Menu"
+            >
+              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
 
-      {/* Main kolom met linker marge afhankelijk van sidebar state */}
-      <div className={cx(
-        "h-full flex flex-col transition-[margin] duration-300",
-        sidebarOpen ? "md:ml-64" : "md:ml-14"
-      )}>
-        {/* Header: hamburger alleen mobiel */}
-        <header className="h-14 flex items-center gap-2 px-3 border-b md:border-0">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden h-9 w-9 grid place-items-center rounded-md text-[#194297] hover:bg-gray-100"
-            aria-label="Zijmenu openen"
-          >
-            <svg viewBox="0 0 24 24" className="w-5.5 h-5.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 6h16M4 12h16M4 18h10" />
-            </svg>
-          </button>
-          <h1 className="text-[15px] md:text:base font-semibold text-[#194297]">Blueline Chatpilot</h1>
-          <p className="hidden sm:block ml-3 text-sm text-[#66676b]">Jouw 24/7 assistent voor klantcontact</p>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] text-[#66676b]">Blueline Chatpilot</div>
+              <div className="text-[18px] font-semibold text-[#194297] truncate">{heroTitle}</div>
+              <div className="text-[13px] text-[#66676b] truncate">{heroSub}</div>
+            </div>
+
+            <div className="hidden md:flex items-center gap-3">
+              {(showMembersLink || canSeeMembers) && (
+                <NavLink
+                  to="/app/members"
+                  className="flex items-center gap-2 px-3 py-1.5 text-[13px] rounded-md border border-[#d6def3] text-[#194297] hover:bg-[#eef3ff]"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" className="shrink-0">
+                    <path
+                      fill="currentColor"
+                      d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
+                    />
+                  </svg>
+                  <span>Ledenbeheer</span>
+                </NavLink>
+              )}
+
+              <AuthProfileButton />
+            </div>
+          </div>
         </header>
 
-        {/* Mobile fullscreen Insights */}
-        {mobileView === "newsfeed" && (
-          <div className="md:hidden fixed inset-0 z-40 bg-white">
-            <div className="h-14 border-b flex items-center px-3 gap-2">
-              <button className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-gray-100" onClick={backToChatMobile} aria-label="Terug">
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path dName="M15 18l-6-6 6-6"/></svg>
-              </button>
-              <div className="text-sm font-semibold text-[#194297]">Insights</div>
-            </div>
-            <div className="p-3 space-y-3 overflow-y-auto h-[calc(100vh-56px)]">
-              <SidebarNewsFeed limit={3} variant="full" />
-            </div>
-          </div>
-        )}
+        {/* Main */}
+        <main className="flex-1">
+          <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-4 px-4 py-6">
+            {/* Chat area */}
+            <section className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm bg-[#eef3ff] text-[#194297]"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                  Nieuwe chat
+                </button>
 
-        {/* Scrollable viewport */}
-        <main className="flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <div className={cx("mx-auto w-full px-4 md:px-5", containerMaxW)}>
-            {isMembers ? (
-              // ===== /members: MembersAdmin binnen de layout, gecentreerd (max-w-960) =====
-              <div className="py-5">
-                <MembersAdmin />
+                <div className="hidden sm:flex items-center gap-2">
+                  <span className="text-[13px] text-[#66676b]">Type:</span>
+                  <div className="inline-flex rounded-lg bg-[#f5f7fb] p-1">
+                    {["Social Media", "E-mail"].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setMessageType(t)}
+                        className={cx(
+                          "px-3 py-1 text-[12px] rounded-md transition-colors",
+                          messageType === t ? "bg-white text-[#194297] shadow-sm" : "text-[#66676b]"
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="hidden md:flex items-center gap-2">
+                  <span className="text-[13px] text-[#66676b]">Toon:</span>
+                  <div className="inline-flex rounded-lg bg-[#f5f7fb] p-1">
+                    {["Automatisch", "Informeel", "Formeel"].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTone(t)}
+                        className={cx(
+                          "px-3 py-1 text-[12px] rounded-md transition-colors",
+                          tone === t ? "bg-white text-[#194297] shadow-sm" : "text-[#66676b]"
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="ml-auto md:hidden">
+                  <AuthProfileButton />
+                </div>
               </div>
-            ) : (
-              // ===== Andere routes: Chat gecentreerd (max-w-760) =====
-              <>
-                {/* Hero greeting zolang er geen user-message is */}
-                {!messages.some(m=>m.role === "user") ? (
-                  <div className="h-[calc(100vh-14rem)] flex flex-col items-center justify-center text-center select-none">
-                    <div className="translate-y-[-4vh] md:translate-y-[-6vh]">
-                      <div className="text-3xl md:text-4xl font-semibold text-[#194297]">{heroTitle}</div>
-                      <div className="mt-2 text-sm text-[#66676b]">{heroSub}</div>
-                    </div>
+
+              <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4" ref={listRef}>
+                {messages.length === 0 ? (
+                  <div className="text-center text-[#66676b] text-[14px]">
+                    <div className="text-[16px] font-semibold text-[#194297] mb-2">Start een gesprek</div>
+                    <p>Typ een vraag of plak een klantbericht, dan helpt Chatpilot je met een voorstel.</p>
                   </div>
                 ) : (
-                  <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
-                    {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
-                      const isUser = m.role === "user";
-                      return (
-                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                          <div className={cx(
-                            "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                            isUser
-                              ? "bg-[#2563eb] text-white"
-                              : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                          )}>{m.text}</div>
-                          {!isUser && (
-                            <div className="-mt-1 ml-2 self:end"> 
-                              <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {isTyping && (
-                      <div className="flex justify-start">
-                        <div className="max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 bg:white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]">
-                          <span className="relative inline-block w-6 h-2 align-middle">
-                            <span className="absolute left-0 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:-0.2s]"/>
-                            <span className="absolute left-2 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce"/>
-                            <span className="absolute left-4 top-0 w-1.5 h-1.5 rounded-full bg-[#66676b] animate-bounce [animation-delay:0.2s]"/>
-                          </span>
-                          <span className="ml-2">Typen…</span>
-                        </div>
+                  messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={cx(
+                        "rounded-2xl px-4 py-3 max-w-[85%] shadow-sm border border-gray-100",
+                        msg.role === "user" ? "ml-auto bg-[#eef3ff]" : "mr-auto bg-white"
+                      )}
+                    >
+                      <div className="text-[11px] uppercase tracking-wide text-[#66676b] mb-1">
+                        {msg.role === "user" ? "Jij" : "Chatpilot"}
                       </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </main>
+                      <div className="text-[14px] text-[#333] whitespace-pre-line leading-6">{msg.content}</div>
 
-        {/* Dock/tekstinvoer: blijft zoals het is — NIET renderen op /members */}
-        {!isMembers && (
-          <div className="bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-            <form onSubmit={handleSend} className="mx-auto max-w-[760px] px-4 md:px-5 py-3">
-              <div className="relative rounded-2xl border border-gray-200 bg-white">
-                {/* textarea */}
-                <div className="px-4 pt-3 pb-10">
+                      <div className="mt-2 flex items-center gap-3 text-[11px] text-[#66676b]">
+                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        {msg.role === "assistant" && (
+                          <CopyButton
+                            id={msg.id}
+                            text={msg.content}
+                            onCopied={(id) => onCopy(id, msg.content)}
+                            isCopied={copiedId === msg.id}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <form
+                className="border-t border-gray-100 bg-[#f9fbff] relative"
+                onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+              >
+                <div className="relative">
                   <textarea
                     ref={inputRef}
                     rows={1}
@@ -853,24 +887,47 @@ function goToChatRoute() {
                     )}
                   </div>
                 </div>
-              </div>
-            </form>
+              </form>
 
-            {/* Disclaimer */}
-            <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
+              {/* Disclaimer */}
+              <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
+            </section>
+
+            {/* Newsfeed */}
+            <aside className={cx(
+              "lg:w-80 flex-shrink-0 transition-transform duration-300 ease-out",
+              feedOpen ? "translate-x-0" : "translate-x-[110%] lg:translate-x-0"
+            )}>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="text-[15px] font-semibold text-[#194297]">Nieuws & updates</h3>
+                  <button
+                    type="button"
+                    className="text-[#66676b] hover:text-[#194297] lg:hidden"
+                    onClick={() => setFeedOpen(false)}
+                    aria-label="Sluiten"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  <SidebarNewsFeed limit={5} />
+                </div>
+              </div>
+            </aside>
           </div>
-        )}
+        </main>
       </div>
 
       {/* Mobile off-canvas sidebar */}
       <MobileSidebar
-  open={mobileMenuOpen}
-  onClose={() => setMobileMenuOpen(false)}
-  onNewChat={() => { handleNewChat(); setMobileMenuOpen(false); }}
-  onToggleFeed={openNewsfeedMobile}
-  feedOpen={feedOpen}
-/>
-
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        onNewChat={() => { handleNewChat(); setMobileMenuOpen(false); }}
+        onToggleFeed={openNewsfeedMobile}
+        feedOpen={feedOpen}
+      />
     </div>
   );
 }
