@@ -290,24 +290,19 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
 
           {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
 {session && roleForActiveOrg === 'ADMIN' && (
-  <NavLink
-    to="/members"
+  <a
+    href="/members"
     title="Ledenbeheer"
     onClick={(e) => {
-      // Forceer navigatie, zelfs als een parent preventDefault() doet
-      e.preventDefault();
+      // blokkeer eventuele parent-handlers, maar laat browser-navigatie doorgaan
       e.stopPropagation();
-      window.location.assign('/app/members');
+      // géén preventDefault → native navigatie wint altijd
     }}
-    className={({ isActive }) =>
-      cx(
-        "group relative z-10 flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
-        expanded ? "justify-start" : "justify-center",
-        isActive
-          ? "bg-[#e8efff] text-[#194297]"
-          : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
-      )
-    }
+    className={cx(
+      "group relative z-50 pointer-events-auto flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
+      expanded ? "justify-start" : "justify-center",
+      "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+    )}
   >
     <svg
       viewBox="0 0 24 24"
@@ -324,8 +319,9 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
       <path d="M14 14c4.42 0 8 1.79 8 4v 1" />
     </svg>
     {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
-  </NavLink>
+  </a>
 )}
+
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
