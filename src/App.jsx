@@ -53,14 +53,13 @@ export default function App() {
           />
 
           <Route
-            path="/app/members"
-            element={
-              <ProtectedAdmin>
-                <MembersAdmin />
-              </ProtectedAdmin>
-            }
-          />
-
+  path="/members"
+  element={
+    <ProtectedAdmin>
+      <MembersAdmin />
+    </ProtectedAdmin>
+  }
+/>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </BrowserRouter>

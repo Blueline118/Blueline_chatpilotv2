@@ -291,7 +291,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
           {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
 {session && roleForActiveOrg === 'ADMIN' && (
   <NavLink
-    to="/app/members"
+    to="/members"
     title="Ledenbeheer"
     onClick={(e) => {
       // Forceer navigatie, zelfs als een parent preventDefault() doet
