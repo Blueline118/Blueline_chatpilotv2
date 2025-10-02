@@ -60,6 +60,9 @@ export default function App() {
     </ProtectedAdmin>
   }
 />
+
+<Route path="/app/members" element={<Navigate to="/members" replace />} />
+
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </BrowserRouter>
