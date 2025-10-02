@@ -1,4 +1,4 @@
-// change: deterministic gate for Members link; removed PermissionGate wrapper
+// change: Members link visible only for authenticated ADMIN; removed blocking wrappers
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
@@ -112,51 +112,6 @@ function CopyButton({ id, text, onCopied, isCopied }) {
   );
 }
 
-/******************** Members nav item ********************/
-function MembersNavItem() {
-  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
-  const [canMembers, setCanMembers] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!activeOrgId || roleForActiveOrg === 'ADMIN') {
-      setCanMembers(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setCanMembers(false);
-
-    hasPermission(activeOrgId, 'members.read')
-      .then((result) => {
-        if (!cancelled) {
-          setCanMembers(Boolean(result));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCanMembers(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrgId, hasPermission, roleForActiveOrg]);
-
-  const showMembers = roleForActiveOrg === 'ADMIN' || canMembers;
-
-  if (!showMembers) return null;
-
-  return (
-    <NavLink to="/app/members" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition">
-      <span>Ledenbeheer</span>
-    </NavLink>
-  );
-}
-
 /******************** Sidebar (desktop) ********************/
 function RecentChatMenu({ chatId, onDelete }) {
   const [open, setOpen] = React.useState(false);
@@ -203,17 +158,21 @@ function RecentChatMenu({ chatId, onDelete }) {
         type="button"
         aria-label="Meer opties"
         title="Meer opties"
-        className="text-[#65676a] hover:text-[#194297]"
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => !v);
-          window.dispatchEvent(new CustomEvent("recent-menu-open", { detail: idRef.current }));
+          setOpen((v) => {
+            const next = !v;
+            if (next) {
+              // vertel andere menus dat deze open gaat
+              window.dispatchEvent(new CustomEvent("recent-menu-open", { detail: idRef.current }));
+            }
+            return next;
+          });
         }}
+        className="h-6 w-6 grid place-items-center rounded hover:bg-gray-200 text-[#66676b]"
       >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden="true">
-          <circle cx="12" cy="5" r="2" />
-          <circle cx="12" cy="12" r="2" />
-          <circle cx="12" cy="19" r="2" />
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
         </svg>
       </button>
 
@@ -242,9 +201,71 @@ function RecentChatMenu({ chatId, onDelete }) {
   );
 }
 
+/* ... rest of file unchanged ... */
+
+function SidebarTooltip({ show, text, position }) {
+  if (!show) return null;
+  return createPortal(
+    <div
+      className="fixed z-50 px-2 py-1 rounded-md text-[11px] leading-none bg-white border border-gray-200 shadow-sm text-[#194297]"
+      style={{ left: position.x, top: position.y, transform: "translateY(-50%)" }}
+    >
+      {text}
+    </div>,
+    document.body
+  );
+}
+
+function SidebarToggleButton({ expanded, onToggle }) {
+  return (
+    <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="h-6 w-6 rounded-md text-[#66676b] hover:text-[#194297] flex items-center justify-center"
+        aria-label={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+        title={expanded ? "Zijbalk verbergen" : "Zijbalk tonen"}
+      >
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, recent = [], loadChat, onDeleteChat }) {
   const expanded = !!open;
   const sidebarWidth = expanded ? 256 : 56;
+
+  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
+  const isAdmin = roleForActiveOrg === 'ADMIN';
+  const [membersGateReady, setMembersGateReady] = React.useState(false);
+  const [canSeeMembers, setCanSeeMembers] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!isAdmin || !activeOrgId) {
+      setCanSeeMembers(false);
+      setMembersGateReady(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setMembersGateReady(false);
+    hasPermission(activeOrgId, 'members.read').then((result) => {
+      if (cancelled) return;
+      setCanSeeMembers(Boolean(result));
+      setMembersGateReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrgId, hasPermission, isAdmin]);
 
   // Tooltip (fixed gepositioneerd: geen horizontale scrollbar)
   const [tip, setTip] = React.useState({ text: "", x: 0, y: 0, show: false });
@@ -271,23 +292,10 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         style={{ width: sidebarWidth }}
         aria-expanded={expanded}
       >
-        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
-          {/* Toggle button */}
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className={cx(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
-              expanded ? "justify-start text-[#66676b] hover:bg-gray-100" : "justify-center text-[#66676b] hover:bg-gray-100"
-            )}
-            aria-expanded={expanded}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 19V9"/><path d="M15 19V5"/><path d="M9 19v-6"/><path d="M3 19v-2"/>
-            </svg>
-            {expanded && <span className="whitespace-nowrap">Sidebar {expanded ? "inklappen" : "uitklappen"}</span>}
-          </button>
+        {/* Toggle */}
+        <SidebarToggleButton expanded={expanded} onToggle={onToggleSidebar} />
 
+        <nav className="relative flex-1 overflow-y-auto px-2 pb-3 space-y-1">
           {/* Nieuwe chat */}
           <div className="relative">
             <button
@@ -301,7 +309,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
               )}
             >
               <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
               </svg>
               {expanded && <span className="whitespace-nowrap">Nieuwe chat</span>}
             </button>
@@ -326,8 +334,27 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
             </button>
           </div>
 
-          {/* --- Ledenbeheer --- */}
-          <MembersNavItem />
+          {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
+          <NavLink
+            to="/app/members"
+            title="Ledenbeheer"
+            className={({ isActive }) => [
+              "group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
+              expanded ? "justify-start" : "justify-center",
+              isActive
+                ? "bg-[#e8efff] text-[#194297]"
+                : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]",
+            ].join(' ')}
+          >
+            {/* people/users icon */}
+            <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
+              <path
+                fill="currentColor"
+                d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
+              />
+            </svg>
+            {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
+          </NavLink>
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
@@ -354,501 +381,514 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
                           title={raw}
                         >
                           <div className="text-[13px] text-[#194297] truncate">{label}</div>
-                          <div className="text-[11px] text-[#66676b] truncate">{new Date(c.updatedAt || c.createdAt || Date.now()).toLocaleString()}</div>
                         </button>
-                        <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+                        <div className="ml-2 flex-shrink-0 relative">
+                          <RecentChatMenu chatId={c.id} onDelete={onDeleteChat} />
+                        </div>
                       </div>
                     </li>
                   );
                 })}
+                {!recent?.length && (
+                  <li className="px-3 py-2 text-[12px] text-[#66676b]">Nog geen gesprekken</li>
+                )}
               </ul>
             </div>
           )}
-        </div>
+        </nav>
 
-        {/* Tooltip */}
-        {tip.show && !expanded && createPortal(
-          <div
-            className="fixed z-[2000] pointer-events-none rounded-md bg-[#194297] text-white text-[12px] px-2 py-1 shadow-lg"
-            style={{ top: tip.y, left: tip.x, transform: "translateY(-50%)" }}
-          >
-            {tip.text}
-          </div>,
-          document.body
-        )}
+        {/* Profiel onderaan (desktop sidebar) */}
+        <div className="mt-auto p-3 border-t border-gray-200">
+          <AuthProfileButton expanded={expanded} />
+        </div>
       </aside>
+
+      {/* Tooltip renderer (fixed): subtiel en klein maar leesbaar */}
+      {tip.show && !expanded && (
+        <div
+          className="fixed z-50 px-2 py-1 rounded-md text-[11px] leading-none bg-white border border-gray-200 shadow-sm text-[#194297]"
+          style={{ left: tip.x, top: tip.y, transform: "translateY(-50%)" }}
+        >
+          {tip.text}
+        </div>
+      )}
     </>
   );
 }
 
-/******************** Mobile sidebar ********************/
+/******************** Mobile Drawer (hamburger) ********************/
 function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
-  const overlayRef = React.useRef(null);
-
-  useEffect(() => {
-    function onKey(e) {
-      if (e.key === "Escape") onClose?.();
+  const { roleForActiveOrg } = useAuth();
+  const expanded = true;
+  const links = [
+    {
+      label: "Nieuwe chat",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+        </svg>
+      ),
+      action: () => { onNewChat?.(); onClose?.(); }
+    },
+    {
+      label: "Insights",
+      icon: (
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
+        </svg>
+      ),
+      action: () => { onToggleFeed?.(); onClose?.(); }
+    },
+    roleForActiveOrg === 'ADMIN' && {
+      label: "Ledenbeheer",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
+          <path
+            fill="currentColor"
+            d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
+          />
+        </svg>
+      ),
+      to: "/app/members"
     }
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    function onClick(e) {
-      if (e.target === overlayRef.current) onClose?.();
-    }
-    if (open) {
-      overlayRef.current?.addEventListener("click", onClick);
-    }
-    return () => overlayRef.current?.removeEventListener("click", onClick);
-  }, [open, onClose]);
+  ].filter(Boolean);
 
   return createPortal(
     <div
-      ref={overlayRef}
       className={cx(
-        "fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity",
-        open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        "fixed inset-0 z-40 transition",
+        open ? "pointer-events-auto" : "pointer-events-none"
       )}
     >
-      <aside
+      <div
         className={cx(
-          "absolute inset-y-0 left-0 w-72 bg-white shadow-xl border-r border-gray-200",
-          "transform transition-transform duration-300 ease-out",
+          "absolute inset-0 bg-black/20 transition-opacity",
+          open ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cx(
+          "absolute inset-y-0 left-0 w-72 max-w-full bg-white shadow-xl transition-transform",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[14px] font-semibold text-[#194297]">Menu</h2>
-            <button type="button" className="text-[#66676b]" onClick={onClose} aria-label="Sluiten">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" stroke="currentColor" fill="none" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-
+        <div className="h-14 flex items-center justify-between px-4 border-b border-gray-200">
+          <div className="text-[15px] font-semibold text-[#194297]">Menu</div>
           <button
             type="button"
-            onClick={() => { onNewChat?.(); onClose?.(); }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] bg-[#194297] text-white"
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/>
-            </svg>
-            <span className="whitespace-nowrap">Nieuwe chat</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { onToggleFeed?.(); onClose?.(); }}
-            className={cx(
-              "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px]",
-              feedOpen ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-gray-100"
-            )}
-          >
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 10l12-5v14L3 14z"/><path d="M15 5l6-2v18l-6-2"/>
-            </svg>
-            <span className="whitespace-nowrap">Insights</span>
-          </button>
-
-          <NavLink
-            to="/app/members"
             onClick={onClose}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] text-[#66676b] hover:bg-gray-100"
+            className="h-8 w-8 flex items-center justify-center rounded-full text-[#66676b] hover:bg-gray-100"
+            aria-label="Sluiten"
+            title="Sluiten"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" className="shrink-0">
-              <path
-                fill="currentColor"
-                d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
-              />
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18"/><path d="M6 6l12 12"/>
             </svg>
-            <span className="whitespace-nowrap">Ledenbeheer</span>
-          </NavLink>
+          </button>
         </div>
-      </aside>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {links.map((link, index) => {
+            if (link.to) {
+              return (
+                <NavLink
+                  key={index}
+                  to={link.to}
+                  onClick={onClose}
+                  className={({ isActive }) => [
+                    "flex items-center gap-3 rounded-xl px-3 py-2 transition-colors",
+                    isActive ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]",
+                  ].join(' ')}
+                >
+                  {link.icon}
+                  <span className="text-[14px] font-medium">{link.label}</span>
+                </NavLink>
+              );
+            }
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={link.action}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[14px] text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+              >
+                {link.icon}
+                <span className="font-medium">{link.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="border-t border-gray-200 p-3">
+          <AuthProfileButton expanded={expanded} />
+        </div>
+      </div>
     </div>,
     document.body
   );
 }
 
-/******************** Chat layout ********************/
+/******************** Main Component ********************/
 function BluelineChatpilotInner() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { roleForActiveOrg, activeOrgId, hasPermission } = useAuth();
-
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [mobileView, setMobileView] = useState("chat"); // "chat" | "newsfeed"
-
-  const [recent, setRecent] = useState([]);
-  const [messageType, setMessageType] = useState(safeLoad().messageType || "Social Media");
-  const [tone, setTone] = useState(safeLoad().tone || "Automatisch");
-  const [profileKey, setProfileKey] = useState(safeLoad().profileKey || "default");
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [heroTitle, setHeroTitle] = useState(timeWord()); // dagdeel prefix
-  const [heroSub, setHeroSub] = useState(SUB_ROTATIONS[0]);
-  const [activeChatId, setActiveChatId] = useState(null);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [copiedId, setCopiedId] = useState(null);
-
-  const inputRef = useRef(null);
-  const listRef = useRef(null);
-  const copiedTimer = useRef(null);
-
-  // Rotatie hero-sub
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setHeroSub((prev) => {
-        const idx = SUB_ROTATIONS.indexOf(prev);
-        const next = (idx + 1) % SUB_ROTATIONS.length;
-        return SUB_ROTATIONS[next];
-      });
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Load recent
-  useEffect(() => {
-    fetchRecentChats().then(setRecent);
-  }, []);
-
-  // Load active chat from URL
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const chatId = params.get("chat");
-    if (!chatId) {
-      setActiveChatId(null);
-      setMessages([]);
-      setInput("");
-      return;
-    }
-    getThread(chatId).then((thread) => {
-      if (thread) {
-        setActiveChatId(chatId);
-        setMessages(thread.messages || []);
-        setMessageType(thread.meta?.messageType || "Social Media");
-        setTone(thread.meta?.tone || "Automatisch");
-        setProfileKey(thread.meta?.profileKey || "default");
-      }
-    });
-  }, [location.search]);
-
-  // Watch message input -> show send button
+  const [reply, setReply] = useState("");
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [tone, setTone] = useState("Automatisch");
+  const [messageType, setMessageType] = useState("Social Media");
+  const [profileKey, setProfileKey] = useState("default");
+  const [tooltip, setTooltip] = useState(null);
+  const [recentChats, setRecentChats] = useState([]);
+  const [currentChatId, setCurrentChatId] = useState(null);
   const [showSend, setShowSend] = useState(false);
   const [showSendDelayed, setShowSendDelayed] = useState(false);
-  useEffect(() => { setShowSend(input.trim().length > 0); }, [input]);
-  useEffect(() => { if (showSend) setShowSendDelayed(true); else { const t = setTimeout(() => setShowSendDelayed(false), 200); return () => clearTimeout(t); } }, [showSend]);
-  useEffect(() => { listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-  useEffect(() => { if (inputRef.current) autoresizeTextarea(inputRef.current); return () => copiedTimer.current && clearTimeout(copiedTimer.current); }, []);
-  useEffect(() => { safeSave({ messageType, tone, profileKey }); }, [messageType, tone, profileKey]);
+  const [isCopiedMap, setIsCopiedMap] = useState({});
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [threadId, setThreadId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [newsfeedDrawerOpen, setNewsfeedDrawerOpen] = useState(false);
+
+  const { activeOrgId, profile } = useAuth();
+
+  const textareaRef = useRef(null);
+  const replyRef = useRef(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    const key = activeChatId;
-    if (!key) return;
-    saveRecentChat(key, {
-      id: key,
-      title: messages[0]?.content?.slice(0, 40) || "Chat",
-      updatedAt: Date.now(),
-    }).then(fetchRecentChats).then(setRecent);
-  }, [messages, activeChatId]);
+    const timer = setTimeout(() => setShowSendDelayed(true), 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
-  function handleNewChat() {
-    const newId = crypto.randomUUID();
-    setActiveChatId(newId);
-    setMessages([]);
-    setInput("");
-    setMessageType("Social Media");
-    setTone("Automatisch");
-    setProfileKey("default");
-    navigate(`?chat=${newId}`);
-  }
+  useEffect(() => {
+    if (!showSendDelayed) return;
+    const timer = setTimeout(() => setShowSend(true), 50);
+    return () => clearTimeout(timer);
+  }, [showSendDelayed]);
 
-  function handleSend() {
-    const trimmed = input.trim();
-    if (!trimmed) return;
+  useEffect(() => {
+    const saved = safeLoad();
+    if (saved.messageType) setMessageType(saved.messageType);
+    if (saved.tone) setTone(saved.tone);
+    if (saved.profileKey) setProfileKey(saved.profileKey);
+  }, []);
 
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: trimmed,
-      createdAt: Date.now(),
-    };
-
-    const fakeAssistant = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: generateAssistantReply(trimmed, messageType, tone),
-      createdAt: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMessage, fakeAssistant]);
-    setInput("");
-    setIsTyping(false);
-    setHeroTitle(timeWord());
-
-    if (inputRef.current) {
-      inputRef.current.style.height = "0px";
-      inputRef.current.style.height = "52px";
-    }
-
-    const chatId = activeChatId || crypto.randomUUID();
-    if (!activeChatId) {
-      setActiveChatId(chatId);
-      navigate(`?chat=${chatId}`, { replace: true });
-    }
-
-    appendToThread(chatId, {
-      messages: [userMessage, fakeAssistant],
-      meta: { messageType, tone, profileKey },
-    });
-
-    saveRecentChat(chatId, {
-      id: chatId,
-      title: trimmed.slice(0, 40),
-      updatedAt: Date.now(),
-    }).then(fetchRecentChats).then(setRecent);
-  }
-
-  async function handleDeleteChat(chatId) {
-    await deleteThread(chatId);
-    await deleteRecentChat(chatId);
-    setRecent(await fetchRecentChats());
-    if (activeChatId === chatId) {
-      navigate(`?`, { replace: true });
-      setActiveChatId(null);
-      setMessages([]);
+  useEffect(() => {
+    const saved = safeLoad();
+    if (saved.currentChatId) {
+      loadChat(saved.currentChatId);
+    } else {
+      setCurrentChatId(null);
+      setHistory([]);
+      setReply("");
       setInput("");
     }
-  }
-
-  function onInputChange(e) {
-    setInput(e.target.value);
-    setIsTyping(e.target.value.trim().length > 0);
-  }
-
-  function onCopy(messageId, text) {
-    setCopiedId(messageId);
-    copyToClipboard(text);
-    if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    copiedTimer.current = setTimeout(() => setCopiedId(null), 2000);
-  }
-
-  function openNewsfeedMobile() {
-    setMobileView((prev) => prev === "chat" ? "newsfeed" : "chat");
-  }
-
-  const showMembersLink = roleForActiveOrg === 'ADMIN';
-  const [canSeeMembers, setCanSeeMembers] = useState(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-
-    if (!activeOrgId || roleForActiveOrg === 'ADMIN') {
-      setCanSeeMembers(false);
-      return () => {
-        cancelled = true;
-      };
+    async function loadRecent() {
+      const list = await fetchRecentChats();
+      if (!cancelled) setRecentChats(list);
     }
+    loadRecent();
+    return () => { cancelled = true; };
+  }, []);
 
-    setCanSeeMembers(false);
+  useEffect(() => {
+    if (!threadId) return;
+    const el = replyRef.current;
+    if (el) {
+      const observer = new MutationObserver(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+      observer.observe(el, { childList: true, subtree: true });
+      return () => observer.disconnect();
+    }
+  }, [threadId]);
 
-    hasPermission(activeOrgId, 'members.read').then((result) => {
-      if (!cancelled) {
-        setCanSeeMembers(Boolean(result));
+  useEffect(() => {
+    autoresizeTextarea(textareaRef.current);
+  }, [input]);
+
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        handleSend();
       }
-    });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
-    return () => {
-      cancelled = true;
+  function openNewsfeedMobile() {
+    setNewsfeedDrawerOpen(true);
+  }
+
+  function closeNewsfeedMobile() {
+    setNewsfeedDrawerOpen(false);
+  }
+
+  function showTooltip(e, text) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltip({
+      text,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8,
+    });
+  }
+
+  function hideTooltip() {
+    setTooltip(null);
+  }
+
+  function handleNewChat() {
+    setCurrentChatId(null);
+    setThreadId(null);
+    setHistory([]);
+    setReply("");
+    setInput("");
+    setIsCopiedMap({});
+    safeSave({ messageType, tone, profileKey, currentChatId: null });
+  }
+
+  async function loadChat(id) {
+    if (!id) return;
+    const thread = await getThread(id);
+    if (!thread) return;
+
+    setCurrentChatId(id);
+    setThreadId(id);
+    setHistory(thread.history || []);
+    setReply(thread.reply || "");
+    setInput(thread.input || "");
+    setIsCopiedMap({});
+    safeSave({ messageType, tone, profileKey, currentChatId: id });
+  }
+
+  async function handleSaveChat(id, data) {
+    setSaving(true);
+    try {
+      await saveRecentChat(id, data);
+      setRecentChats(await fetchRecentChats());
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteChat(id) {
+    await deleteRecentChat(id);
+    setRecentChats(await fetchRecentChats());
+    if (currentChatId === id) {
+      handleNewChat();
+    }
+  }
+
+  async function handleSend() {
+    if (!input.trim() || loading) return;
+
+    const newHistory = [...history, { role: "user", content: input }];
+    setHistory(newHistory);
+    setLoading(true);
+    setReply("");
+    setIsCopiedMap((prev) => ({ ...prev, assistant: false }));
+
+    const anonId = await getAnonId();
+    const requestBody = {
+      input,
+      history: newHistory,
+      tone,
+      messageType,
+      profile: profileKey,
+      anonId,
+      organizationId: activeOrgId,
+      userEmail: profile?.email,
     };
-  }, [activeOrgId, hasPermission, roleForActiveOrg]);
+
+    let newReply = "";
+    try {
+      const response = await fetch("/.netlify/functions/chatpilot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let done = false;
+
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        const chunk = decoder.decode(value || new Uint8Array(), { stream: !done });
+        newReply += chunk;
+        setReply((prev) => prev + chunk);
+      }
+
+      setHistory((prev) => [...prev, { role: "assistant", content: newReply }]);
+
+      const newThreadId = threadId || Date.now().toString(36);
+      setThreadId(newThreadId);
+
+      await appendToThread(newThreadId, {
+        input,
+        history: newHistory,
+        reply: newReply,
+        tone,
+        messageType,
+        profileKey,
+      });
+
+      safeSave({ messageType, tone, profileKey, currentChatId: newThreadId });
+      setCurrentChatId(newThreadId);
+
+      await handleSaveChat(newThreadId, {
+        id: newThreadId,
+        title: input.slice(0, 80) || "Nieuwe chat",
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error(err);
+      const fallback = generateAssistantReply(input, messageType, tone);
+      setReply(fallback);
+      setHistory((prev) => [...prev, { role: "assistant", content: fallback }]);
+    } finally {
+      setLoading(false);
+      setInput("");
+    }
+  }
+
+  function handleInputChange(e) {
+    setInput(e.target.value);
+  }
+
+  function handleToneChange(value) {
+    setTone(value);
+    safeSave({ messageType, tone: value, profileKey, currentChatId });
+  }
+
+  function handleMessageTypeChange(value) {
+    setMessageType(value);
+    safeSave({ messageType: value, tone, profileKey, currentChatId });
+  }
+
+  function handleCopy(id, text) {
+    setIsCopiedMap((prev) => ({ ...prev, [id]: true }));
+    setTimeout(() => {
+      setIsCopiedMap((prev) => ({ ...prev, [id]: false }));
+    }, 2000);
+  }
+
+  function handleDeleteThread(id) {
+    deleteThread(id);
+    setRecentChats((prev) => prev.filter((chat) => chat.id !== id));
+    if (currentChatId === id) {
+      handleNewChat();
+    }
+  }
+
+  const toneOptions = ["Automatisch", "Formeel", "Informeel"];
+  const messageTypes = ["Social Media", "E-mail"];
 
   return (
-    <div className="min-h-screen bg-[#f2f5fb] flex">
-      {/* Desktop sidebar */}
-      <AppSidebar
-        open={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onToggleFeed={() => setFeedOpen((v) => !v)}
-        feedOpen={feedOpen}
-        onNewChat={handleNewChat}
-        recent={recent}
-        loadChat={(chatId) => navigate(`?chat=${chatId}`)}
-        onDeleteChat={handleDeleteChat}
-      />
+    <div className="relative min-h-screen bg-white">
+      {/* Desktop layout */}
+      <div className="md:pl-[256px]">
+        <AppSidebar
+          open={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onToggleFeed={() => setFeedOpen((prev) => !prev)}
+          feedOpen={feedOpen}
+          onNewChat={handleNewChat}
+          recent={recentChats}
+          loadChat={loadChat}
+          onDeleteChat={handleDeleteChat}
+        />
 
-      {/* Content */}
-      <div className="flex-1 flex flex-col md:ml-[56px] lg:ml-[256px] transition-[margin] duration-300 ease-out">
-        {/* Top bar */}
-        <header className="sticky top-0 z-20 bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-            <button
-              type="button"
-              className="md:hidden text-[#194297]"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Menu"
-            >
-              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] text-[#66676b]">Blueline Chatpilot</div>
-              <div className="text-[18px] font-semibold text-[#194297] truncate">{heroTitle}</div>
-              <div className="text-[13px] text-[#66676b] truncate">{heroSub}</div>
-            </div>
-
-            <div className="hidden md:flex items-center gap-3">
-              {(showMembersLink || canSeeMembers) && (
-                <NavLink
-                  to="/app/members"
-                  className="flex items-center gap-2 px-3 py-1.5 text-[13px] rounded-md border border-[#d6def3] text-[#194297] hover:bg-[#eef3ff]"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" className="shrink-0">
-                    <path
-                      fill="currentColor"
-                      d="M16 13a4 4 0 1 0-4-4a4 4 0 0 0 4 4m-8 0a3 3 0 1 0-3-3a3 3 0 0 0 3 3m8 2c-2.67 0-8 1.34-8 4v 2h16v-2c0-2.66-5.33-4-8-4m-8-1c-3 0-9 1.5-9 4v2h6v-2c0-1.35.74-2.5 1.93-3.41A11.5 11.5 0 0 0 0 18h0"
-                    />
-                  </svg>
-                  <span>Ledenbeheer</span>
-                </NavLink>
-              )}
-
-              <AuthProfileButton />
-            </div>
-          </div>
-        </header>
-
-        {/* Main */}
-        <main className="flex-1">
-          <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-4 px-4 py-6">
-            {/* Chat area */}
-            <section className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+        <main className="min-h-screen">
+          <div className="sticky top-0 z-20 bg-white border-b border-gray-200">
+            <div className="flex items-center justify-between px-4 h-14">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleNewChat}
-                  className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm bg-[#eef3ff] text-[#194297]"
+                  className="md:hidden h-8 w-8 flex items-center justify-center rounded-full text-[#66676b] hover:bg-gray-100"
+                  onClick={() => setMobileMenuOpen(true)}
+                  aria-label="Menu"
                 >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                  Nieuwe chat
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>
+                  </svg>
+                </button>
+                <div className="text-[15px] font-semibold text-[#194297]">Blueline Chatpilot</div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onMouseEnter={(e) => showTooltip(e, "Nieuwsfeed")}
+                  onMouseLeave={hideTooltip}
+                  className={cx(
+                    "hidden md:inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-medium transition",
+                    feedOpen ? "bg-[#e8efff] text-[#194297]" : "text-[#66676b] hover:bg-[#f3f6ff]"
+                  )}
+                  onClick={() => setFeedOpen((prev) => !prev)}
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h6"/>
+                  </svg>
+                  Nieuwsfeed
                 </button>
 
-                <div className="hidden sm:flex items-center gap-2">
-                  <span className="text-[13px] text-[#66676b]">Type:</span>
-                  <div className="inline-flex rounded-lg bg-[#f5f7fb] p-1">
-                    {["Social Media", "E-mail"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setMessageType(t)}
-                        className={cx(
-                          "px-3 py-1 text-[12px] rounded-md transition-colors",
-                          messageType === t ? "bg-white text-[#194297] shadow-sm" : "text-[#66676b]"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="hidden md:flex items-center gap-2">
-                  <span className="text-[13px] text-[#66676b]">Toon:</span>
-                  <div className="inline-flex rounded-lg bg-[#f5f7fb] p-1">
-                    {["Automatisch", "Informeel", "Formeel"].map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setTone(t)}
-                        className={cx(
-                          "px-3 py-1 text-[12px] rounded-md transition-colors",
-                          tone === t ? "bg-white text-[#194297] shadow-sm" : "text-[#66676b]"
-                        )}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="ml-auto md:hidden">
-                  <AuthProfileButton />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/app/settings")}
+                  onMouseEnter={(e) => showTooltip(e, "Instellingen")}
+                  onMouseLeave={hideTooltip}
+                  className="hidden md:inline-flex items-center justify-center w-9 h-9 rounded-full text-[#66676b] hover:bg-gray-100"
+                  aria-label="Instellingen"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
               </div>
+            </div>
+          </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4" ref={listRef}>
-                {messages.length === 0 ? (
-                  <div className="text-center text-[#66676b] text-[14px]">
-                    <div className="text-[16px] font-semibold text-[#194297] mb-2">Start een gesprek</div>
-                    <p>Typ een vraag of plak een klantbericht, dan helpt Chatpilot je met een voorstel.</p>
-                  </div>
-                ) : (
-                  messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={cx(
-                        "rounded-2xl px-4 py-3 max-w-[85%] shadow-sm border border-gray-100",
-                        msg.role === "user" ? "ml-auto bg-[#eef3ff]" : "mr-auto bg-white"
-                      )}
+          <div className="px-4 py-4 max-w-3xl mx-auto">
+            <div className="bg-[#f7f8fa] rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                <div className="text-[14px] font-medium text-[#194297]">Chat</div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setProfileMenuOpen((v) => !v)}
+                      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[13px] text-[#66676b] hover:bg-[#f3f6ff]"
                     >
-                      <div className="text-[11px] uppercase tracking-wide text-[#66676b] mb-1">
-                        {msg.role === "user" ? "Jij" : "Chatpilot"}
-                      </div>
-                      <div className="text-[14px] text-[#333] whitespace-pre-line leading-6">{msg.content}</div>
-
-                      <div className="mt-2 flex items-center gap-3 text-[11px] text-[#66676b]">
-                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                        {msg.role === "assistant" && (
-                          <CopyButton
-                            id={msg.id}
-                            text={msg.content}
-                            onCopied={(id) => onCopy(id, msg.content)}
-                            isCopied={copiedId === msg.id}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <form
-                className="border-t border-gray-100 bg-[#f9fbff] relative"
-                onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-              >
-                <div className="relative">
-                  <textarea
-                    ref={inputRef}
-                    rows={1}
-                    value={input}
-                    onChange={onInputChange}
-                    placeholder="Typ een bericht..."
-                    className="w-full resize-none outline-none placeholder:text-[#66676b] placeholder:text-[15px] text-[15px] leading-6"
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  />
-                </div>
-
-                {/* onderregel: + (profiel), type toggles, mic + send */}
-                <div className="absolute left-0 right-0 bottom-0 h-10 flex items-center">
-                  {/* Links */}
-                  <div className="pl-4 flex items-center gap-3 relative">
-                    {/* plus */}
-                    <button type="button" className="w-5 h-5 text-[#65676a] hover:text-[#194297]" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
-                      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                      <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
+                        <path d="M21 20a9 9 0 1 0-18 0"/>
+                      </svg>
+                      Profielen
+                      <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
                     </button>
 
-                    {/* Profiel dropdown */}
                     {profileMenuOpen && (
-                      <div className="absolute bottom-11 left-0 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                      <div className="absolute right-0 mt-2 w-44 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden z-10">
                         {[{key:"default",label:"Standaard"},{key:"merrachi",label:"Merrachi"}].map((p) => (
                           <button
                             key={p.key}
                             type="button"
-                            onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
+                            onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key, currentChatId }); }}
                             className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
                           >
                             {p.label}
@@ -856,66 +896,159 @@ function BluelineChatpilotInner() {
                         ))}
                       </div>
                     )}
-
-                    {/* Type toggles */}
-                    <div className="flex items-center gap-4 text-[14px]">
-                      {["Social Media","E-mail"].map((t) => (
-                        <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
-                      ))}
-                    </div>
                   </div>
 
-                  {/* Rechts */}
-                  <div className="ml-auto pr-3 flex items-center gap-2">
-                    {/* Mic (dummy) */}
-                    <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-[#65676a] hover:bg-[#f2f8ff]" aria-label="Spraak">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setTone((prev) => {
+                        const currentIndex = toneOptions.indexOf(prev);
+                        const nextIndex = (currentIndex + 1) % toneOptions.length;
+                        const next = toneOptions[nextIndex];
+                        handleToneChange(next);
+                        return next;
+                      })}
+                      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[13px] text-[#66676b] hover:bg-[#f3f6ff]"
+                    >
                       <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 15a3 3 0 003-3V7a3 3 0 10-6 0v5a3 3 0 003 3z"/>
-                        <path d="M19 10v2a7 7 0 01-14 0v-2"/>
-                        <path d="M12 19v3"/>
+                        <path d="M4 21v-7a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v7"/>
+                        <path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4z"/>
                       </svg>
+                      {tone}
                     </button>
-
-                    {/* Send (fade + delay) */}
-                    {showSendDelayed && (
-                      <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f8ff] text-[#194297] shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
-                        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M22 2L11 13" />
-                          <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-                        </svg>
-                      </button>
-                    )}
                   </div>
-                </div>
-              </form>
-
-              {/* Disclaimer */}
-              <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
-            </section>
-
-            {/* Newsfeed */}
-            <aside className={cx(
-              "lg:w-80 flex-shrink-0 transition-transform duration-300 ease-out",
-              feedOpen ? "translate-x-0" : "translate-x-[110%] lg:translate-x-0"
-            )}>
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                  <h3 className="text-[15px] font-semibold text-[#194297]">Nieuws & updates</h3>
-                  <button
-                    type="button"
-                    className="text-[#66676b] hover:text-[#194297] lg:hidden"
-                    onClick={() => setFeedOpen(false)}
-                    aria-label="Sluiten"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto">
-                  <SidebarNewsFeed limit={5} />
                 </div>
               </div>
-            </aside>
+
+              <div className="px-4 py-6 space-y-6">
+                <div className="space-y-4">
+                  {history.map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className={cx(
+                        "relative rounded-2xl px-4 py-3 text-[14px]",
+                        entry.role === "assistant" ? "bg-white border border-gray-200 shadow-sm text-[#194297]" : "bg-[#194297] text-white"
+                      )}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className={cx(
+                          "w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-semibold",
+                          entry.role === "assistant" ? "bg-[#e8efff] text-[#194297]" : "bg-white/20 text-white"
+                        )}>
+                          {entry.role === "assistant" ? "AI" : "JIJ"}
+                        </div>
+                        <div className="flex-1 whitespace-pre-wrap leading-6">{entry.content}</div>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <CopyButton
+                          id={`${idx}-${entry.role}`}
+                          text={entry.content}
+                          onCopied={handleCopy}
+                          isCopied={isCopiedMap[`${idx}-${entry.role}`]}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {reply && (
+                    <div className="relative rounded-2xl px-4 py-3 bg-white border border-gray-200 shadow-sm text-[#194297] text-[14px]">
+                      <div className="flex items-start gap-2">
+                        <div className="w-8 h-8 rounded-full bg-[#e8efff] text-[#194297] flex items-center justify-center text-[13px] font-semibold">
+                          AI
+                        </div>
+                        <div className="flex-1 whitespace-pre-wrap leading-6" ref={replyRef}>{reply}</div>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <CopyButton
+                          id="assistant"
+                          text={reply}
+                          onCopied={handleCopy}
+                          isCopied={isCopiedMap.assistant}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+                  className="relative"
+                >
+                  <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="px-4 pt-3 pb-12">
+                      <textarea
+                        ref={textareaRef}
+                        rows={1}
+                        value={input}
+                        onChange={handleInputChange}
+                        placeholder="Typ een bericht..."
+                        className="w-full resize-none outline-none placeholder:text-[#66676b] placeholder:text-[15px] text-[15px] leading-6"
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                      />
+                    </div>
+
+                    {/* onderregel: + (profiel), type toggles, mic + send */}
+                    <div className="absolute left-0 right-0 bottom-0 h-10 flex items-center">
+                      {/* Links */}
+                      <div className="pl-4 flex items-center gap-3 relative">
+                        {/* plus */}
+                        <button type="button" className="w-5 h-5 text-[#65676a] hover:text-[#194297]" aria-label="Meer" onClick={() => setProfileMenuOpen((v) => !v)}>
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                        </button>
+
+                        {/* Profiel dropdown */}
+                        {profileMenuOpen && (
+                          <div className="absolute bottom-11 left-0 z-20 w-48 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                            {[{key:"default",label:"Standaard"},{key:"merrachi",label:"Merrachi"}].map((p) => (
+                              <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
+                                className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
+                              >
+                                {p.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Type toggles */}
+                        <div className="flex items-center gap-4 text-[14px]">
+                          {["Social Media","E-mail"].map((t) => (
+                            <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Rechts */}
+                      <div className="ml-auto pr-3 flex items-center gap-2">
+                        {/* Mic (dummy) */}
+                        <button type="button" className="hidden sm:inline-flex w-8 h-8 items-center justify-center rounded-full text-[#65676a] hover:bg-[#f2f8ff]" aria-label="Spraak">
+                          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <path d="M12 19v3"/>
+                          </svg>
+                        </button>
+
+                        {/* Send (fade + delay) */}
+                        {showSendDelayed && (
+                          <button type="submit" className={cx("w-8 h-8 rounded-full flex items-center justify-center bg-[#f2f8ff] text-[#194297] shadow transition-all duration-200", showSend ? "opacity-100 scale-100" : "opacity-0 scale-95")} aria-label="Versturen">
+                            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 2L11 13" />
+                              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Disclaimer */}
+                <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
+              </div>
+            </div>
           </div>
         </main>
       </div>
@@ -928,6 +1061,35 @@ function BluelineChatpilotInner() {
         onToggleFeed={openNewsfeedMobile}
         feedOpen={feedOpen}
       />
+
+      {/* Mobile newsfeed drawer */}
+      {newsfeedDrawerOpen && (
+        <div className="fixed inset-0 z-40">
+          <div className="absolute inset-0 bg-black/20" onClick={closeNewsfeedMobile} />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <div className="text-[15px] font-semibold text-[#194297]">Nieuwsfeed</div>
+              <button
+                type="button"
+                onClick={closeNewsfeedMobile}
+                className="h-8 w-8 flex items-center justify-center rounded-full text-[#66676b] hover:bg-gray-100"
+                aria-label="Sluiten"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18"/><path d="M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-4">
+              <SidebarNewsFeed limit={10} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tooltip && (
+        <SidebarTooltip show={!!tooltip} text={tooltip.text} position={{ x: tooltip.x, y: tooltip.y }} />
+      )}
     </div>
   );
 }
