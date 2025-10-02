@@ -1,18 +1,15 @@
-// src/components/MembersAdmin.jsx
+// change: sync members admin with consolidated auth context
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../providers/AuthProvider';
-import { useMembership } from '../hooks/useMembership';
 import RoleBadge from './RoleBadge';
 import AdminInviteForm from './AdminInviteForm';
 import { supabase } from '../lib/supabaseClient';
 import { resendInvite, revokeInvite } from '../lib/invitesApi';
-import { deleteMember, updateMemberRole, MEMBER_ROLES } from '../services/members';
+import { deleteMember, updateMemberRole, MEMBER_ROLES, refetchAfterMembersMutation } from '../services/members';
 import { warn, error as logError } from '../lib/log';
 
 const ROLES = MEMBER_ROLES;
 const ROLE_LABEL = { ADMIN: 'Admin', TEAM: 'Team', CUSTOMER: 'Customer' };
-const LS_KEY = 'blueline.activeOrgId';
-
 function classNames(...values) {
   return values.filter(Boolean).join(' ');
 }
@@ -105,8 +102,11 @@ function downloadCsv(filename, text) {
 async function loadMembersForOrg(supabaseClient, orgId) {
   if (!orgId) return [];
 
-  // Roept de SECURITY DEFINER RPC aan; RPC controleert zelf of caller ADMIN is
-  const { data, error } = await supabaseClient.rpc('list_org_members', { p_org: orgId });
+  const { data, error } = await supabaseClient
+    .from('memberships_view')
+    .select('user_id,email,role')
+    .eq('org_id', orgId)
+    .order('email', { ascending: true });
 
   if (error) {
     logError('members_admin.fetch_members_failed', {
@@ -116,12 +116,10 @@ async function loadMembersForOrg(supabaseClient, orgId) {
     throw error;
   }
 
-  // Normaliseer naar het formaat dat je UI verwacht
-  return (data ?? []).map(r => ({
-    user_id: r.user_id,
-    role: String(r.role || '').toUpperCase(),
-    email: r.email || '—',
-    created_at: r.created_at,
+  return (data ?? []).map((row) => ({
+    user_id: row.user_id,
+    role: String(row.role || '').toUpperCase(),
+    email: row.email || '—',
   }));
 }
 
@@ -197,23 +195,9 @@ function ConfirmModal({
 }
 
 export default function MembersAdmin() {
-  const { user } = useAuth();
-  const membership = useMembership();
-  const membershipLoading = membership?.loading ?? false;
-  const membershipRole = membership?.role ?? null;
-  const membershipOrgId = membership?.activeOrgId ?? null;
+  const { user, activeOrgId, roleForActiveOrg, refreshMemberships, membershipsLoading } = useAuth();
 
-  const activeOrgId = useMemo(() => {
-    if (membershipOrgId) return membershipOrgId;
-    if (typeof window === 'undefined') return null;
-    try {
-      return localStorage.getItem(LS_KEY) || null;
-    } catch {
-      return null;
-    }
-  }, [membershipOrgId]);
-
-  const role = membershipRole ? String(membershipRole).toUpperCase() : '';
+  const role = roleForActiveOrg ? String(roleForActiveOrg).toUpperCase() : '';
   const isAdmin = role === 'ADMIN';
 
   const [rows, setRows] = useState([]);
@@ -259,11 +243,11 @@ export default function MembersAdmin() {
     if (!activeOrgId || !isAdmin) return;
     setLoading(true);
     try {
-      await reloadMembers();
+      await refetchAfterMembersMutation(refreshMemberships, reloadMembers);
     } finally {
       setLoading(false);
     }
-  }, [activeOrgId, isAdmin, reloadMembers]);
+  }, [activeOrgId, isAdmin, refreshMemberships, reloadMembers]);
 
   useEffect(() => {
     if (!activeOrgId) {
@@ -553,7 +537,7 @@ export default function MembersAdmin() {
         </div>
       )}
 
-      {membershipLoading && (
+      {membershipsLoading && (
         <div className="rounded-lg border border-[#eef1f6] bg-white p-4 text-sm text-[#5b5e66]">
           Rol bepalen…
         </div>
@@ -565,7 +549,7 @@ export default function MembersAdmin() {
         </div>
       )}
 
-      {!membershipLoading && activeOrgId && !isAdmin && (
+      {!membershipsLoading && activeOrgId && !isAdmin && (
         <div className="rounded-lg border border-[#eef1f6] bg-white p-4 text-sm text-[#5b5e66]">
           Alleen ADMIN kan leden beheren (jouw rol: {displayRole}).
         </div>

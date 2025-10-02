@@ -1,3 +1,4 @@
+// LEGACY: replaced by direct Supabase RPC calls. Kept for backward compatibility in scripts.
 import type { Handler } from '@netlify/functions';
 import { buildCorsHeaders, supabaseForRequest } from './_shared/supabaseServer';
 

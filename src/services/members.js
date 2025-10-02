@@ -1,3 +1,4 @@
+// change: add helper to refresh memberships after mutations
 import { supabase } from '../lib/supabaseClient';
 import { error as logError } from '../lib/log';
 
@@ -55,6 +56,15 @@ export async function updateMemberRole(orgId, memberUserId, role) {
   }
 
   return data;
+}
+
+export async function refetchAfterMembersMutation(refreshMemberships, refetchList) {
+  if (typeof refreshMemberships === 'function') {
+    await refreshMemberships();
+  }
+  if (typeof refetchList === 'function') {
+    await refetchList();
+  }
 }
 
 export { MEMBER_ROLES };
