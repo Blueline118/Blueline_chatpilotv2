@@ -25,13 +25,13 @@ export default function App() {
             }
           />
           <Route
-            path="/app/members"
-            element={
-              <Protected perm="members.read" requireMembership>
-                <MembersAdmin />
-              </Protected>
-            }
-          />
+  path="/app/members"
+  element={
+    <Protected requireSession requireMembership perm="org:admin">
+      <MembersAdmin />
+    </Protected>
+  }
+/>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </BrowserRouter>
