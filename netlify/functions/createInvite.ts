@@ -1,10 +1,11 @@
+// change: use user-scoped Supabase client + has_permission RPC for invite rights
 import type { Handler } from '@netlify/functions';
 import { supabaseForRequest, buildCorsHeaders } from './_shared/supabaseServer';
 import { sendInviteEmail } from './_shared/email';
 
 type BodyIn =
-  | { p_org?: string; p_email?: string; p_role?: 'ADMIN' | 'TEAM' | 'CUSTOMER' }
-  | { org_id?: string; email?: string; role?: 'ADMIN' | 'TEAM' | 'CUSTOMER' };
+  | { p_org?: string; p_email?: string; p_role?: 'ADMIN' | 'TEAM' | 'CUSTOMER'; sendEmail?: boolean }
+  | { org_id?: string; email?: string; role?: 'ADMIN' | 'TEAM' | 'CUSTOMER'; sendEmail?: boolean };
 
 export const handler: Handler = async (event) => {
   const headers = buildCorsHeaders(event.headers.origin);
@@ -23,6 +24,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // === Auth header vereist (user-context voor permissiecheck) ===
     const auth = event.headers.authorization;
     if (!auth) {
       return {
@@ -32,6 +34,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // === Body parsen ===
     const raw =
       event.isBase64Encoded && event.body
         ? Buffer.from(event.body, 'base64').toString('utf8')
@@ -40,7 +43,7 @@ export const handler: Handler = async (event) => {
     let json: BodyIn;
     try {
       json = JSON.parse(raw) as BodyIn;
-    } catch (error: any) {
+    } catch {
       return {
         statusCode: 400,
         headers: jsonHeaders,
@@ -48,6 +51,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // Accept beide naamgevingen
     const p_org_raw = (json as any).p_org ?? (json as any).org_id;
     const p_email_raw = (json as any).p_email ?? (json as any).email;
     const p_role_raw = (json as any).p_role ?? (json as any).role;
@@ -76,8 +80,10 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // === User-scoped Supabase client (met Bearer token uit header) ===
     const supabase = supabaseForRequest(auth);
 
+    // Bevestig ingelogde gebruiker
     const { data: me, error: meErr } = await supabase.auth.getUser();
     if (meErr || !me?.user) {
       return {
@@ -87,23 +93,22 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const { data: adminRows, error: adminErr } = await supabase
-      .from('memberships')
-      .select('role')
-      .eq('org_id', p_org)
-      .eq('user_id', me.user.id)
-      .eq('role', 'ADMIN')
-      .limit(1);
+    // === Permissiecheck via RPC: org:invite:manage ===
+    // Werkt dankzij JSON/overload varianten in Supabase (p_org_id, p_perm)
+    const { data: allowed, error: permErr } = await supabase.rpc('has_permission', {
+      p_org_id: p_org,
+      p_perm: 'org:invite:manage',
+    });
 
-    if (adminErr) {
+    if (permErr) {
       return {
-        statusCode: 400,
+        statusCode: 500,
         headers: jsonHeaders,
-        body: JSON.stringify({ error: adminErr.message }),
+        body: JSON.stringify({ error: `perm_check_failed: ${permErr.message}` }),
       };
     }
 
-    if (!adminRows?.length) {
+    if (!allowed) {
       return {
         statusCode: 403,
         headers: jsonHeaders,
@@ -111,6 +116,7 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // === Invite aanmaken via bestaande RPC (blijft user-client: RLS/audit werkt netjes) ===
     const { data: invData, error: invErr } = await supabase.rpc('create_invite', {
       p_org,
       p_email,
@@ -134,14 +140,16 @@ export const handler: Handler = async (event) => {
       };
     }
 
+    // === Accept URL opbouwen ===
     const scheme = (event.headers['x-forwarded-proto'] || 'https') as string;
     const hostHeader =
       (event.headers['x-forwarded-host'] || event.headers.host) as string | undefined;
-    const base = process.env.APP_ORIGIN || (hostHeader ? `${scheme}://${hostHeader}` : `${scheme}://localhost`);
+    const base =
+      process.env.APP_ORIGIN || (hostHeader ? `${scheme}://${hostHeader}` : `${scheme}://localhost`);
     const acceptUrl = `${base}/accept-invite?token=${encodeURIComponent(inv.token)}`;
 
+    // === E-mail versturen (optioneel) ===
     const sendEmail = (json as any).sendEmail !== false;
-
     const mail: { attempted: boolean; sent: boolean; reason: string | null } = {
       attempted: false,
       sent: false,

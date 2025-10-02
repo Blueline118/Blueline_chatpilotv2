@@ -1,39 +1,46 @@
-// src/components/PermissionGate.jsx
-import React from 'react';
-import { usePermission } from '../hooks/usePermission';
+// change: gate children with has_permission rpc
+import { useEffect, useState } from 'react';
 import { useAuth } from '../providers/AuthProvider';
 
-/**
- * Gebruik:
- * <PermissionGate perm="org:admin">
- *   {({ allowed }) => allowed ? <NavLink .../> : null}
- * </PermissionGate>
- *
- * Of zonder render-prop:
- * <PermissionGate perm="org:admin"><NavLink .../></PermissionGate>
- */
-export default function PermissionGate({ perm, children }) {
-  // Verberg standaard als je niet bent ingelogd.
-  let session = null;
-  try {
-    // defensief: useAuth bestaat in jouw project
-    const auth = useAuth?.();
-    session = auth?.session ?? null;
-  } catch (_) {
-    session = null;
-  }
-  if (!session) return null;
+export default function PermissionGate({ perm, children, fallback = null }) {
+  const { session, activeOrgId, hasPermission } = useAuth();
+  const [allowed, setAllowed] = useState(false);
+  const [checking, setChecking] = useState(true);
 
-  const { allowed, loading, error } = usePermission(perm);
+  useEffect(() => {
+    let cancelled = false;
 
-  // Niets tonen tijdens laden of error (liever te strikt).
-  if (loading || error) return null;
+    if (!perm) {
+      setAllowed(false);
+      setChecking(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
-  // Render-prop variant
-  if (typeof children === 'function') {
-    return children({ allowed: !!allowed, loading, error });
-  }
+    if (!session || !activeOrgId) {
+      setAllowed(false);
+      setChecking(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
-  // Children variant
-  return allowed ? <>{children}</> : null;
+    setChecking(true);
+    hasPermission(activeOrgId, perm).then((result) => {
+      if (cancelled) return;
+      setAllowed(Boolean(result));
+      setChecking(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrgId, hasPermission, perm, session]);
+
+  if (!perm || !session || !activeOrgId) return fallback;
+  if (checking) return null;
+  if (!allowed) return fallback;
+
+  return <>{children}</>;
 }

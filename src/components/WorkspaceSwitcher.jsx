@@ -1,60 +1,69 @@
+// change: sync active org through AuthProvider context
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
 
 export default function WorkspaceSwitcher() {
-  const { user, activeOrgId, setActiveOrgId } = useAuth();
+  const { user, activeOrgId, setActiveOrgId, refreshMemberships } = useAuth();
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setOrgs([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
     (async () => {
       setLoading(true);
 
-      // 1) Try RPC
       let list = [];
-      let err = null;
-      {
-        const { data, error } = await supabase.rpc('get_user_orgs');
-        if (error) err = error;
-        else list = data || [];
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_orgs');
+      if (!rpcError && Array.isArray(rpcData)) {
+        list = rpcData;
       }
 
-      // 2) Fallback to direct select if RPC failed or returned empty (covers most RLS hiccups)
-      if (err || list.length === 0) {
+      if (list.length === 0) {
         const { data, error } = await supabase
           .from('memberships')
           .select('org_id, role, organizations ( id, name )')
           .order('created_at', { ascending: true });
 
-        if (!error && data) {
+        if (!error && Array.isArray(data)) {
           list = data
             .map((row) => ({
               id: row.organizations?.id,
               name: row.organizations?.name,
               role: row.role,
             }))
-            .filter((x) => x.id && x.name);
+            .filter((item) => item.id && item.name);
         } else if (error) {
           console.error('[WorkspaceSwitcher] fallback error:', error);
         }
       }
 
+      if (cancelled) return;
+
       setOrgs(list);
 
-      // Reset activeOrgId if it no longer exists
       if (activeOrgId && !list.find((o) => o.id === activeOrgId)) {
         setActiveOrgId(null);
       }
-      // Auto-pick when there is exactly one org
       if (!activeOrgId && list.length === 1) {
         setActiveOrgId(list[0].id);
       }
 
       setLoading(false);
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   if (!user || loading) return null;
@@ -64,7 +73,11 @@ export default function WorkspaceSwitcher() {
       <span style={{ fontSize: 12, opacity: 0.7 }}>Workspace:</span>
       <select
         value={activeOrgId || ''}
-        onChange={(e) => setActiveOrgId(e.target.value || null)}
+        onChange={async (e) => {
+          const next = e.target.value || null;
+          setActiveOrgId(next);
+          await refreshMemberships();
+        }}
         style={{ padding: 6 }}
       >
         <option value="">— kies —</option>

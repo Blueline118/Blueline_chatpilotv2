@@ -1,32 +1,21 @@
-// src/components/AuthProfileButton.jsx
+// change: display role badge from consolidated auth context
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../providers/AuthProvider';
-import { useMembership } from '../hooks/useMembership';
+import RoleBadge from './RoleBadge';
 
-/**
- * Props:
- * - expanded (boolean): true = sidebar open, false = sidebar dicht
- *
- * Regels:
- * - Uitgelogd + expanded=false -> niets
- * - Uitgelogd + expanded=true  -> subtiele inlogknop
- * - Ingelogd  + expanded=false -> alleen avatar
- * - Ingelogd  + expanded=true  -> avatar + naam + rol + uitloggen
- *
- * (Mobiel volgt exact dezelfde regels; "expanded" is dus leidend.)
- */
 export default function AuthProfileButton({ expanded }) {
-  const { session, user, setActiveOrgId } = useAuth();
-  const { role } = useMembership();
+  const { session, user, setActiveOrgId, roleForActiveOrg } = useAuth();
   const [busy, setBusy] = useState(false);
 
-  // --- UITGELOGD ---
-  if (!session) {
-    // Sidebar dicht: niets tonen (desktop én mobiel)
-    if (!expanded) return null;
+  useEffect(() => {
+    if (!session) {
+      setBusy(false);
+    }
+  }, [session]);
 
-    // Sidebar open: subtiele, smalle inlogknop
+  if (!session) {
+    if (!expanded) return null;
     return (
       <a
         href="/login?intent=1"
@@ -39,10 +28,8 @@ export default function AuthProfileButton({ expanded }) {
     );
   }
 
-  // --- INGELOGD ---
   const initials = String(user?.email || '?').slice(0, 2).toUpperCase();
 
-  // Sidebar dicht: alleen avatar
   if (!expanded) {
     return (
       <div className="w-full flex items-center justify-center">
@@ -53,7 +40,6 @@ export default function AuthProfileButton({ expanded }) {
     );
   }
 
-  // Sidebar open: volledige info + uitloggen
   return (
     <div className="w-full">
       <div className="flex items-center gap-3">
@@ -62,7 +48,10 @@ export default function AuthProfileButton({ expanded }) {
         </div>
         <div className="min-w-0">
           <div className="text-sm font-medium text-[#194297] truncate">{user?.email}</div>
-          <div className="text-[11px] text-[#66676b]">Rol: {role ?? '—'}</div>
+          <div className="text-[11px] text-[#66676b] flex items-center gap-1">
+            <span>Rol:</span>
+            <RoleBadge role={roleForActiveOrg ?? undefined} />
+          </div>
         </div>
       </div>
 
