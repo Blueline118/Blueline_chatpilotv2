@@ -12,6 +12,7 @@ import MembersAdmin from './MembersAdmin';
 import SidebarNewsFeed from "./SidebarNewsFeed";
 import { useAuth } from '../providers/AuthProvider';
 
+
 /******************** Utils ********************/
 const cx = (...args) => args.filter(Boolean).join(" ");
 
@@ -288,37 +289,43 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
           </div>
 
           {/* --- Ledenbeheer (alleen zichtbaar voor admins) --- */}
-          {session && roleForActiveOrg === 'ADMIN' && (
-            <NavLink
-              to="/app/members"
-              title="Ledenbeheer"
-              className={({ isActive }) =>
-                cx(
-                  "group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
-                  expanded ? "justify-start" : "justify-center",
-                  isActive
-                    ? "bg-[#e8efff] text-[#194297]"
-                    : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
-                )
-              }
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="w-5 h-5 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" />
-                <path d="M8 12a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" />
-                <path d="M2 19v-1c0-2.21 3.58-4 8-4" />
-                <path d="M14 14c4.42 0 8 1.79 8 4v1" />
-              </svg>
-              {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
-            </NavLink>
-          )}
+{session && roleForActiveOrg === 'ADMIN' && (
+  <NavLink
+    to="/app/members"
+    title="Ledenbeheer"
+    onClick={(e) => {
+      // Forceer navigatie, zelfs als een parent preventDefault() doet
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.assign('/app/members');
+    }}
+    className={({ isActive }) =>
+      cx(
+        "group relative z-10 flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors",
+        expanded ? "justify-start" : "justify-center",
+        isActive
+          ? "bg-[#e8efff] text-[#194297]"
+          : "text-[#66676b] hover:bg-[#f3f6ff] hover:text-[#194297]"
+      )
+    }
+  >
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" />
+      <path d="M8 12a3 3 0 1 0-3-3 3 3 0 0 0 3 3Z" />
+      <path d="M2 19v-1c0-2.21 3.58-4 8-4" />
+      <path d="M14 14c4.42 0 8 1.79 8 4v 1" />
+    </svg>
+    {expanded && <span className="text-[14px] font-medium">Ledenbeheer</span>}
+  </NavLink>
+)}
 
           {/* Newsfeed bij uitgeklapt */}
           {feedOpen && expanded && (
