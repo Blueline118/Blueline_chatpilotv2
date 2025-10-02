@@ -1,85 +1,60 @@
-// change: enforce membership-aware permission checks
-import { useEffect, useState } from 'react';
+// change: wait for auth/permission to finish loading before redirecting (prevents bounce back from /app/members)
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
+import usePermission from '../hooks/usePermission';
 
-export default function Protected({ children, perm = null, requireMembership = false }) {
-  const {
-    session,
-    activeOrgId,
-    memberships,
-    membershipsLoading,
-    initializing,
-    hasPermission,
-  } = useAuth();
+/**
+ * Props:
+ *  - requireSession?: boolean
+ *  - requireMembership?: boolean   (optional; if you already gate with perm, this can be false)
+ *  - perm?: string                 e.g. 'org:admin'
+ *  - children: React.ReactNode
+ */
+export default function Protected({
+  requireSession = false,
+  requireMembership = false,
+  perm,
+  children,
+}) {
   const location = useLocation();
-  const [allowed, setAllowed] = useState(!perm);
-  const [checkingPerm, setCheckingPerm] = useState(!!perm);
+  const { session, activeOrgId, memberships, membershipsLoading } = useAuth() || {};
 
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!perm) {
-      setAllowed(true);
-      setCheckingPerm(false);
-      return () => {
-        cancelled = true;
-      };
+  // 1) Session gating
+  if (requireSession) {
+    if (session === undefined) {
+      // auth state is still resolving -> render nothing to avoid premature redirect
+      return null;
     }
-
-    if (!activeOrgId) {
-      setAllowed(false);
-      setCheckingPerm(false);
-      return () => {
-        cancelled = true;
-      };
+    if (!session) {
+      const next = encodeURIComponent(location.pathname + location.search);
+      return <Navigate to={`/login?next=${next}`} replace />;
     }
-
-    setCheckingPerm(true);
-    hasPermission(activeOrgId, perm).then((result) => {
-      if (cancelled) return;
-      setAllowed(Boolean(result));
-      setCheckingPerm(false);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrgId, hasPermission, perm]);
-
-  if (initializing) {
-    return null;
   }
 
-  if (session === undefined) {
-    return null;
-  }
-
-  if (!session) {
-    const next = location.pathname + location.search;
-    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
-  }
-
+  // 2) Membership gating (optional)
   if (requireMembership) {
-    if (membershipsLoading) {
-      return null;
+    if (membershipsLoading || memberships === undefined) {
+      return null; // wait until memberships known
     }
-    const hasMembership = Boolean(
-      activeOrgId && memberships.some((member) => member.org_id === activeOrgId),
-    );
-    if (!hasMembership) {
-      return <Navigate to="/login?reason=no-membership" replace />;
-    }
-  }
-
-  if (perm) {
-    if (checkingPerm) {
-      return null;
-    }
-    if (!allowed) {
+    const hasAny = Array.isArray(memberships) && memberships.length > 0;
+    if (!hasAny) {
       return <Navigate to="/app" replace />;
     }
   }
 
-  return children;
+  // 3) Permission gating (wait for result)
+  if (perm) {
+    // usePermission should return { allowed, isLoading, error }
+    const { allowed, isLoading } = usePermission(perm, activeOrgId);
+
+    if (isLoading || allowed === undefined) {
+      return null; // IMPORTANT: do not redirect while loading
+    }
+    if (allowed !== true) {
+      return <Navigate to="/app" replace />;
+    }
+  }
+
+  return <>{children}</>;
 }
