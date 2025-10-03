@@ -246,22 +246,39 @@ function extractTextFromCandidates(d) {
 const urlObj = new URL(request.url);
 const DEBUG = urlObj.searchParams.get("debug") === "1";
 
-const rawText = extractTextFromCandidates(data);
+// Parse candidate + reasons
+const cand          = data?.candidates?.[0] ?? null;
+const parts         = cand?.content?.parts ?? [];
+const firstText     = parts.find((p) => typeof p?.text === "string")?.text ?? "";
+const finishReason  = cand?.finishReason ?? cand?.finish_reason ?? null;
+const blockReason   = data?.promptFeedback?.blockReason ?? null;
+const safetyRatings = cand?.safetyRatings ?? data?.safetyRatings ?? null;
 
-// blok-/eindredenen tonen als er geen tekst komt
-const blockReason = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason || null;
-const safety = data?.candidates?.[0]?.safetyRatings || null;
+// If model returned no text → return explicit 502 with diagnostics
+if (!firstText || firstText.trim() === "") {
+  const payload = {
+    error: "Empty model response",
+    meta: {
+      source: "empty",
+      build: BUILD_MARK,
+      modelUsed: MODEL,
+      finishReason,
+      blockReason,
+      safetyRatings,
+      usedKb: Array.isArray(kb)
+        ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+        : [],
+    },
+  };
+  if (DEBUG) out.debug = { upstream: data, parts };
+  return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
+}
 
-const finalText = stripSubjectLine(
-  rawText && rawText.trim().length > 0
-    ? rawText
-    : (blockReason
-        ? `Ik kan niet antwoorden vanwege een blokkade (${blockReason}). Probeer je vraag anders te formuleren.`
-        : "Er is geen tekst gegenereerd.")
-);
+// Normal success path
+const text = stripSubjectLine(firstText);
 
-const responsePayload = {
-  text: finalText,
+const out = {
+  text,
   meta: {
     source: "model",
     build: BUILD_MARK,
@@ -274,16 +291,10 @@ const responsePayload = {
       : [],
   },
 };
+if (DEBUG) payload.debug = { finishReason, blockReason, safetyRatings };
 
-if (DEBUG) {
-  responsePayload.debug = {
-    blockReason,
-    safetyRatings: safety,
-    upstream: data,
-  };
-}
+return new Response(JSON.stringify(payload), { headers: JSON_HEADERS });
 
-return new Response(JSON.stringify(responsePayload), { headers: JSON_HEADERS });
 
   } catch (e) {
     const isTimeout = e?.message === "Timeout";
