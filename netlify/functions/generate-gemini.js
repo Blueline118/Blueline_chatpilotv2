@@ -1,31 +1,15 @@
 // netlify/functions/generate-gemini.js
-// ============================================================================
-// Blueline Chatpilot – Gemini gateway (REST v1)
-// - Automatische model-fallback op basis van ListModels (v1)
-// - System prompt als prefix in user prompt (geen system_instruction veld nodig)
-// - Response bevat meta.modelUsed zodat je ziet welk model live draait
-// ============================================================================
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Config
+// ────────────────────────────────────────────────────────────────────────────────
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const API_BASE = process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1";
-/** Let op: hier ZONDER "models/" prefix; de URL voegt /models/ zelf toe. */
-const ENV_MODEL = (process.env.GEMINI_MODEL || "").replace(/^models\//, "").trim();
-/** Kandidaten voor gratis/snel → betaald/beter volgorde */
-const CANDIDATE_MODELS = [
-  ENV_MODEL || null,
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-2.0-flash-001",
-  "gemini-2.0-flash-lite-001",
-  "gemini-2.5-pro" // als je quota hebt
-].filter(Boolean);
+const API_URL = `${API_BASE}/models/${MODEL}:generateContent`;
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
-const BUILD_MARK = "v1-fallback-model-prefix-systemprompt@2025-10-03";
+const BUILD_MARK = `kb-chat@${new Date().toISOString()}`;
 
-/** In-memory cache van models lijst (per function cold start) */
-let _modelsCache = { at: 0, names: [] };
-
+// ────────────────────────────────────────────────────────────────────────────────
 function withTimeout(promise, ms = 20000) {
   return Promise.race([
     promise,
@@ -33,98 +17,102 @@ function withTimeout(promise, ms = 20000) {
   ]);
 }
 
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function clampTemp(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(1.0, Math.max(0.1, n));
+}
+
+/** Verwijder "Onderwerp:" / "Subject:" regels (en varianten) uit tekst */
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
   const lines = s.split(/\r?\n/);
-  const filtered = lines.filter(
-    (line) => !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(line.replace(/\u00A0/g, " "))
-  );
+  const filtered = lines.filter((line) => !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(line.replace(/\u00A0/g, " ")));
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** Haal lijst met models op (v1) en cache 5 min */
-async function listModels(key) {
-  const now = Date.now();
-  if (_modelsCache.names.length && now - _modelsCache.at < 5 * 60 * 1000) {
-    return _modelsCache.names;
-  }
-  const url = `${API_BASE}/models?key=${encodeURIComponent(key)}`;
-  const resp = await withTimeout(fetch(url), 10000);
-  if (!resp.ok) {
-    // geef lege lijst terug; caller zal trial/fallback doen
-    return [];
-  }
-  const data = await resp.json().catch(() => ({}));
-  const names = Array.isArray(data?.models)
-    ? data.models.map((m) => String(m?.name || "")).filter(Boolean) // bv. "models/gemini-2.0-flash"
-    : [];
-  _modelsCache = { at: now, names };
-  return names;
+/** Compact de KB-context naar max N regels */
+function formatKbContext(kbItems, maxItems = 3, maxCharsPerSnippet = 300) {
+  if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
+  const top = kbItems
+    .slice(0, maxItems)
+    .map((it, idx) => {
+      const title = (it.title || "").toString().trim();
+      const snippet = ((it.snippet || it.body || "") + "").slice(0, maxCharsPerSnippet).trim();
+      return `${idx + 1}) ${title ? `${title} — ` : ""}${snippet}`;
+    })
+    .join("\n");
+  return `Context (max ${Math.min(maxItems, kbItems.length)}):\n${top}`;
 }
 
-/** Controleer of een model naam (zonder "models/") in ListModels zit en generateContent kan */
-function modelSupported(modelName, list) {
-  const full = `models/${modelName}`;
-  return list.some((n) => n === full);
-}
-
-/** Roep generateContent aan met fallback over CANDIDATE_MODELS */
-async function callGeminiWithFallback({ key, body }) {
-  // stap 1: kijk of ENV/candidates in ListModels staan; zo ja → probeer in volgorde
-  let names = [];
-  try {
-    names = await listModels(key);
-  } catch {
-    names = []; // als list faalt, blijven we trialen op HTTP
-  }
-
-  let last404 = null;
-
-  for (const m of CANDIDATE_MODELS) {
-    // Als we een geldige lijst hebben, sla modellen over die niet voorkomen
-    if (names.length && !modelSupported(m, names)) {
-      continue;
-    }
-
-    const url = `${API_BASE}/models/${m}:generateContent?key=${encodeURIComponent(key)}`;
-    const resp = await fetch(url, { method: "POST", headers: JSON_HEADERS, body });
-
-    if (resp.ok) {
-      return { resp, modelUsed: m };
-    }
-
-    const text = await resp.text().catch(() => "");
-    if (resp.status === 404) {
-      last404 = { status: 404, text, model: m };
-      continue; // probeer volgende kandidaat
-    }
-    // andere fout → direct terug
-    return { resp, text, modelUsed: m };
-  }
-
-  // niets gewerkt
-  return {
-    resp: { ok: false, status: last404?.status || 404 },
-    text: last404?.text || "",
-    modelUsed: CANDIDATE_MODELS.at(-1),
+/** Bouw profielrichtlijnen (lichte hints) */
+function buildProfileDirectives(profileKey) {
+  const PROFILES = {
+    default: {
+      display: "Standaard",
+      toneHints: ["vriendelijk-professioneel", "empathisch", "duidelijk"],
+      styleRules: ["korte zinnen", "geen jargon", "positief geformuleerd"],
+      lexicon: { prefer: ["bestelling", "retour", "bevestiging"], avoid: ["ticket", "case", "RMA"] },
+      knowledge: [
+        "Retourtermijn: 30 dagen (NL/BE).",
+        "Gratis retour bij schade of verkeerde levering.",
+      ],
+    },
+    merrachi: {
+      display: "Merrachi",
+      toneHints: ["inspirerend", "respectvol", "vertrouwelijk"],
+      styleRules: ["verfijnde toon", "korte zinnen", "inclusief taalgebruik"],
+      lexicon: { prefer: ["collectie", "maat", "retourneren"], avoid: ["RMA", "order-ID"] },
+      knowledge: [
+        "Wereldwijde verzending 2–5 dagen.",
+        "Retour binnen 14 dagen.",
+        "Focus op stijl, comfort, bescheiden elegantie.",
+      ],
+    },
   };
+  const p = PROFILES[profileKey] || PROFILES.default;
+  return [
+    `Profiel: ${p.display}`,
+    `Toon-hints: ${p.toneHints.join(", ")}`,
+    `Stijl: ${p.styleRules.join(", ")}`,
+    `Terminologie — verkies: ${p.lexicon.prefer.join(", ")}; vermijd: ${p.lexicon.avoid.join(", ")}`,
+    `Kennis (alleen indien relevant, kort):`,
+    ...p.knowledge.map((k) => `- ${k}`),
+  ].join("\n");
+}
+
+/** Basissysteemrichtlijnen (geen systemInstruction veld gebruiken: merge in prompt) */
+function baseSystemDirectives() {
+  return `
+Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
+Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
+
+Algemene richtlijnen:
+- **Social Media**: 1–2 zinnen, varieer formuleringen, maximaal 1 passende emoji.
+- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf GEEN onderwerpregel** en **geen regel die begint met "Onderwerp:" of "Subject:"**.
+- Erken de situatie van de klant en geef, waar mogelijk, direct antwoord. Geen meta-uitleg.
+
+Vraag- & gegevenslogica:
+- **Beschikbaarheid / productinfo**: geef direct info of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
+- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (alleen indien nodig).
+- **Schade / defect**: vraag **foto + ordernummer** (alleen indien nodig).
+- **Retour/ruil**: licht kort de procedure toe; vraag pas om gegevens als het echt nodig is.
+
+Stijl:
+- Varieer natuurlijk in aanhef en afsluiting; vermijd herhaalde standaardzinnen.
+- Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
+`.trim();
 }
 
 export default async (request) => {
   try {
     const url = new URL(request.url);
     if (url.searchParams.get("ping")) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          pong: true,
-          build: BUILD_MARK,
-          env_model: ENV_MODEL || null,
-          candidates: CANDIDATE_MODELS,
-          api_base: API_BASE,
-        }),
-        { headers: JSON_HEADERS }
-      );
+      return new Response(JSON.stringify({ ok: true, pong: true, build: BUILD_MARK }), {
+        headers: JSON_HEADERS,
+      });
     }
 
     if (request.method !== "POST") {
@@ -132,21 +120,6 @@ export default async (request) => {
         status: 405,
         headers: JSON_HEADERS,
       });
-    }
-
-    let payload = {};
-    try {
-      payload = await request.json();
-    } catch {
-      payload = {};
-    }
-
-    const { userText, type, tone, profileKey = "default" } = payload || {};
-    if (!userText || !type || !tone) {
-      return new Response(
-        JSON.stringify({ error: "Missing fields (userText, type, tone)" }),
-        { status: 400, headers: JSON_HEADERS }
-      );
     }
 
     const key = process.env.GEMINI_API_KEY;
@@ -157,189 +130,116 @@ export default async (request) => {
       });
     }
 
-    const temperature = 0.7;
-
-    const systemDirectives = `
-Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
-Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
-
-Algemene richtlijnen:
-- **Social Media**: 1–2 zinnen, varieer formuleringen, maximaal 1 passende emoji.
-- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf GEEN onderwerpregel** en **geen regel die begint met “Onderwerp:” of “Subject:”.**
-- Erken de situatie van de klant en geef, waar mogelijk, direct antwoord. Geen meta-uitleg.
-
-Vraag- & gegevenslogica:
-- **Beschikbaarheid / productinfo**: geef direct info of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
-- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (alleen indien nodig).
-- **Schade / defect**: vraag **foto + ordernummer** (alleen indien nodig).
-- **Retour/ruil**: licht kort de procedure toe; vraag pas om gegevens als het écht nodig is.
-
-Stijl:
-- Varieer natuurlijk in aanhef en afsluiting; vermijd herhaalde standaardzinnen.
-- Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
-`.trim();
-
-    const PROFILES = {
-      default: {
-        display: "Standaard",
-        toneHints: ["vriendelijk-professioneel", "empathisch", "duidelijk"],
-        styleRules: ["korte zinnen", "geen jargon", "positief geformuleerd"],
-        lexicon: { prefer: ["bestelling", "retour", "bevestiging"], avoid: ["ticket", "case", "RMA"] },
-        knowledge: [
-          "Retourtermijn: 30 dagen (NL/BE).",
-          "Gratis retour bij schade of verkeerde levering.",
-        ],
-      },
-      merrachi: {
-        display: "Merrachi",
-        toneHints: ["inspirerend", "empowerend", "respectvol"],
-        styleRules: ["korte zinnen", "verfijnde toon", "duidelijk en inclusief"],
-        lexicon: { prefer: ["collectie", "maat", "retourneren"], avoid: ["RMA", "order-ID"] },
-        knowledge: [
-          "Wereldwijde verzending binnen 2–5 dagen.",
-          "Retourneren toegestaan binnen 14 dagen.",
-          "Collecties geïnspireerd door cultuur en bescheidenheid.",
-          "Maten ontworpen voor comfort en zelfvertrouwen.",
-          "Gebruik maattabel bij pasvorm-vragen.",
-          "Veilige betaalmethoden wereldwijd beschikbaar.",
-          "Duurzame materialen zorgvuldig geselecteerd.",
-          "Speciale collecties tijdens Ramadan.",
-          "Klantenservice dagelijks bereikbaar.",
-          "Focus op elegantie en vrouwelijk zelfvertrouwen.",
-        ],
-      },
-    };
-
-    function buildProfileDirectives(keyName) {
-      const p = PROFILES[keyName] || PROFILES.default;
-      return [
-        `Profiel: ${p.display}`,
-        `Toon-hints: ${p.toneHints.join(", ")}`,
-        `Stijl: ${p.styleRules.join(", ")}`,
-        `Terminologie — verkies: ${p.lexicon.prefer.join(", ")}; vermijd: ${p.lexicon.avoid.join(", ")}`,
-        `Kennis (alleen indien relevant, kort):`,
-        ...p.knowledge.map((k) => `- ${k}`),
-      ].join("\n");
+    // Payload lezen
+    let payload = {};
+    try {
+      payload = await request.json();
+    } catch {
+      payload = {};
     }
 
-    const finalSystem = [systemDirectives, buildProfileDirectives(profileKey)].join("\n\n");
+    const {
+      userText,
+      type,
+      tone,
+      profileKey = "default",
+      kb = [], // optioneel: array [{id,title,snippet,rank}]
+    } = payload || {};
 
-    // System prompt als prefix in dezelfde user prompt (schema-proof)
-    const userPrompt = `${finalSystem}
+    if (!userText || !type || !tone) {
+      return new Response(JSON.stringify({ error: "Missing fields (userText, type, tone)" }), {
+        status: 400,
+        headers: JSON_HEADERS,
+      });
+    }
 
----
-Type: ${type}
-Stijl: ${tone}
+    // Temperatuur
+    const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
+    const temperature = envTemp ?? 0.7;
 
-Invoer klant:
-${userText}`;
+    // Profiel & KB
+    const profile = buildProfileDirectives(profileKey);
+    const kbBlock = formatKbContext(kb, 3, 350);
 
-    const body = JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        temperature,
-        topP: 0.95,
-        topK: 50,
-        maxOutputTokens: 512,
-      },
-    });
+    // Prompt samenstellen zonder systemInstruction veld (v1 compat)
+    const system = baseSystemDirectives();
+    const userPrompt = [
+      system,
+      profile,
+      kbBlock ? kbBlock : "",
+      `Type: ${type}`,
+      `Stijl: ${tone}`,
+      "",
+      "Invoer klant:",
+      userText,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
-    const { resp, text: errPayload, modelUsed } = await withTimeout(
-      callGeminiWithFallback({ key, body }),
+    // API-call
+    const resp = await withTimeout(
+      fetch(`${API_URL}?key=${key}`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            temperature,
+            topP: 0.95,
+            topK: 50,
+            maxOutputTokens: 512,
+          },
+        }),
+      }),
       20000
     );
 
     if (!resp.ok) {
-      const errText = errPayload || (await resp.text().catch(() => ""));
+      const errText = await resp.text().catch(() => "");
       return new Response(
         JSON.stringify({
           error: "Gemini error",
           upstreamStatus: resp.status,
           details: errText,
-          meta: { source: "error", build: BUILD_MARK, modelTried: modelUsed, api_base: API_BASE },
+          meta: { source: "error", build: BUILD_MARK, modelUsed: MODEL },
         }),
         { status: resp.status, headers: JSON_HEADERS }
       );
     }
 
-    // ▼▼▼ vervanging begint hier
-const data = await resp.json().catch(() => ({}));
+    const data = await resp.json().catch(() => ({}));
 
-const cand = data?.candidates?.[0] || {};
-const parts = Array.isArray(cand?.content?.parts) ? cand.content.parts : [];
-const rawTextJoined = parts
-  .map(p => (typeof p?.text === "string" ? p.text : ""))
-  .filter(Boolean)
-  .join("\n")
-  .trim();
+    // v1: text zit op candidates[0].content.parts[0].text (kan leeg zijn)
+    const rawText =
+      data?.candidates?.[0]?.content?.parts?.find((p) => typeof p?.text === "string")?.text ||
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "";
 
-let text = rawTextJoined;
-const finishReason = cand?.finishReason || null;
+    const text = stripSubjectLine(rawText || "Er is geen tekst gegenereerd.");
 
-// Als leeg of niet STOP → één lichte retry met lagere temperatuur en meer tokens
-if (!text || (finishReason && finishReason !== "STOP")) {
-  const retryBody = JSON.stringify({
-    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.4,
-      topP: 0.95,
-      topK: 50,
-      maxOutputTokens: 1024,
-    },
-  });
-
-  const { resp: retryResp } = await withTimeout(
-    callGeminiWithFallback({ key, body: retryBody }),
-    20000
-  );
-
-  if (retryResp?.ok) {
-    const retryData = await retryResp.json().catch(() => ({}));
-    const rCand = retryData?.candidates?.[0] || {};
-    const rParts = Array.isArray(rCand?.content?.parts) ? rCand.content.parts : [];
-    const retryJoined = rParts
-      .map(p => (typeof p?.text === "string" ? p.text : ""))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-    if (retryJoined) {
-      text = retryJoined;
-    }
-  }
-}
-
-// Laatste vangnet: nette NL fallback
-if (!text) {
-  text = "Er is geen tekst gegenereerd.";
-}
-
-// onderwerpregel verwijderen (onze stijlregel)
-text = stripSubjectLine(text);
-
-return new Response(
-  JSON.stringify({
-    text,
-    meta: {
-      source: "model",
-      build: BUILD_MARK,
-      modelUsed,
-      temperature,
-      topP: 0.95,
-      topK: 50,
-      finishReason, // handig voor debug in Network-tab
-    },
-  }),
-  { headers: JSON_HEADERS }
-);
-// ▲▲▲ vervanging eindigt hier
-
-  } catch (e) {
     return new Response(
       JSON.stringify({
-        error: e?.message || "Unknown error",
-        meta: { source: e?.message === "Timeout" ? "timeout" : "exception", build: BUILD_MARK },
+        text,
+        meta: {
+          source: "model",
+          build: BUILD_MARK,
+          modelUsed: MODEL,
+          temperature,
+          topP: 0.95,
+          topK: 50,
+          usedKb: Array.isArray(kb) ? kb.slice(0, 3).map(({ id, title }) => ({ id, title })) : [],
+        },
       }),
-      { status: e?.message === "Timeout" ? 408 : 500, headers: JSON_HEADERS }
+      { headers: JSON_HEADERS }
+    );
+  } catch (e) {
+    const isTimeout = e?.message === "Timeout";
+    return new Response(
+      JSON.stringify({
+        error: isTimeout ? "Timeout" : e?.message || "Unknown error",
+        meta: { source: isTimeout ? "timeout" : "exception", build: BUILD_MARK, modelUsed: MODEL },
+      }),
+      { status: isTimeout ? 408 : 500, headers: JSON_HEADERS }
     );
   }
 };
