@@ -57,14 +57,13 @@ export default async (request) => {
     }
 
     let payload = {};
-    try { payload = await request.json(); } catch { payload = {}; }
+    try {
+      payload = await request.json();
+    } catch {
+      payload = {};
+    }
 
-    const {
-      userText,
-      type,
-      tone,
-      profileKey = "default",
-    } = payload || {};
+    const { userText, type, tone, profileKey = "default" } = payload || {};
 
     if (!userText || !type || !tone) {
       return new Response(
@@ -76,15 +75,13 @@ export default async (request) => {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
       return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), {
-        status: 500, headers: JSON_HEADERS,
+        status: 500,
+        headers: JSON_HEADERS,
       });
     }
 
     // Forceer tijdelijk 0.7 zodat ENV niet knijpt
     const temperature = 0.7;
-    // // Later weer via ENV?
-    // // const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
-    // // const temperature = envTemp ?? 0.7;
 
     /** Lossere systeemprompt (geen onderwerp), plus logica voor welke gegevens je wél/niet vraagt */
     const systemDirectives = `
@@ -139,8 +136,8 @@ Stijl:
       },
     };
 
-    function buildProfileDirectives(key) {
-      const p = PROFILES[key] || PROFILES.default;
+    function buildProfileDirectives(keyName) {
+      const p = PROFILES[keyName] || PROFILES.default;
       return [
         `Profiel: ${p.display}`,
         `Toon-hints: ${p.toneHints.join(", ")}`,
@@ -159,13 +156,13 @@ Stijl: ${tone}
 Invoer klant:
 ${userText}`;
 
+    // Belangrijk: in v1 heet het 'systemInstruction' (camelCase), niet 'system_instruction'
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: JSON_HEADERS,
-        // cache no-store om hergebruik/spraakverwarring te voorkomen
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: finalSystem }] },
+          systemInstruction: { parts: [{ text: finalSystem }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: {
             temperature,
@@ -217,7 +214,10 @@ ${userText}`;
       );
     }
     return new Response(
-      JSON.stringify({ error: e?.message || "Unknown error", meta: { source: "exception" } }),
+      JSON.stringify({
+        error: e?.message || "Unknown error",
+        meta: { source: "exception" },
+      }),
       { status: 500, headers: JSON_HEADERS }
     );
   }
