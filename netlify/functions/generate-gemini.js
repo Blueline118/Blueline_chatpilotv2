@@ -33,19 +33,35 @@ function stripSubjectLine(s) {
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** Compact de KB-context naar max N regels */
-function formatKbContext(kbItems, maxItems = 3, maxCharsPerSnippet = 300) {
+/** Compact de KB-context naar totaalbudget (chars) */
+function formatKbContextBudgeted(kbItems) {
+  const DEFAULT_BUDGET = Number(process.env.KB_CONTEXT_BUDGET_CHARS || 800); // schaalbaar via env
+  const maxPerSnippet = Math.max(120, Math.floor(DEFAULT_BUDGET / 3));      // bescherming tegen één mega-snippet
+
   if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
-  const top = kbItems
-    .slice(0, maxItems)
-    .map((it, idx) => {
-      const title = (it.title || "").toString().trim();
-      const snippet = ((it.snippet || it.body || "") + "").slice(0, maxCharsPerSnippet).trim();
-      return `${idx + 1}) ${title ? `${title} — ` : ""}${snippet}`;
-    })
-    .join("\n");
-  return `Context (max ${Math.min(maxItems, kbItems.length)}):\n${top}`;
+
+  let used = 0;
+  const picked = [];
+
+  for (let i = 0; i < kbItems.length; i++) {
+    const it = kbItems[i] || {};
+    const title = (it.title || "").toString().trim();
+    const raw = (it.snippet || it.body || "").toString().replace(/\s+/g, " ").trim();
+
+    // Snij individuele snippet af (zachte limiet per snippet zodat er meerdere mee kunnen)
+    const snippet = raw.length > maxPerSnippet ? raw.slice(0, maxPerSnippet - 1).trimEnd() + "…" : raw;
+
+    const line = `${i + 1}) ${title ? `${title} — ` : ""}${snippet}`;
+    if (used + line.length > DEFAULT_BUDGET) break;
+
+    picked.push(line);
+    used += line.length;
+  }
+
+  if (!picked.length) return "";
+  return `Context (≈${used}/${DEFAULT_BUDGET} chars):\n` + picked.join("\n");
 }
+
 
 /** Bouw profielrichtlijnen (lichte hints) */
 function buildProfileDirectives(profileKey) {
@@ -159,7 +175,7 @@ export default async (request) => {
 
     // Profiel & KB
     const profile = buildProfileDirectives(profileKey);
-    const kbBlock = formatKbContext(kb, 3, 350);
+    const kbBlock = formatKbContextBudgeted(kb);
 
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
     const system = baseSystemDirectives();
@@ -184,11 +200,12 @@ export default async (request) => {
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: {
-            temperature,
-            topP: 0.95,
-            topK: 50,
-            maxOutputTokens: 512,
-          },
+  temperature,
+  topP: 0.9,
+  topK: 40,
+  // meer ruimte voor het antwoord:
+  maxOutputTokens: 768
+},
         }),
       }),
       20000
