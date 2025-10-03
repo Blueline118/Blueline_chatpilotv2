@@ -60,52 +60,33 @@ function formatKbContextBudgeted(kbItems) {
     : "";
 }
 
-/** Bouw profielrichtlijnen (lichte hints) */
+/** Compacte profielrichtlijnen (alleen stijl en verboden termen) */
 function buildProfileDirectives(profileKey) {
   const PROFILES = {
     default: {
-      display: "Standaard",
-      toneHints: ["vriendelijk-professioneel", "empathisch", "duidelijk"],
-      styleRules: ["korte zinnen", "geen jargon", "positief geformuleerd"],
-      lexicon: { prefer: ["bestelling", "retour", "bevestiging"], avoid: ["ticket", "case", "RMA"] },
-      knowledge: [
-        "Retourtermijn: 30 dagen (NL/BE).",
-        "Gratis retour bij schade of verkeerde levering.",
-      ],
+      style: "korte zinnen; geen jargon; positief geformuleerd",
+      avoid: ["ticket", "case", "RMA"],
     },
     merrachi: {
-      display: "Merrachi",
-      toneHints: ["inspirerend", "respectvol", "vertrouwelijk"],
-      styleRules: ["verfijnde toon", "korte zinnen", "inclusief taalgebruik"],
-      lexicon: { prefer: ["collectie", "maat", "retourneren"], avoid: ["RMA", "order-ID"] },
-      knowledge: [
-        "Wereldwijde verzending 2–5 dagen.",
-        "Retour binnen 14 dagen.",
-        "Focus op stijl, comfort, bescheiden elegantie.",
-      ],
+      style: "verfijnde toon; korte zinnen; inclusief taal",
+      avoid: ["RMA", "order-ID"],
     },
   };
   const p = PROFILES[profileKey] || PROFILES.default;
   return [
-    `Profiel: ${p.display}`,
-    `Toon-hints: ${p.toneHints.join(", ")}`,
-    `Stijl: ${p.styleRules.join(", ")}`,
-    `Terminologie — verkies: ${p.lexicon.prefer.join(", ")}; vermijd: ${p.lexicon.avoid.join(", ")}`,
-    `Kennis (alleen indien relevant, kort):`,
-    ...p.knowledge.map((k) => `- ${k}`),
+    `Stijl: ${p.style}`,
+    p.avoid?.length ? `Vermijd: ${p.avoid.join(", ")}` : null,
+  ].filter(Boolean).join("\n");
+}
+
+/** Basissysteemrichtlijnen (ultra-compact) */
+function baseSystemDirectives() {
+  return [
+    "Je bent de klantenservice-assistent.",
+    "Schrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam)."
   ].join("\n");
 }
 
-/** Basissysteemrichtlijnen – compacte versie */
-function baseSystemDirectives() {
-  return [
-    "Jij bent klantenservice-assistent voor Blueline Customer Care (e-commerce).",
-    "Schrijf in het Nederlands; toon: vriendelijk, professioneel, empathisch.",
-    "Social: 1–2 zinnen, max 1 emoji. E-mail: 80–140 woorden, géén onderwerpregel.",
-    "Geef direct antwoord; stel alleen noodzakelijke vervolgvragen.",
-    "Alleen indien nodig: (levering) ordernr+postcode+huisnr • (schade) foto+ordernr • (retour/ruil) korte procedure.",
-  ].join("\n");
-}
 
 export default async (request) => {
   try {
@@ -159,23 +140,33 @@ export default async (request) => {
     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     const temperature = envTemp ?? 0.7;
 
-    // Prompt samenstellen zonder systemInstruction veld (v1 compat)
-    const system = baseSystemDirectives();
-    const profile = buildProfileDirectives(profileKey);
-    const kbBlock = formatKbContextBudgeted(kb);
+function channelLine(type) {
+  const t = (type || "").toLowerCase();
+  if (t.includes("social")) return "Social: 1–2 zinnen; varieer; max 1 emoji.";
+  if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
+    return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
+  }
+  // fallback (pas desgewenst aan)
+  return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
+}
 
-    const userPrompt = [
-      system,
-      profile,
-      kbBlock ? kbBlock : "",
-      `Type: ${type}`,
-      `Stijl: ${tone}`,
-      "",
-      "Invoer klant:",
-      userText,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+   // Prompt samenstellen zonder systemInstruction veld (v1 compat)
+const system  = baseSystemDirectives();
+const profile = buildProfileDirectives(profileKey);
+const kbBlock =
+  typeof formatKbContextBudgeted === "function"
+    ? formatKbContextBudgeted(kb)
+    : (typeof formatKbContext === "function" ? formatKbContext(kb, 3, 280) : "");
+
+const userPrompt = [
+  system,               // kort systeemkader
+  channelLine(type),    // **dynamische** kanaalregel o.b.v. UI-keuze
+  profile,              // compact profiel (stijl/lexicon hints)
+  kbBlock || null,      // compacte KB-context (optioneel)
+  "Vraag:",
+  userText
+].filter(Boolean).join("\n\n");
+
 
     const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
     const generationConfig = {
