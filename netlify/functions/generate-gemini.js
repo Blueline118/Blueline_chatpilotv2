@@ -173,11 +173,12 @@ const promptPreview = userPrompt.slice(0, 600);
 
     const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
     const generationConfig = {
-      temperature,
-      topP: 0.95,
-      topK: 50,
-      maxOutputTokens: 768,
-    };
+  temperature,
+  topP: 0.95,
+  topK: 50,
+  // meer budget zodat er na "thoughts" ook tekst overblijft:
+  maxOutputTokens: 2048,
+};
     const promptLen = userPrompt.length;
     const systemLen = system.length;
     const profileLen = profile.length;
