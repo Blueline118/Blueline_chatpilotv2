@@ -5,6 +5,8 @@ export async function searchKb({ supabase, orgId, query, limit }) {
     k: limit ?? 3,
   });
 
+  if (error) return { items: [], error };
+
   const items = Array.isArray(data)
     ? data.map((row, index) => ({
         id: row?.id ?? row?.chunk_id ?? row?.document_id ?? null,
@@ -14,5 +16,5 @@ export async function searchKb({ supabase, orgId, query, limit }) {
       }))
     : [];
 
-  return { items, error };
+  return { items, error: null };
 }
