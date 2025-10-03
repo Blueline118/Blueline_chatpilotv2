@@ -6,11 +6,13 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
+import { supabase } from '../lib/supabaseClient';
 
 import AuthProfileButton from './AuthProfileButton';
 import MembersAdmin from './MembersAdmin';
 import SidebarNewsFeed from "./SidebarNewsFeed";
 import { useAuth } from '../providers/AuthProvider';
+import { searchKb } from '../services/kb';
 
 
 /******************** Utils ********************/
@@ -477,12 +479,14 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
-const navigate = useNavigate();
-function goToChatRoute() {
-  if (location.pathname.startsWith('/members')) {
-    navigate('/app'); // of je chatroute (bijv. '/')
+  const { activeOrgId } = useAuth();
+  const navigate = useNavigate();
+
+  function goToChatRoute() {
+    if (location.pathname.startsWith('/members')) {
+      navigate('/app'); // of je chatroute (bijv. '/')
+    }
   }
-}
 
 
   // Layout state (sidebar moet altijd zichtbaar blijven, open/closed)
@@ -547,38 +551,60 @@ function goToChatRoute() {
     e?.preventDefault();
     const trimmed = (input || "").trim();
     if (!trimmed) return;
+    const userMeta = { type: messageType, tone, profileKey };
+    const userMessage = { role: "user", text: trimmed, meta: userMeta, ts: Date.now() };
     // verwijder hero zodra eerste user message komt
     setMessages((prev) => prev.filter((m) => m.text !== "__hero__"));
-    setMessages((prev) => [...prev, { role: "user", text: trimmed, meta: { type: messageType, tone, profileKey } }]);
-    setInput(""); if (inputRef.current) autoresizeTextarea(inputRef.current);
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    if (inputRef.current) autoresizeTextarea(inputRef.current);
     setIsTyping(true);
+
+    let kbItems = [];
+    const orgId = activeOrgId;
+    if (orgId) {
+      try {
+        const { items } = await searchKb({ supabase, orgId, query: trimmed, limit: 3 });
+        if (Array.isArray(items) && items.length) {
+          kbItems = items;
+        }
+      } catch {
+        kbItems = [];
+      }
+    }
+
+    const payload = { userText: trimmed, type: messageType, tone, profileKey, kb: kbItems };
+
+    const chatId = currentChatIdRef.current;
+    const uid = uidRef.current;
+    const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
+    let assistantMessage = null;
+
     try {
       const r = await fetch("/.netlify/functions/generate-gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userText: trimmed, type: messageType, tone, profileKey }),
+        body: JSON.stringify(payload),
       });
       const data = await r.json();
       const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
-
-      // Opslaan in thread + recents
-      const chatId = currentChatIdRef.current;
-      const uid = uidRef.current;
-      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
-      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
-      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
-      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
+      const usedKb = Array.isArray(data?.meta?.usedKb) ? data.meta.usedKb : [];
+      const assistantMeta = { type: messageType, tone, profileKey, usedKb };
+      assistantMessage = { role: "assistant", text: reply, meta: assistantMeta, ts: Date.now() };
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch {
       const reply = generateAssistantReply(trimmed, messageType, tone);
-      setMessages((prev) => [...prev, { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey } }]);
-      const chatId = currentChatIdRef.current;
-      const uid = uidRef.current;
-      appendToThread(uid, chatId, { role: "user", text: trimmed, ts: Date.now() });
-      appendToThread(uid, chatId, { role: "assistant", text: reply, ts: Date.now() });
-      const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
-      setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
-    } finally { setIsTyping(false); }
+      assistantMessage = { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey, usedKb: [] }, ts: Date.now() };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
+      setIsTyping(false);
+    }
+
+    appendToThread(uid, chatId, userMessage);
+    if (assistantMessage) {
+      appendToThread(uid, chatId, assistantMessage);
+    }
+    setRecent(saveRecentChat(uid, { id: chatId, title, lastMessageAt: Date.now() }));
   }
 
   function handleCopied(id) {
@@ -591,45 +617,43 @@ function goToChatRoute() {
   const backToChatMobile = () => setMobileView("chat");
 
   function handleNewChat() {
-  // maak nieuwe chatId
-  const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
-  currentChatIdRef.current = newId;
+    // maak nieuwe chatId
+    const newId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    currentChatIdRef.current = newId;
 
-  // reset lijst en input
-  setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
-  setInput("");
-  setIsTyping(false);
+    // reset lijst en input
+    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    setInput("");
+    setIsTyping(false);
 
-  // ga (indien nodig) naar chatroute (weg uit /members)
-  goToChatRoute();
+    // ga (indien nodig) naar chatroute (weg uit /members)
+    goToChatRoute();
 
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
-
-
+    // focus op input
+    requestAnimationFrame(() => inputRef.current?.focus?.());
+  }
 
   // Recall & delete
   function loadChat(chatId) {
-  const uid = uidRef.current;
-  const thread = getThread(uid, chatId);
+    const uid = uidRef.current;
+    const thread = getThread(uid, chatId);
 
-  // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
-  currentChatIdRef.current = chatId;
+    // zelfs als de thread (nog) leeg is, wisselen we naar deze chat
+    currentChatIdRef.current = chatId;
 
-  if (Array.isArray(thread) && thread.length) {
-    setMessages(thread);
-  } else {
-    // toon hero als placeholder
-    setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    if (Array.isArray(thread) && thread.length) {
+      setMessages(thread);
+    } else {
+      // toon hero als placeholder
+      setMessages([{ role: "assistant", text: "__hero__", meta: { type: "System" } }]);
+    }
+
+    // verlaat /members en ga naar chatroute
+    goToChatRoute();
+
+    // focus op input
+    requestAnimationFrame(() => inputRef.current?.focus?.());
   }
-
-  // verlaat /members en ga naar chatroute
-  goToChatRoute();
-
-  // focus op input
-  requestAnimationFrame(() => inputRef.current?.focus?.());
-}
 
   function handleDeleteChat(chatId) {
     const uid = uidRef.current;
@@ -731,16 +755,33 @@ function goToChatRoute() {
                   <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                     {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
                       const isUser = m.role === "user";
+                      const usedKbItems = !isUser && Array.isArray(m?.meta?.usedKb) ? m.meta.usedKb.slice(0, 3) : [];
                       return (
-                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}> 
-                          <div className={cx(
-                            "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
-                            isUser
-                              ? "bg-[#2563eb] text-white"
-                              : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
-                          )}>{m.text}</div>
+                        <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
+                          <div className={cx("flex flex-col gap-2 max-w-[560px]", isUser ? "items-end" : "items-start")}>
+                            <div
+                              className={cx(
+                                "max-w-[560px] rounded-2xl px-5 py-4 text-[15px] leading-6 break-words",
+                                isUser
+                                  ? "bg-[#2563eb] text-white"
+                                  : "bg-white text-[#65676a] border border-gray-200 shadow-[0_6px_18px_rgba(25,66,151,0.08)]"
+                              )}
+                            >
+                              {m.text}
+                            </div>
+                            {!isUser && usedKbItems.length > 0 && (
+                              <div className="max-w-[560px] text-[12px] text-[#8b8d94]">
+                                <div className="font-medium text-[#6b6e77]">🛈 Gebruikte kennisbank</div>
+                                <ul className="mt-1 list-disc list-inside space-y-0.5">
+                                  {usedKbItems.map((item, itemIdx) => (
+                                    <li key={item?.id ?? item?.slug ?? itemIdx}>{item?.title || 'Onbekende bron'}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
                           {!isUser && (
-                            <div className="-mt-1 ml-2 self:end"> 
+                            <div className="-mt-1 ml-2 self:end">
                               <CopyButton id={`msg-${idx}`} text={m.text} onCopied={handleCopied} isCopied={copiedId === `msg-${idx}`} />
                             </div>
                           )}
