@@ -1,7 +1,16 @@
 // netlify/functions/generate-gemini.js
-const API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Config: v1 endpoint + configureerbaar model via env
+// ────────────────────────────────────────────────────────────────────────────────
+const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro"; // alternatief: "gemini-1.5-flash-latest"
+const API_BASE =
+  process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1";
+const API_URL = `${API_BASE}/models/${MODEL}:generateContent`;
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────────
 function withTimeout(promise, ms = 20000) {
   return Promise.race([
     promise,
