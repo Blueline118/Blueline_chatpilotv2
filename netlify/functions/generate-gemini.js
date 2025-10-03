@@ -60,7 +60,6 @@ function formatKbContextBudgeted(kbItems) {
     : "";
 }
 
-
 /** Bouw profielrichtlijnen (lichte hints) */
 function buildProfileDirectives(profileKey) {
   const PROFILES = {
@@ -104,13 +103,14 @@ function baseSystemDirectives() {
     "Schrijf in het Nederlands; toon: vriendelijk, professioneel, empathisch.",
     "Social: 1–2 zinnen, max 1 emoji. E-mail: 80–140 woorden, géén onderwerpregel.",
     "Geef direct antwoord; stel alleen noodzakelijke vervolgvragen.",
-    "Alleen indien nodig: (levering) ordernr+postcode+huisnr • (schade) foto+ordernr • (retour/ruil) korte procedure."
+    "Alleen indien nodig: (levering) ordernr+postcode+huisnr • (schade) foto+ordernr • (retour/ruil) korte procedure.",
   ].join("\n");
 }
 
 export default async (request) => {
   try {
     const url = new URL(request.url);
+    const DEBUG = url.searchParams.get("debug") === "1";
     if (url.searchParams.get("ping")) {
       return new Response(JSON.stringify({ ok: true, pong: true, build: BUILD_MARK }), {
         headers: JSON_HEADERS,
@@ -159,34 +159,44 @@ export default async (request) => {
     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     const temperature = envTemp ?? 0.7;
 
-     // Compacte prompt – kort & schaalbaar
-const system = "Je bent een NL klantenservice-assistent. Antwoord kort, concreet en behulpzaam.";
-const profile = ""; // voorlopig geen lange profielregels, scheelt tokens
-const kbBlock = formatKbContextBudgeted(kb);
+    // Prompt samenstellen zonder systemInstruction veld (v1 compat)
+    const system = baseSystemDirectives();
+    const profile = buildProfileDirectives(profileKey);
+    const kbBlock = formatKbContextBudgeted(kb);
 
-const userPrompt = [
-  system,
-  kbBlock, // compact KB-feiten
-  `Stijl: ${tone || "Professioneel"}`,
-  "Beantwoord in maximaal 120 woorden.",
-  `Vraag: ${userText}`
-].filter(Boolean).join("\n");
+    const userPrompt = [
+      system,
+      profile,
+      kbBlock ? kbBlock : "",
+      `Type: ${type}`,
+      `Stijl: ${tone}`,
+      "",
+      "Invoer klant:",
+      userText,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
+    const generationConfig = {
+      temperature,
+      topP: 0.95,
+      topK: 50,
+      maxOutputTokens: 768,
+    };
+    const promptLen = userPrompt.length;
+    const systemLen = system.length;
+    const profileLen = profile.length;
+    const kbLen = (kbBlock || "").length;
+
+    const payloadForGemini = { contents, generationConfig };
 
     // API-call
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
-  temperature: 0.4,
-  topP: 0.8,
-  topK: 40,
-  maxOutputTokens: 256
-}
-
-        }),
+        body: JSON.stringify(payloadForGemini),
       }),
       20000
     );
@@ -206,80 +216,74 @@ const userPrompt = [
 
     const data = await resp.json().catch(() => ({}));
 
-// optionele debug: ?debug=1
-const DEBUG = new URL(request.url).searchParams.get("debug") === "1";
+    const cand = data?.candidates?.[0] ?? null;
+    const parts = cand?.content?.parts ?? [];
+    const firstText = parts.find((p) => typeof p?.text === "string")?.text ?? "";
+    const finishReason = cand?.finishReason ?? cand?.finish_reason ?? null;
+    const blockReason = data?.promptFeedback?.blockReason ?? null;
+    const safetyRatings = cand?.safetyRatings ?? data?.safetyRatings ?? null;
 
-// Parse candidate + redenen
-const cand          = data?.candidates?.[0] ?? null;
-const parts         = Array.isArray(cand?.content?.parts) ? cand.content.parts : [];
-const firstText     = parts.find((p) => typeof p?.text === "string")?.text ?? "";
-const finishReason  = cand?.finishReason ?? cand?.finish_reason ?? null;
-const blockReason   = data?.promptFeedback?.blockReason ?? null;
-const safetyRatings = cand?.safetyRatings ?? null;
+    if (!firstText || firstText.trim() === "") {
+      const payload = {
+        error: "Empty model response",
+        meta: {
+          source: "empty",
+          build: BUILD_MARK,
+          modelUsed: MODEL,
+          finishReason,
+          blockReason,
+          safetyRatings,
+          usedKb: Array.isArray(kb)
+            ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+            : [],
+        },
+      };
+      if (DEBUG) {
+        payload.debug = {
+          promptLen,
+          systemLen,
+          profileLen,
+          kbLen,
+          promptPreview: userPrompt.slice(0, 1200),
+          generationConfig,
+          contentsSent: contents,
+          upstream: data,
+        };
+      }
+      return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
+    }
 
-// Geen bruikbaar modelantwoord → expliciet 502
-if (!firstText || firstText.trim() === "") {
-  const respPayload = {
-    error: "Empty model response",
-    meta: {
-      source: "empty",
-      build: BUILD_MARK,
-      modelUsed: MODEL,
-      finishReason,
-      blockReason,
-      safetyRatings,
-      usedKb: Array.isArray(kb)
-        ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
-        : [],
-    },
-    ...(DEBUG ? { upstream: data, parts } : {}),
-  };
-  return new Response(JSON.stringify(respPayload), { status: 502, headers: JSON_HEADERS });
-}
+    const modelText = stripSubjectLine(firstText);
+    const respPayload = {
+      text: modelText,
+      meta: {
+        source: "model",
+        build: BUILD_MARK,
+        modelUsed: MODEL,
+        temperature,
+        topP: 0.95,
+        topK: 50,
+        usedKb: Array.isArray(kb)
+          ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+          : [],
+      },
+    };
+    if (DEBUG) {
+      respPayload.debug = {
+        promptLen,
+        systemLen,
+        profileLen,
+        kbLen,
+        promptPreview: userPrompt.slice(0, 1200),
+        generationConfig,
+        contentsSent: contents,
+        finishReason,
+        blockReason,
+        safetyRatings,
+      };
+    }
 
-// Normaal pad
-const modelText = stripSubjectLine(firstText);
-
-const respPayload = {
-  modelText,
-  meta: {
-    source: "model",
-    build: BUILD_MARK,
-    modelUsed: MODEL,
-    temperature,
-    topP: 0.95,
-    topK: 50,
-    usedKb: Array.isArray(kb)
-      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
-      : [],
-  },
-  ...(DEBUG ? { upstream: data } : {}),
-};
-
-return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });
-
-
-// Normal success path
-const text = stripSubjectLine(firstText);
-
-const out = {
-  text,
-  meta: {
-    source: "model",
-    build: BUILD_MARK,
-    modelUsed: MODEL,
-    temperature,
-    topP: 0.95,
-    topK: 50,
-    usedKb: Array.isArray(kb)
-      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
-      : [],
-  },
-};
-if (DEBUG) payload.debug = { finishReason, blockReason, safetyRatings };
-
-return new Response(JSON.stringify(payload), { headers: JSON_HEADERS });
-
+    return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });
 
   } catch (e) {
     const isTimeout = e?.message === "Timeout";
