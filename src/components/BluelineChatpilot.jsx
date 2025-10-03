@@ -6,13 +6,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { getAnonId } from "../utils/anonId";
 import { fetchRecentChats, saveRecentChat, deleteRecentChat } from "../utils/recentChats";
 import { appendToThread, getThread, deleteThread } from "../utils/threadStore";
-import { supabase } from '../lib/supabaseClient';
-
 import AuthProfileButton from './AuthProfileButton';
 import MembersAdmin from './MembersAdmin';
 import SidebarNewsFeed from "./SidebarNewsFeed";
-import { useAuth } from '../providers/AuthProvider';
 import { searchKb } from '../services/kb';
+import { useAuth } from '../providers/AuthProvider';
 
 
 /******************** Utils ********************/
@@ -106,7 +104,7 @@ function CopyButton({ id, text, onCopied, isCopied }) {
       title={isCopied ? "Gekopieerd" : "Kopieer bericht"}
     >
       {isCopied ? (
-        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M9 16.2l-3.5-3.5a1 1 0 10-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z"/></svg>
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M9 16.2l-3.5-3.5a1 1 010-1.4 1.4l4.2 4.2a1 1 0 001.4 0l10-10a1 1 0 10-1.4-1.4L9 16.2z"/></svg>
       ) : (
         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden="true"><path d="M16 1H6a2 2 0 00-2 2v12h2V3h10V1zm3 4H10a2 2 0 00-2 2v14a2 2 0 002 2h9a2 2 0 002-2V7a2 2 0 00-2-2zm0 16H10V7h9v14z"/></svg>
       )}
@@ -236,7 +234,7 @@ function AppSidebar({ open, onToggleSidebar, onToggleFeed, feedOpen, onNewChat, 
         aria-expanded={expanded}
       >
         {/* Toggle */}
-        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}> 
+        <div className={cx("h-14 flex items-center px-2", expanded ? "justify-end" : "justify-center")}>
           <button
             type="button"
             onClick={onToggleSidebar}
@@ -479,7 +477,7 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
-  const { activeOrgId } = useAuth();
+  const { supabase, activeOrgId } = useAuth();
   const navigate = useNavigate();
 
   function goToChatRoute() {
@@ -561,12 +559,17 @@ function BluelineChatpilotInner() {
     setIsTyping(true);
 
     let kbItems = [];
-    const orgId = activeOrgId;
-    if (orgId) {
+    const orgId = activeOrgId || null;
+
+    if (orgId && supabase) {
       try {
         const { items } = await searchKb({ supabase, orgId, query: trimmed, limit: 3 });
         if (Array.isArray(items) && items.length) {
-          kbItems = items;
+          kbItems = items.slice(0, 3).map((it) => ({
+            id: it?.id ?? null,
+            title: it?.title ?? "",
+            snippet: it?.snippet ?? it?.body ?? "",
+          }));
         }
       } catch {
         kbItems = [];
@@ -755,7 +758,7 @@ function BluelineChatpilotInner() {
                   <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                     {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
                       const isUser = m.role === "user";
-                      const usedKbItems = !isUser && Array.isArray(m?.meta?.usedKb) ? m.meta.usedKb.slice(0, 3) : [];
+                      const usedKbItems = !isUser && Array.isArray(m?.meta?.usedKb) ? m.meta.usedKb : [];
                       return (
                         <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
                           <div className={cx("flex flex-col gap-2 max-w-[560px]", isUser ? "items-end" : "items-start")}>
@@ -772,11 +775,11 @@ function BluelineChatpilotInner() {
                             {!isUser && usedKbItems.length > 0 && (
                               <div className="max-w-[560px] text-[12px] text-[#8b8d94]">
                                 <div className="font-medium text-[#6b6e77]">🛈 Gebruikte kennisbank</div>
-                                <ul className="mt-1 list-disc list-inside space-y-0.5">
+                                <div className="mt-1 space-y-0.5">
                                   {usedKbItems.map((item, itemIdx) => (
-                                    <li key={item?.id ?? item?.slug ?? itemIdx}>{item?.title || 'Onbekende bron'}</li>
+                                    <div key={item?.id ?? itemIdx}>• {item?.title || "Onbekende bron"}</div>
                                   ))}
-                                </ul>
+                                </div>
                               </div>
                             )}
                           </div>
