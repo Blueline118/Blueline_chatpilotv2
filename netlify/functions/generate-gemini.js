@@ -166,6 +166,9 @@ const userPrompt = [
   "Vraag:",
   userText
 ].filter(Boolean).join("\n\n");
+// Voor debug: korte prompt-preview (ook bij 502)
+
+const promptPreview = userPrompt.slice(0, 600);
 
 
     const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
@@ -213,36 +216,45 @@ const userPrompt = [
     const finishReason = cand?.finishReason ?? cand?.finish_reason ?? null;
     const blockReason = data?.promptFeedback?.blockReason ?? null;
     const safetyRatings = cand?.safetyRatings ?? data?.safetyRatings ?? null;
+    
 
     if (!firstText || firstText.trim() === "") {
-      const payload = {
-        error: "Empty model response",
-        meta: {
-          source: "empty",
-          build: BUILD_MARK,
-          modelUsed: MODEL,
-          finishReason,
-          blockReason,
-          safetyRatings,
-          usedKb: Array.isArray(kb)
-            ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
-            : [],
-        },
-      };
-      if (DEBUG) {
-        payload.debug = {
-          promptLen,
-          systemLen,
-          profileLen,
-          kbLen,
-          promptPreview: userPrompt.slice(0, 1200),
-          generationConfig,
-          contentsSent: contents,
-          upstream: data,
-        };
-      }
-      return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
-    }
+  const payload = {
+    error: "Empty model response",
+    meta: {
+      source: "empty",
+      build: BUILD_MARK,
+      modelUsed: MODEL,
+      finishReason,
+      blockReason,
+      safetyRatings,
+      // ▶︎ altijd meegeven (niet alleen in DEBUG), zodat je het in UI/Network ziet
+      promptPreview: userPrompt.slice(0, 600),
+      promptLengths: {
+        total: promptLen,
+        system: systemLen,
+        profile: profileLen,
+        kb: kbLen,
+        user: (userText || "").length,
+      },
+      usedKb: Array.isArray(kb)
+        ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+        : [],
+    },
+  };
+
+  // Extra’s alleen bij ?debug=1
+  if (DEBUG) {
+    payload.debug = {
+      generationConfig,
+      contentsSent: contents,
+      upstream: data,
+    };
+  }
+
+  return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
+}
+
 
     const modelText = stripSubjectLine(firstText);
     const respPayload = {
