@@ -1,19 +1,30 @@
 // netlify/functions/generate-gemini.js
 // ============================================================================
 // Blueline Chatpilot – Gemini gateway (REST v1)
-// - Model/endpoint via env (GEMINI_MODEL, GEMINI_API_BASE)
-// - Single-turn: systemprompt wordt als prefix in de user prompt gezet
-// - Vermijdt schema issues rond system_instruction/systemInstruction
+// - Automatische model-fallback op basis van ListModels (v1)
+// - System prompt als prefix in user prompt (geen system_instruction veld nodig)
+// - Response bevat meta.modelUsed zodat je ziet welk model live draait
 // ============================================================================
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro-latest";;
+const API_BASE = process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1";
+/** Let op: hier ZONDER "models/" prefix; de URL voegt /models/ zelf toe. */
+const ENV_MODEL = (process.env.GEMINI_MODEL || "").replace(/^models\//, "").trim();
+/** Kandidaten voor gratis/snel → betaald/beter volgorde */
+const CANDIDATE_MODELS = [
+  ENV_MODEL || null,
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash-lite-001",
+  "gemini-2.5-pro" // als je quota hebt
+].filter(Boolean);
 
-const API_BASE =
-  process.env.GEMINI_API_BASE ||
-  // REST v1 (niet v1beta)
-  "https://generativelanguage.googleapis.com/v1";
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const BUILD_MARK = "v1-fallback-model-prefix-systemprompt@2025-10-03";
 
-const API_URL = `${API_BASE}/models/${MODEL}:generateContent`;
+/** In-memory cache van models lijst (per function cold start) */
+let _modelsCache = { at: 0, names: [] };
 
 function withTimeout(promise, ms = 20000) {
   return Promise.race([
@@ -22,15 +33,6 @@ function withTimeout(promise, ms = 20000) {
   ]);
 }
 
-const JSON_HEADERS = { "Content-Type": "application/json" };
-
-function clampTemp(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.min(1.0, Math.max(0.1, n));
-}
-
-/** Verwijder “Onderwerp:” / “Subject:” regels (varianten incl. NBSP) */
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
   const lines = s.split(/\r?\n/);
@@ -40,13 +42,89 @@ function stripSubjectLine(s) {
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** Haal lijst met models op (v1) en cache 5 min */
+async function listModels(key) {
+  const now = Date.now();
+  if (_modelsCache.names.length && now - _modelsCache.at < 5 * 60 * 1000) {
+    return _modelsCache.names;
+  }
+  const url = `${API_BASE}/models?key=${encodeURIComponent(key)}`;
+  const resp = await withTimeout(fetch(url), 10000);
+  if (!resp.ok) {
+    // geef lege lijst terug; caller zal trial/fallback doen
+    return [];
+  }
+  const data = await resp.json().catch(() => ({}));
+  const names = Array.isArray(data?.models)
+    ? data.models.map((m) => String(m?.name || "")).filter(Boolean) // bv. "models/gemini-2.0-flash"
+    : [];
+  _modelsCache = { at: now, names };
+  return names;
+}
+
+/** Controleer of een model naam (zonder "models/") in ListModels zit en generateContent kan */
+function modelSupported(modelName, list) {
+  const full = `models/${modelName}`;
+  return list.some((n) => n === full);
+}
+
+/** Roep generateContent aan met fallback over CANDIDATE_MODELS */
+async function callGeminiWithFallback({ key, body }) {
+  // stap 1: kijk of ENV/candidates in ListModels staan; zo ja → probeer in volgorde
+  let names = [];
+  try {
+    names = await listModels(key);
+  } catch {
+    names = []; // als list faalt, blijven we trialen op HTTP
+  }
+
+  let last404 = null;
+
+  for (const m of CANDIDATE_MODELS) {
+    // Als we een geldige lijst hebben, sla modellen over die niet voorkomen
+    if (names.length && !modelSupported(m, names)) {
+      continue;
+    }
+
+    const url = `${API_BASE}/models/${m}:generateContent?key=${encodeURIComponent(key)}`;
+    const resp = await fetch(url, { method: "POST", headers: JSON_HEADERS, body });
+
+    if (resp.ok) {
+      return { resp, modelUsed: m };
+    }
+
+    const text = await resp.text().catch(() => "");
+    if (resp.status === 404) {
+      last404 = { status: 404, text, model: m };
+      continue; // probeer volgende kandidaat
+    }
+    // andere fout → direct terug
+    return { resp, text, modelUsed: m };
+  }
+
+  // niets gewerkt
+  return {
+    resp: { ok: false, status: last404?.status || 404 },
+    text: last404?.text || "",
+    modelUsed: CANDIDATE_MODELS.at(-1),
+  };
+}
+
 export default async (request) => {
   try {
     const url = new URL(request.url);
     if (url.searchParams.get("ping")) {
-      return new Response(JSON.stringify({ ok: true, pong: true }), {
-        headers: JSON_HEADERS,
-      });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          pong: true,
+          build: BUILD_MARK,
+          env_model: ENV_MODEL || null,
+          candidates: CANDIDATE_MODELS,
+          api_base: API_BASE,
+        }),
+        { headers: JSON_HEADERS }
+      );
     }
 
     if (request.method !== "POST") {
@@ -79,10 +157,8 @@ export default async (request) => {
       });
     }
 
-    // Voor nu hard op 0.7 zodat ENV niet knijpt tijdens testen
     const temperature = 0.7;
 
-    // ── System directives + profiel hints
     const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
 Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
@@ -108,10 +184,7 @@ Stijl:
         display: "Standaard",
         toneHints: ["vriendelijk-professioneel", "empathisch", "duidelijk"],
         styleRules: ["korte zinnen", "geen jargon", "positief geformuleerd"],
-        lexicon: {
-          prefer: ["bestelling", "retour", "bevestiging"],
-          avoid: ["ticket", "case", "RMA"],
-        },
+        lexicon: { prefer: ["bestelling", "retour", "bevestiging"], avoid: ["ticket", "case", "RMA"] },
         knowledge: [
           "Retourtermijn: 30 dagen (NL/BE).",
           "Gratis retour bij schade of verkeerde levering.",
@@ -121,10 +194,7 @@ Stijl:
         display: "Merrachi",
         toneHints: ["inspirerend", "empowerend", "respectvol"],
         styleRules: ["korte zinnen", "verfijnde toon", "duidelijk en inclusief"],
-        lexicon: {
-          prefer: ["collectie", "maat", "retourneren"],
-          avoid: ["RMA", "order-ID"],
-        },
+        lexicon: { prefer: ["collectie", "maat", "retourneren"], avoid: ["RMA", "order-ID"] },
         knowledge: [
           "Wereldwijde verzending binnen 2–5 dagen.",
           "Retourneren toegestaan binnen 14 dagen.",
@@ -154,7 +224,7 @@ Stijl:
 
     const finalSystem = [systemDirectives, buildProfileDirectives(profileKey)].join("\n\n");
 
-    // ⬇️ Truc: systemprompt als prefix in dezelfde user prompt. Geen system_instruction veld meer.
+    // System prompt als prefix in dezelfde user prompt (schema-proof)
     const userPrompt = `${finalSystem}
 
 ---
@@ -164,31 +234,29 @@ Stijl: ${tone}
 Invoer klant:
 ${userText}`;
 
-    const resp = await withTimeout(
-      fetch(`${API_URL}?key=${key}`, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature,
-            topP: 0.95,
-            topK: 50,
-            maxOutputTokens: 512,
-          },
-        }),
-      }),
+    const body = JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature,
+        topP: 0.95,
+        topK: 50,
+        maxOutputTokens: 512,
+      },
+    });
+
+    const { resp, text: errPayload, modelUsed } = await withTimeout(
+      callGeminiWithFallback({ key, body }),
       20000
     );
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
+      const errText = errPayload || (await resp.text().catch(() => ""));
       return new Response(
         JSON.stringify({
           error: "Gemini error",
           upstreamStatus: resp.status,
           details: errText,
-          meta: { source: "error" },
+          meta: { source: "error", build: BUILD_MARK, modelTried: modelUsed, api_base: API_BASE },
         }),
         { status: resp.status, headers: JSON_HEADERS }
       );
@@ -206,33 +274,22 @@ ${userText}`;
         text,
         meta: {
           source: "model",
+          build: BUILD_MARK,
+          modelUsed,
           temperature,
           topP: 0.95,
           topK: 50,
-          profileKey,
-          model: MODEL,
         },
       }),
       { headers: JSON_HEADERS }
     );
   } catch (e) {
-    if (e && e.message === "Timeout") {
-      return new Response(
-        JSON.stringify({
-          error: "Timeout",
-          hint:
-            "De AI deed er te lang over. Probeer het zo nog eens of versmal je vraag.",
-          meta: { source: "timeout" },
-        }),
-        { status: 408, headers: JSON_HEADERS }
-      );
-    }
     return new Response(
       JSON.stringify({
         error: e?.message || "Unknown error",
-        meta: { source: "exception" },
+        meta: { source: e?.message === "Timeout" ? "timeout" : "exception", build: BUILD_MARK },
       }),
-      { status: 500, headers: JSON_HEADERS }
+      { status: e?.message === "Timeout" ? 408 : 500, headers: JSON_HEADERS }
     );
   }
 };
