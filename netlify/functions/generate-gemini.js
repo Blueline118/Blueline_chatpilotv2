@@ -209,29 +209,65 @@ export default async (request) => {
 
     const data = await resp.json().catch(() => ({}));
 
-    // v1: text zit op candidates[0].content.parts[0].text (kan leeg zijn)
-    const rawText =
-      data?.candidates?.[0]?.content?.parts?.find((p) => typeof p?.text === "string")?.text ||
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "";
+// helper: probeer zoveel mogelijk tekst uit kandidaten te halen
+function extractTextFromCandidates(d) {
+  const c = d?.candidates?.[0];
+  if (!c) return "";
+  // 1) eerste text-part als die bestaat
+  const p1 = c?.content?.parts?.find((p) => typeof p?.text === "string")?.text;
+  if (p1) return p1;
+  // 2) concateneer alle text-parts
+  const all = (c?.content?.parts || [])
+    .map((p) => (typeof p?.text === "string" ? p.text : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  return all;
+}
 
-    const text = stripSubjectLine(rawText || "Er is geen tekst gegenereerd.");
+// optionele debug: ?debug=1 aan de functie-URL toont upstream terug
+const urlObj = new URL(request.url);
+const DEBUG = urlObj.searchParams.get("debug") === "1";
 
-    return new Response(
-      JSON.stringify({
-        text,
-        meta: {
-          source: "model",
-          build: BUILD_MARK,
-          modelUsed: MODEL,
-          temperature,
-          topP: 0.95,
-          topK: 50,
-          usedKb: Array.isArray(kb) ? kb.slice(0, 3).map(({ id, title }) => ({ id, title })) : [],
-        },
-      }),
-      { headers: JSON_HEADERS }
-    );
+const rawText = extractTextFromCandidates(data);
+
+// blok-/eindredenen tonen als er geen tekst komt
+const blockReason = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason || null;
+const safety = data?.candidates?.[0]?.safetyRatings || null;
+
+const finalText = stripSubjectLine(
+  rawText && rawText.trim().length > 0
+    ? rawText
+    : (blockReason
+        ? `Ik kan niet antwoorden vanwege een blokkade (${blockReason}). Probeer je vraag anders te formuleren.`
+        : "Er is geen tekst gegenereerd.")
+);
+
+const responsePayload = {
+  text: finalText,
+  meta: {
+    source: "model",
+    build: BUILD_MARK,
+    modelUsed: MODEL,
+    temperature,
+    topP: 0.95,
+    topK: 50,
+    usedKb: Array.isArray(kb)
+      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+      : [],
+  },
+};
+
+if (DEBUG) {
+  responsePayload.debug = {
+    blockReason,
+    safetyRatings: safety,
+    upstream: data,
+  };
+}
+
+return new Response(JSON.stringify(responsePayload), { headers: JSON_HEADERS });
+
   } catch (e) {
     const isTimeout = e?.message === "Timeout";
     return new Response(
