@@ -6,10 +6,7 @@
 // - Vermijdt schema issues rond system_instruction/systemInstruction
 // ============================================================================
 
-const MODEL =
-  process.env.GEMINI_MODEL ||
-  // kies zelf: "gemini-1.5-pro" of "gemini-1.5-flash-latest"
-  "gemini-1.5-pro";
+const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro-latest";;
 
 const API_BASE =
   process.env.GEMINI_API_BASE ||
