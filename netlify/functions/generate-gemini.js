@@ -200,15 +200,15 @@ ${userText}`;
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          systemInstruction: { role: "system", parts: [{ text: finalSystem }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature,
-            topP: 0.95,
-            topK: 50,
-            maxOutputTokens: 512,
-          },
-        }),
+  system_instruction: { role: "system", parts: [{ text: finalSystem }] },
+  contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+  generationConfig: {
+    temperature,
+    topP: 0.95,
+    topK: 50,
+    maxOutputTokens: 512,
+  },
+}),
       }),
       20000
     );
