@@ -3,7 +3,7 @@
 // ────────────────────────────────────────────────────────────────────────────────
 // Config: v1 endpoint + configureerbaar model via env
 // ────────────────────────────────────────────────────────────────────────────────
-const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro"; // alternatief: "gemini-1.5-flash-latest"
+const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro"; // of "gemini-1.5-flash-latest"
 const API_BASE =
   process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com/v1";
 const API_URL = `${API_BASE}/models/${MODEL}:generateContent`;
@@ -34,7 +34,7 @@ function stripSubjectLine(s) {
     const l = line
       .replace(/\u00A0/g, " ") // NBSP -> spatie
       .replace(/[*_~`>•\-–—]+/g, (m) => m); // laat opmaak staan maar we checken startwoord
-    // Match: start met Onderwerp/Subject (case-insensitive), gevolgd door optionele spaties en (:|–|—|-)
+    // Match “Onderwerp/Subject:” aan het begin van de regel (case-insensitive)
     return !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(l);
   });
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -83,7 +83,7 @@ export default async (request) => {
     // Forceer tijdelijk 0.7 zodat ENV niet knijpt
     const temperature = 0.7;
 
-    /** Lossere systeemprompt (geen onderwerp), plus logica voor welke gegevens je wél/niet vraagt */
+    // ── System directives + profielhint
     const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
 Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
@@ -104,7 +104,6 @@ Stijl:
 - Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
 `.trim();
 
-    /** Klantprofielen: zachte hints (niet knijpen) */
     const PROFILES = {
       default: {
         display: "Standaard",
@@ -156,15 +155,15 @@ Stijl: ${tone}
 Invoer klant:
 ${userText}`;
 
-    // Belangrijk: in v1 heet het 'systemInstruction' (camelCase), niet 'system_instruction'
+    // ── Belangrijk: v1 verwacht snake_case keys
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: finalSystem }] },
+          system_instruction: { role: "system", parts: [{ text: finalSystem }] },
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: {
+          generation_config: {
             temperature,
             topP: 0.95,
             topK: 50,
