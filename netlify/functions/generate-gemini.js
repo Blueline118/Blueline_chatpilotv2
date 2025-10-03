@@ -262,27 +262,77 @@ ${userText}`;
       );
     }
 
-    const data = await resp.json().catch(() => ({}));
-    const rawText =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Er is geen tekst gegenereerd.";
+    // ▼▼▼ vervanging begint hier
+const data = await resp.json().catch(() => ({}));
 
-    const text = stripSubjectLine(rawText);
+const cand = data?.candidates?.[0] || {};
+const parts = Array.isArray(cand?.content?.parts) ? cand.content.parts : [];
+const rawTextJoined = parts
+  .map(p => (typeof p?.text === "string" ? p.text : ""))
+  .filter(Boolean)
+  .join("\n")
+  .trim();
 
-    return new Response(
-      JSON.stringify({
-        text,
-        meta: {
-          source: "model",
-          build: BUILD_MARK,
-          modelUsed,
-          temperature,
-          topP: 0.95,
-          topK: 50,
-        },
-      }),
-      { headers: JSON_HEADERS }
-    );
+let text = rawTextJoined;
+const finishReason = cand?.finishReason || null;
+
+// Als leeg of niet STOP → één lichte retry met lagere temperatuur en meer tokens
+if (!text || (finishReason && finishReason !== "STOP")) {
+  const retryBody = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      temperature: 0.4,
+      topP: 0.95,
+      topK: 50,
+      maxOutputTokens: 1024,
+    },
+  });
+
+  const { resp: retryResp } = await withTimeout(
+    callGeminiWithFallback({ key, body: retryBody }),
+    20000
+  );
+
+  if (retryResp?.ok) {
+    const retryData = await retryResp.json().catch(() => ({}));
+    const rCand = retryData?.candidates?.[0] || {};
+    const rParts = Array.isArray(rCand?.content?.parts) ? rCand.content.parts : [];
+    const retryJoined = rParts
+      .map(p => (typeof p?.text === "string" ? p.text : ""))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (retryJoined) {
+      text = retryJoined;
+    }
+  }
+}
+
+// Laatste vangnet: nette NL fallback
+if (!text) {
+  text = "Er is geen tekst gegenereerd.";
+}
+
+// onderwerpregel verwijderen (onze stijlregel)
+text = stripSubjectLine(text);
+
+return new Response(
+  JSON.stringify({
+    text,
+    meta: {
+      source: "model",
+      build: BUILD_MARK,
+      modelUsed,
+      temperature,
+      topP: 0.95,
+      topK: 50,
+      finishReason, // handig voor debug in Network-tab
+    },
+  }),
+  { headers: JSON_HEADERS }
+);
+// ▲▲▲ vervanging eindigt hier
+
   } catch (e) {
     return new Response(
       JSON.stringify({
