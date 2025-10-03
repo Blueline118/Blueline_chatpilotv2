@@ -34,40 +34,32 @@ function stripSubjectLine(s) {
 }
 
 /** Compact de KB-context naar totaalbudget (chars) */
+// Compact KB: at most ~400 characters total, max 2 lines
 function formatKbContextBudgeted(kbItems) {
   if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
-  const MAX_CONTEXT_BUDGET = 500; // was 800
-  const MAX_ITEMS          = 2;   // was 3
-  const TITLE_COST         = 40;
-
+  const MAX_TOTAL = 400;
+  const lines = [];
   let used = 0;
-  const picked = [];
 
-  for (const it of kbItems) {
-    if (picked.length >= MAX_ITEMS) break;
-    const title = (it.title || "").toString().trim();
-    const raw   = ((it.snippet || it.body || "") + "").trim();
-    const room  = Math.max(0, MAX_CONTEXT_BUDGET - used - (title ? TITLE_COST : 0));
-    if (room <= 0) break;
+  for (const it of kbItems.slice(0, 3)) {
+    const title = (it?.title || "").toString().trim();
+    const snip  = ((it?.snippet || it?.body || "") + "").trim();
+    if (!snip) continue;
 
-    const text  = raw
-      .replace(/[\s\r\n\t]+/g, " ")
-      .slice(0, room)
-      .trim();
-    if (!text) continue;
+    let line = title ? `• ${title}: ${snip}` : `• ${snip}`;
+    if (line.length > 240) line = line.slice(0, 240) + "…";
 
-    picked.push({ title, text });
-    used += text.length + (title ? TITLE_COST : 0);
+    if (used + line.length > MAX_TOTAL) break;
+    lines.push(line);
+    used += line.length;
+    if (lines.length >= 2) break; // max 2 bullets
   }
 
-  if (picked.length === 0) return "";
-
-  const top = picked
-    .map((it, idx) => `${idx + 1}) ${it.title ? `${it.title} — ` : ""}${it.text}`)
-    .join("\n");
-
-  return `Context (max ${picked.length}):\n${top}`;
+  return lines.length
+    ? `Feiten (kort):\n${lines.join("\n")}`
+    : "";
 }
+
 
 /** Bouw profielrichtlijnen (lichte hints) */
 function buildProfileDirectives(profileKey) {
@@ -105,16 +97,16 @@ function buildProfileDirectives(profileKey) {
   ].join("\n");
 }
 
-/** Basissysteemrichtlijnen (geen systemInstruction veld gebruiken: merge in prompt) */
+/** Basissysteemrichtlijnen – compacte versie */
 function baseSystemDirectives() {
-  return `
-Je bent een NL klantenservice-assistent (e-commerce/fashion).
-Schrijf kort, vriendelijk en behulpzaam. 
-Social: 1–2 zinnen (max 1 emoji). E-mail: 2–3 korte alinea’s (geen onderwerpregel).
-Vraag alleen noodzakelijke gegevens.
-`.trim();
+  return [
+    "Jij bent klantenservice-assistent voor Blueline Customer Care (e-commerce).",
+    "Schrijf in het Nederlands; toon: vriendelijk, professioneel, empathisch.",
+    "Social: 1–2 zinnen, max 1 emoji. E-mail: 80–140 woorden, géén onderwerpregel.",
+    "Geef direct antwoord; stel alleen noodzakelijke vervolgvragen.",
+    "Alleen indien nodig: (levering) ordernr+postcode+huisnr • (schade) foto+ordernr • (retour/ruil) korte procedure."
+  ].join("\n");
 }
-
 
 export default async (request) => {
   try {
@@ -167,24 +159,18 @@ export default async (request) => {
     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     const temperature = envTemp ?? 0.7;
 
-    // Profiel & KB
-    const profile = buildProfileDirectives(profileKey);
-    const kbBlock = formatKbContextBudgeted(kb);
+     // Compacte prompt – kort & schaalbaar
+const system = "Je bent een NL klantenservice-assistent. Antwoord kort, concreet en behulpzaam.";
+const profile = ""; // voorlopig geen lange profielregels, scheelt tokens
+const kbBlock = formatKbContextBudgeted(kb);
 
-    // Prompt samenstellen zonder systemInstruction veld (v1 compat)
-    const system = baseSystemDirectives();
-    const userPrompt = [
-      system,
-      profile,
-      kbBlock ? kbBlock : "",
-      `Type: ${type}`,
-      `Stijl: ${tone}`,
-      "",
-      "Invoer klant:",
-      userText,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+const userPrompt = [
+  system,
+  kbBlock, // compact KB-feiten
+  `Stijl: ${tone || "Professioneel"}`,
+  "Beantwoord in maximaal 120 woorden.",
+  `Vraag: ${userText}`
+].filter(Boolean).join("\n");
 
     // API-call
     const resp = await withTimeout(
@@ -194,12 +180,11 @@ export default async (request) => {
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: {
-  temperature,        // keep whatever you have
-  topP: 0.9,
+  temperature: 0.4,
+  topP: 0.8,
   topK: 40,
-  maxOutputTokens: 1024,   // was 768
-  candidateCount: 1
-},
+  maxOutputTokens: 256
+}
 
         }),
       }),
@@ -221,37 +206,20 @@ export default async (request) => {
 
     const data = await resp.json().catch(() => ({}));
 
-// helper: probeer zoveel mogelijk tekst uit kandidaten te halen
-function extractTextFromCandidates(d) {
-  const c = d?.candidates?.[0];
-  if (!c) return "";
-  // 1) eerste text-part als die bestaat
-  const p1 = c?.content?.parts?.find((p) => typeof p?.text === "string")?.text;
-  if (p1) return p1;
-  // 2) concateneer alle text-parts
-  const all = (c?.content?.parts || [])
-    .map((p) => (typeof p?.text === "string" ? p.text : ""))
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  return all;
-}
+// optionele debug: ?debug=1
+const DEBUG = new URL(request.url).searchParams.get("debug") === "1";
 
-// optionele debug: ?debug=1 aan de functie-URL toont upstream terug
-const urlObj = new URL(request.url);
-const DEBUG = urlObj.searchParams.get("debug") === "1";
-
-// Parse candidate + reasons
+// Parse candidate + redenen
 const cand          = data?.candidates?.[0] ?? null;
-const parts         = cand?.content?.parts ?? [];
+const parts         = Array.isArray(cand?.content?.parts) ? cand.content.parts : [];
 const firstText     = parts.find((p) => typeof p?.text === "string")?.text ?? "";
 const finishReason  = cand?.finishReason ?? cand?.finish_reason ?? null;
 const blockReason   = data?.promptFeedback?.blockReason ?? null;
-const safetyRatings = cand?.safetyRatings ?? data?.safetyRatings ?? null;
+const safetyRatings = cand?.safetyRatings ?? null;
 
-// If model returned no text → return explicit 502 with diagnostics
+// Geen bruikbaar modelantwoord → expliciet 502
 if (!firstText || firstText.trim() === "") {
-  const payload = {
+  const respPayload = {
     error: "Empty model response",
     meta: {
       source: "empty",
@@ -264,10 +232,32 @@ if (!firstText || firstText.trim() === "") {
         ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
         : [],
     },
+    ...(DEBUG ? { upstream: data, parts } : {}),
   };
-  if (DEBUG) out.debug = { upstream: data, parts };
-  return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
+  return new Response(JSON.stringify(respPayload), { status: 502, headers: JSON_HEADERS });
 }
+
+// Normaal pad
+const modelText = stripSubjectLine(firstText);
+
+const respPayload = {
+  modelText,
+  meta: {
+    source: "model",
+    build: BUILD_MARK,
+    modelUsed: MODEL,
+    temperature,
+    topP: 0.95,
+    topK: 50,
+    usedKb: Array.isArray(kb)
+      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+      : [],
+  },
+  ...(DEBUG ? { upstream: data } : {}),
+};
+
+return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });
+
 
 // Normal success path
 const text = stripSubjectLine(firstText);
