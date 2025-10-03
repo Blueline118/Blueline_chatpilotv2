@@ -2,13 +2,10 @@
 // ============================================================================
 // Blueline Chatpilot – Gemini gateway (REST v1)
 // - Model/endpoint via env (GEMINI_MODEL, GEMINI_API_BASE)
-// - Stuurt 1-turn prompt met system + user naar /v1/models/...:generateContent
-// - BELANGRIJK: v1 gebruikt camelCase keys: systemInstruction, generationConfig
+// - Single-turn: systemprompt wordt als prefix in de user prompt gezet
+// - Vermijdt schema issues rond system_instruction/systemInstruction
 // ============================================================================
 
-// ────────────────────────────────────────────────────────────────────────────────
-// Config
-// ────────────────────────────────────────────────────────────────────────────────
 const MODEL =
   process.env.GEMINI_MODEL ||
   // kies zelf: "gemini-1.5-pro" of "gemini-1.5-flash-latest"
@@ -21,8 +18,6 @@ const API_BASE =
 
 const API_URL = `${API_BASE}/models/${MODEL}:generateContent`;
 
-// ────────────────────────────────────────────────────────────────────────────────
-/** Race helper om API-calls te begrenzen */
 function withTimeout(promise, ms = 20000) {
   return Promise.race([
     promise,
@@ -32,34 +27,24 @@ function withTimeout(promise, ms = 20000) {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-/** Optioneel: temp clamp (nu niet gebruikt – temperatuur forceren we op 0.7) */
 function clampTemp(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
   return Math.min(1.0, Math.max(0.1, n));
 }
 
-/** Verwijder “Onderwerp:” / “Subject:” regels in allerlei varianten
- *  (ook **Onderwerp:**, en/dash, bullets, NBSP, markdown) */
+/** Verwijder “Onderwerp:” / “Subject:” regels (varianten incl. NBSP) */
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
   const lines = s.split(/\r?\n/);
-  const filtered = lines.filter((line) => {
-    const l = line
-      .replace(/\u00A0/g, " ") // NBSP -> spatie
-      .replace(/[*_~`>•\-–—]+/g, (m) => m); // laat opmaak staan; we checken startwoord
-    // Match: start met Onderwerp/Subject (case-insensitive), gevolgd door optionele spaties en (:|–|—|-)
-    return !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(l);
-  });
+  const filtered = lines.filter(
+    (line) => !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(line.replace(/\u00A0/g, " "))
+  );
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
-// HTTP handler (Netlify Functions ESM default export)
-// ────────────────────────────────────────────────────────────────────────────────
 export default async (request) => {
   try {
-    // Health check /ping
     const url = new URL(request.url);
     if (url.searchParams.get("ping")) {
       return new Response(JSON.stringify({ ok: true, pong: true }), {
@@ -67,7 +52,6 @@ export default async (request) => {
       });
     }
 
-    // Alleen POST toestaan
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Use POST" }), {
         status: 405,
@@ -75,7 +59,6 @@ export default async (request) => {
       });
     }
 
-    // Body-parsing (safe)
     let payload = {};
     try {
       payload = await request.json();
@@ -83,10 +66,7 @@ export default async (request) => {
       payload = {};
     }
 
-    // Minimale velden die de UI vandaag stuurt
     const { userText, type, tone, profileKey = "default" } = payload || {};
-
-    // Simpele validatie
     if (!userText || !type || !tone) {
       return new Response(
         JSON.stringify({ error: "Missing fields (userText, type, tone)" }),
@@ -94,7 +74,6 @@ export default async (request) => {
       );
     }
 
-    // API key check
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
       return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), {
@@ -103,13 +82,10 @@ export default async (request) => {
       });
     }
 
-    // Voor nu hard op 0.7 zodat ENV je niet knijpt tijdens testen
+    // Voor nu hard op 0.7 zodat ENV niet knijpt tijdens testen
     const temperature = 0.7;
-    // (Als je dit via env wil doen, kun je clampTemp(process.env.GEMINI_TEMPERATURE) toepassen)
 
-    // ────────────────────────────────────────────────────────────────────────────
-    // System directives + profiel hints (identiek aan je huidige logica)
-    // ────────────────────────────────────────────────────────────────────────────
+    // ── System directives + profiel hints
     const systemDirectives = `
 Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
 Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
@@ -130,7 +106,6 @@ Stijl:
 - Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
 `.trim();
 
-    /** Klantprofielen: zachte hints (niet knijpen) */
     const PROFILES = {
       default: {
         display: "Standaard",
@@ -180,40 +155,35 @@ Stijl:
       ].join("\n");
     }
 
-    const finalSystem = [
-      systemDirectives,
-      buildProfileDirectives(profileKey),
-    ].join("\n\n");
+    const finalSystem = [systemDirectives, buildProfileDirectives(profileKey)].join("\n\n");
 
-    // User prompt met type/tone (zoals je had)
-    const userPrompt = `Type: ${type}
+    // ⬇️ Truc: systemprompt als prefix in dezelfde user prompt. Geen system_instruction veld meer.
+    const userPrompt = `${finalSystem}
+
+---
+Type: ${type}
 Stijl: ${tone}
 
 Invoer klant:
 ${userText}`;
 
-    // ────────────────────────────────────────────────────────────────────────────
-    // V1 PAYLOAD – LET OP camelCase: systemInstruction, generationConfig
-    // ────────────────────────────────────────────────────────────────────────────
     const resp = await withTimeout(
       fetch(`${API_URL}?key=${key}`, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
-  system_instruction: { role: "system", parts: [{ text: finalSystem }] },
-  contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-  generationConfig: {
-    temperature,
-    topP: 0.95,
-    topK: 50,
-    maxOutputTokens: 512,
-  },
-}),
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            temperature,
+            topP: 0.95,
+            topK: 50,
+            maxOutputTokens: 512,
+          },
+        }),
       }),
       20000
     );
 
-    // Foutpad (toon upstream mee voor debug)
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
       return new Response(
@@ -227,13 +197,11 @@ ${userText}`;
       );
     }
 
-    // Succes: parse & extraheer eerste candidate
     const data = await resp.json().catch(() => ({}));
     const rawText =
       data?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "Er is geen tekst gegenereerd.";
 
-    // Post-processing: onderwerpregel weg
     const text = stripSubjectLine(rawText);
 
     return new Response(
