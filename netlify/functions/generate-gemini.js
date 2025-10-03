@@ -35,33 +35,39 @@ function stripSubjectLine(s) {
 
 /** Compact de KB-context naar totaalbudget (chars) */
 function formatKbContextBudgeted(kbItems) {
-  const DEFAULT_BUDGET = Number(process.env.KB_CONTEXT_BUDGET_CHARS || 800); // schaalbaar via env
-  const maxPerSnippet = Math.max(120, Math.floor(DEFAULT_BUDGET / 3));      // bescherming tegen één mega-snippet
-
   if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
+  const MAX_CONTEXT_BUDGET = 500; // was 800
+  const MAX_ITEMS          = 2;   // was 3
+  const TITLE_COST         = 40;
 
   let used = 0;
   const picked = [];
 
-  for (let i = 0; i < kbItems.length; i++) {
-    const it = kbItems[i] || {};
+  for (const it of kbItems) {
+    if (picked.length >= MAX_ITEMS) break;
     const title = (it.title || "").toString().trim();
-    const raw = (it.snippet || it.body || "").toString().replace(/\s+/g, " ").trim();
+    const raw   = ((it.snippet || it.body || "") + "").trim();
+    const room  = Math.max(0, MAX_CONTEXT_BUDGET - used - (title ? TITLE_COST : 0));
+    if (room <= 0) break;
 
-    // Snij individuele snippet af (zachte limiet per snippet zodat er meerdere mee kunnen)
-    const snippet = raw.length > maxPerSnippet ? raw.slice(0, maxPerSnippet - 1).trimEnd() + "…" : raw;
+    const text  = raw
+      .replace(/[\s\r\n\t]+/g, " ")
+      .slice(0, room)
+      .trim();
+    if (!text) continue;
 
-    const line = `${i + 1}) ${title ? `${title} — ` : ""}${snippet}`;
-    if (used + line.length > DEFAULT_BUDGET) break;
-
-    picked.push(line);
-    used += line.length;
+    picked.push({ title, text });
+    used += text.length + (title ? TITLE_COST : 0);
   }
 
-  if (!picked.length) return "";
-  return `Context (≈${used}/${DEFAULT_BUDGET} chars):\n` + picked.join("\n");
-}
+  if (picked.length === 0) return "";
 
+  const top = picked
+    .map((it, idx) => `${idx + 1}) ${it.title ? `${it.title} — ` : ""}${it.text}`)
+    .join("\n");
+
+  return `Context (max ${picked.length}):\n${top}`;
+}
 
 /** Bouw profielrichtlijnen (lichte hints) */
 function buildProfileDirectives(profileKey) {
@@ -102,25 +108,13 @@ function buildProfileDirectives(profileKey) {
 /** Basissysteemrichtlijnen (geen systemInstruction veld gebruiken: merge in prompt) */
 function baseSystemDirectives() {
   return `
-Je bent de klantenservice-assistent van **Blueline Customer Care** (e-commerce/fashion).
-Schrijf in het **Nederlands** en klink **vriendelijk-professioneel** (menselijk, empathisch, behulpzaam).
-
-Algemene richtlijnen:
-- **Social Media**: 1–2 zinnen, varieer formuleringen, maximaal 1 passende emoji.
-- **E-mail**: 2–3 korte alinea’s (±80–140 woorden). **Schrijf GEEN onderwerpregel** en **geen regel die begint met "Onderwerp:" of "Subject:"**.
-- Erken de situatie van de klant en geef, waar mogelijk, direct antwoord. Geen meta-uitleg.
-
-Vraag- & gegevenslogica:
-- **Beschikbaarheid / productinfo**: geef direct info of stel gerichte vragen (bijv. gewenste **maat/kleur/model**). **Vraag GEEN ordernummer.**
-- **Leverstatus / vertraagd / niet ontvangen**: vraag **ordernummer + postcode + huisnummer** (alleen indien nodig).
-- **Schade / defect**: vraag **foto + ordernummer** (alleen indien nodig).
-- **Retour/ruil**: licht kort de procedure toe; vraag pas om gegevens als het echt nodig is.
-
-Stijl:
-- Varieer natuurlijk in aanhef en afsluiting; vermijd herhaalde standaardzinnen.
-- Reageer alsof je al in een DM zit (dus niet “stuur ons een DM”).
+Je bent een NL klantenservice-assistent (e-commerce/fashion).
+Schrijf kort, vriendelijk en behulpzaam. 
+Social: 1–2 zinnen (max 1 emoji). E-mail: 2–3 korte alinea’s (geen onderwerpregel).
+Vraag alleen noodzakelijke gegevens.
 `.trim();
 }
+
 
 export default async (request) => {
   try {
@@ -200,12 +194,13 @@ export default async (request) => {
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           generationConfig: {
-  temperature,
+  temperature,        // keep whatever you have
   topP: 0.9,
   topK: 40,
-  // meer ruimte voor het antwoord:
-  maxOutputTokens: 768
+  maxOutputTokens: 1024,   // was 768
+  candidateCount: 1
 },
+
         }),
       }),
       20000
