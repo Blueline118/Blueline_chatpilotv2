@@ -29,8 +29,31 @@ function clampTemp(v) {
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
   const lines = s.split(/\r?\n/);
-  const filtered = lines.filter((line) => !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(line.replace(/\u00A0/g, " ")));
+  const filtered = lines.filter((line) =>
+    !/^\s*(onderwerp|subject)\s*[:–—-]/i.test(line.replace(/\u00A0/g, " "))
+  );
   return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function stripSocialToTwoSentences(input) {
+  if (!input || typeof input !== "string") return input;
+  // Max 1 emoji: verwijder extra's
+  const emojiRegex = /([\p{Emoji_Presentation}\p{Emoji}\uFE0F])/gu;
+  let emojiCount = 0;
+  const noExtraEmojis = input.replace(emojiRegex, (m) => {
+    emojiCount += 1;
+    return emojiCount <= 1 ? m : "";
+  });
+
+  // Pak max 2 zinnen op basis van punt/uitroepteken/vraagteken
+  const parts = noExtraEmojis
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const two = parts.slice(0, 2).join(" ");
+  // Hard cap als extra veiligheidsnet
+  return two.length > 280 ? two.slice(0, 277).trim() + "…" : two;
 }
 
 /** Compact de KB-context naar totaalbudget (chars) */
@@ -142,7 +165,9 @@ export default async (request) => {
 
 function channelLine(type) {
   const t = (type || "").toLowerCase();
-  if (t.includes("social")) return "Social: 1–2 zinnen; varieer; max 1 emoji.";
+  if (t.includes("social")) {
+  return "SOCIAL: Antwoord in maximaal 2 korte zinnen (≤ 220 tekens totaal). Geen aanhef of afsluiting. Eén passende emoji is oké.";
+}
   if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
     return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
   }
@@ -160,12 +185,15 @@ const kbBlock =
 
 const userPrompt = [
   system,               // kort systeemkader
-  channelLine(type),    // **dynamische** kanaalregel o.b.v. UI-keuze
+  channelLine(type),    // dynamische kanaalregel (Social/E-mail)
   profile,              // compact profiel (stijl/lexicon hints)
   kbBlock || null,      // compacte KB-context (optioneel)
+  // 🔽 NIEUWE REGEL: alleen relevante KB gebruiken, anders veilige route
+  "Belangrijk: gebruik uitsluitend relevante kennisbank-fragmenten. Past niets uit de KB, zeg dat duidelijk en geef een veilige route (bijv. reset-wachtwoord of contact opnemen).",
   "Vraag:",
   userText
 ].filter(Boolean).join("\n\n");
+
 // Voor debug: korte prompt-preview (ook bij 502)
 
 const promptPreview = userPrompt.slice(0, 600);
@@ -258,20 +286,26 @@ const promptPreview = userPrompt.slice(0, 600);
 
 
     const modelText = stripSubjectLine(firstText);
-    const respPayload = {
-      text: modelText,
-      meta: {
-        source: "model",
-        build: BUILD_MARK,
-        modelUsed: MODEL,
-        temperature,
-        topP: 0.95,
-        topK: 50,
-        usedKb: Array.isArray(kb)
-          ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
-          : [],
-      },
-    };
+
+// Als het kanaal "social" is: maximaal 1–2 zinnen, max 1 emoji
+const isSocial = typeof type === "string" && /social/i.test(type);
+const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
+
+const respPayload = {
+  text: finalText,
+  meta: {
+    source: "model",
+    build: BUILD_MARK,
+    modelUsed: MODEL,
+    temperature,
+    topP: 0.95,
+    topK: 50,
+    usedKb: Array.isArray(kb)
+      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
+      : [],
+  },
+};
+
     if (DEBUG) {
       respPayload.debug = {
         promptLen,
