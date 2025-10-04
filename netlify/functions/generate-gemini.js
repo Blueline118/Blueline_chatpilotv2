@@ -142,11 +142,14 @@ export default async (request) => {
 
 function channelLine(type) {
   const t = (type || "").toLowerCase();
-  if (t.includes("social")) return "Social: 1–2 zinnen; varieer; max 1 emoji.";
+  if (t.includes("social")) {
+    // zachte hint, geen harde beperking
+    return "Social Media: 1–2 zinnen, varieer formuleringen, maximaal 1 emoji.";
+  }
   if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
     return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
   }
-  // fallback (pas desgewenst aan)
+  // fallback
   return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
 }
 
@@ -177,7 +180,7 @@ const promptPreview = userPrompt.slice(0, 600);
   topP: 0.95,
   topK: 50,
   // meer budget zodat er na "thoughts" ook tekst overblijft:
-  maxOutputTokens: 2048,
+  maxOutputTokens: 512,
 };
     const promptLen = userPrompt.length;
     const systemLen = system.length;
