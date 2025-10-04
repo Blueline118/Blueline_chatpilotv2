@@ -1,5 +1,7 @@
 // netlify/functions/generate-gemini.js
 
+import supabaseServer from "./supabaseServer.js";
+
 // ────────────────────────────────────────────────────────────────────────────────
 // Config
 // ────────────────────────────────────────────────────────────────────────────────
@@ -143,19 +145,36 @@ export default async (request) => {
       payload = {};
     }
 
-    const {
-      userText,
-      type,
-      tone,
-      profileKey = "default",
-      kb = [], // optioneel: array [{id,title,snippet,rank}]
-    } = payload || {};
+    const { userText, type, tone, profileKey = "default" } = payload || {};
 
     if (!userText || !type || !tone) {
       return new Response(JSON.stringify({ error: "Missing fields (userText, type, tone)" }), {
         status: 400,
         headers: JSON_HEADERS,
       });
+    }
+
+    const orgId = payload?.orgId || "54ec8e89-d265-474d-98fc-d2ba579ac83f";
+
+    let kb = [];
+    if (Array.isArray(payload?.kb) && payload.kb.length > 0) {
+      kb = payload.kb;
+    } else {
+      const { data: rows, error } = await supabaseServer.rpc("kb_search_chunks", {
+        p_org: orgId,
+        q: userText,
+        k: 5,
+      });
+      if (error) {
+        console.error("SERVER_KB_ERROR", error.message);
+      } else {
+        kb = (rows || []).map((r) => ({
+          id: r.id,
+          title: r.title,
+          snippet: r.snippet,
+          rank: r.rank,
+        }));
+      }
     }
 
     // Temperatuur
@@ -185,6 +204,8 @@ export default async (request) => {
       "• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.",
     ].join("\n");
     const kbBlock = formatKbSection(kb);
+    const kbPromptLen = (kbBlock || "").length;
+    const kbLen = Array.isArray(kb) ? kb.length : 0;
 
     const userPrompt = [
       system,
@@ -214,7 +235,6 @@ const promptPreview = userPrompt.slice(0, 600);
     const promptLen = userPrompt.length;
     const systemLen = system.length;
     const profileLen = profile.length;
-    const kbLen = (kbBlock || "").length;
 
     const payloadForGemini = { contents, generationConfig };
 
@@ -267,12 +287,10 @@ const promptPreview = userPrompt.slice(0, 600);
         total: promptLen,
         system: systemLen,
         profile: profileLen,
-        kb: kbLen,
+        kb: kbPromptLen,
         user: (userText || "").length,
       },
-      usedKb: Array.isArray(kb)
-        ? kb.slice(0, 3).map(({ title }) => title).filter(Boolean)
-        : [],
+      usedKb: Array.isArray(kb) ? kb.map(({ title }) => title).filter(Boolean) : [],
     },
   };
 
@@ -282,6 +300,7 @@ const promptPreview = userPrompt.slice(0, 600);
       generationConfig,
       contentsSent: contents,
       upstream: data,
+      kbLen,
     };
   }
 
@@ -304,9 +323,7 @@ const respPayload = {
     temperature,
     topP: 0.95,
     topK: 50,
-    usedKb: Array.isArray(kb)
-      ? kb.slice(0, 3).map(({ title }) => title).filter(Boolean)
-      : [],
+    usedKb: Array.isArray(kb) ? kb.map(({ title }) => title).filter(Boolean) : [],
   },
 };
 
@@ -316,6 +333,7 @@ const respPayload = {
         systemLen,
         profileLen,
         kbLen,
+        kbPromptLen,
         promptPreview: userPrompt.slice(0, 1200),
         generationConfig,
         contentsSent: contents,
