@@ -19,12 +19,6 @@ function withTimeout(promise, ms = 20000) {
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function clampTemp(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.min(1.0, Math.max(0.1, n));
-}
-
 /** Verwijder "Onderwerp:" / "Subject:" regels (en varianten) uit tekst */
 function stripSubjectLine(s) {
   if (typeof s !== "string") return s;
@@ -173,13 +167,21 @@ export default async (request) => {
       note("serverKB: client kb used");
     }
 
-    const kbForPrompt = (Array.isArray(kb) ? kb : [])
-      .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0))
+    const q = String(userText || "").toLowerCase();
+    const qTokens = (q.match(/[a-z0-9]{5,}/g) || []);
+
+    function isRelevant(item) {
+      const hay = `${item?.title || ""} ${item?.snippet || ""}`.toLowerCase();
+      return qTokens.length === 0 ? true : qTokens.some((t) => hay.includes(t));
+    }
+
+    const kbFiltered = (Array.isArray(kb) ? kb : [])
+      .filter(isRelevant)
+      .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0));
+
+    const kbForPrompt = kbFiltered
       .slice(0, 2)
       .map((x) => ({ ...x, snippet: String(x?.snippet || "").slice(0, 200) }));
-
-    // Temperatuur
-    const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
 
     function channelLine(type) {
       const t = (type || "").toLowerCase();
@@ -252,14 +254,11 @@ export default async (request) => {
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
     const isSocial = /social/i.test(String(body.type || ""));
     const generationConfig = {
-      temperature: isSocial ? 0.4 : 0.5,
-      topP: 0.9,
-      topK: 40,
+      temperature: 0.6,
+      topP: 0.95,
+      topK: 50,
       maxOutputTokens: 2048,
     };
-    if (envTemp !== null) {
-      generationConfig.temperature = envTemp;
-    }
     const promptLen = fullPrompt.length;
     const systemLen = sectionHeader.length;
     const profileLen = sectionStyle.length;
@@ -297,7 +296,8 @@ export default async (request) => {
     const finishReason = cand?.finishReason ?? cand?.finish_reason ?? null;
     const blockReason = data?.promptFeedback?.blockReason ?? null;
     const safetyRatings = cand?.safetyRatings ?? data?.safetyRatings ?? null;
-    
+    const usedKbTitles = (kbForPrompt || []).map((x) => x.title);
+    const baseDebug = { ...dbg, kbLen };
 
     if (!firstText || firstText.trim() === "") {
       const payload = {
@@ -318,87 +318,53 @@ export default async (request) => {
             kb: kbPromptLen,
             user: (userText || "").length,
           },
-          usedKb: Array.isArray(kbForPrompt) ? kbForPrompt.map(({ title }) => title) : [],
+          usedKb: usedKbTitles,
+          channelDetected: isSocial ? "social" : "email",
+          typeReceived: body.type || null,
         },
+        debug: baseDebug,
       };
 
       // Extra’s alleen bij ?debug=1
       if (DEBUG) {
         payload.debug = {
+          ...baseDebug,
           generationConfig,
           contentsSent: contents,
           upstream: data,
-          kbLen,
+          fullPrompt,
+          sectionLengths: debugSections.chars,
+          sectionTokensApprox: debugSections.estTokens,
         };
-        payload.debug = {
-          ...payload.debug,
-          ...dbg,
-        };
-        payload.debug.fullPrompt = fullPrompt;
-        payload.debug.sectionLengths = debugSections.chars;
-        payload.debug.sectionTokensApprox = debugSections.estTokens;
       }
 
       return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
     }
 
-    let modelText = stripSubjectLine(firstText);
-    let safeText = modelText;
-
-    function extractFacts(text) {
-      if (typeof text !== "string") return [];
-      const out = [],
-        re = /\b(\d+)\s*(dagen?|maanden?|mnd(?:en)?)\b/gi;
-      let m;
-      while ((m = re.exec(text)) !== null) {
-        let u = m[2].toLowerCase();
-        if (/^mnd/.test(u)) u = "maanden";
-        if (u === "maand") u = "maanden";
-        if (u === "dag") u = "dagen";
-        out.push({ n: m[1], unit: u, raw: m[0] });
-      }
-      return out;
-    }
-    function normalizeAnswerNumbers(answer, kbFacts) {
-      if (typeof answer !== "string" || !kbFacts.length) return answer;
-      const main = kbFacts[0];
-      return answer.replace(/\b(\d+)\s*(dagen?|maanden?|mnd(?:en)?)\b/gi, `${main.n} ${main.unit}`);
-    }
-
-    const kbText = kbForPrompt.map((x) => x.snippet).join(" ");
-    const kbFacts = extractFacts(kbText);
-
-    safeText = normalizeAnswerNumbers(safeText, kbFacts);
-
-    const ansFacts = extractFacts(safeText);
-    const hasExact =
-      kbFacts.length && ansFacts.some((a) => kbFacts.some((k) => a.n === k.n && a.unit === k.unit));
-    if (kbFacts.length && !hasExact) {
-      const main = kbFacts[0];
-      safeText = `${safeText} ${main.n} ${main.unit} volgens de kennisbank.`;
-    }
-
-    const finalText = isSocial ? stripSocialToTwoSentences(safeText) : safeText;
+    const modelText = stripSubjectLine(firstText);
+    const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
+    const baseMeta = {
+      source: "model",
+      build: BUILD_MARK,
+      modelUsed: MODEL,
+      temperature: generationConfig.temperature,
+      topP: generationConfig.topP,
+      topK: generationConfig.topK,
+      usedKb: usedKbTitles,
+      channelDetected: isSocial ? "social" : "email",
+      typeReceived: body.type || null,
+    };
     const respPayload = {
       text: finalText,
-      meta: {
-        source: "model",
-        build: BUILD_MARK,
-        modelUsed: MODEL,
-        temperature: generationConfig.temperature,
-        topP: generationConfig.topP,
-        topK: generationConfig.topK,
-        usedKb: Array.isArray(kbForPrompt) ? kbForPrompt.map(({ title }) => title) : [],
-      },
+      meta: baseMeta,
+      debug: baseDebug,
     };
 
-    respPayload.meta.usedKb = (kbForPrompt || []).map((x) => x.title);
-    if (DEBUG) {
-      addDbg("kbLen", (kbForPrompt || []).length);
-    }
+    respPayload.meta.usedKb = usedKbTitles;
 
     if (DEBUG) {
       respPayload.debug = {
+        ...baseDebug,
         promptLen,
         systemLen,
         profileLen,
@@ -410,11 +376,10 @@ export default async (request) => {
         finishReason,
         blockReason,
         safetyRatings,
-        ...dbg,
+        fullPrompt,
+        sectionLengths: debugSections.chars,
+        sectionTokensApprox: debugSections.estTokens,
       };
-      respPayload.debug.fullPrompt = fullPrompt;
-      respPayload.debug.sectionLengths = debugSections.chars;
-      respPayload.debug.sectionTokensApprox = debugSections.estTokens;
     }
 
     return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });

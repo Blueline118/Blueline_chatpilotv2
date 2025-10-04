@@ -577,6 +577,13 @@ function BluelineChatpilotInner() {
     const body = { userText, type, tone, profileKey, kb };
 
     console.log("=== KB SEND PAYLOAD ===", body);
+    console.debug('[Chat send payload]', {
+      userText,
+      type,
+      tone,
+      profileKey,
+      kb: Array.isArray(kb) ? kb.map((k) => k.title) : [],
+    });
 
     const chatId = currentChatIdRef.current;
     const uid = uidRef.current;
