@@ -172,6 +172,15 @@ export default async (request) => {
       note("serverKB: client kb used");
     }
 
+    const kbTop2 = (Array.isArray(kb) ? [...kb] : [])
+      .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0))
+      .slice(0, 2)
+      .map((x) => ({
+        ...x,
+        snippet: (x?.snippet || "").slice(0, 220),
+      }));
+    const kbForPrompt = kbTop2;
+
     // Temperatuur
     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
     const temperature = envTemp ?? 0.7;
@@ -195,9 +204,9 @@ export default async (request) => {
       ? `\n\n${profile}`
       : `\n\nStijl: korte zinnen; geen jargon; positief geformuleerd\nVermijd: ticket, case, RMA`;
     const sectionRules = `\n\nRegels:\n• Gebruik uitsluitend de meegegeven kennisbank-snippets als primaire bron. Als KB niet leeg is: beantwoord met die inhoud.\n• Neem feiten (bedragen, aantallen, datums, termijnen, namen) letterlijk over uit de KB. Verander geen cijfers/eenheden.\n• Als KB leeg is: geef een kort, veilig antwoord zonder specifieke cijfers/voorwaarden en adviseer waar nodig vervolg (link/klantenservice).\n• Respecteer kanaalregels: Social = max 4 zinnen, E-mail = 2–3 korte alinea’s.\n• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.`;
-    const sectionKb = Array.isArray(kb) && kb.length
+    const sectionKb = Array.isArray(kbForPrompt) && kbForPrompt.length
       ? `\n\nKB\n` +
-        kb
+        kbForPrompt
           .map((x) => {
             const title = (x?.title ?? "").toString();
             const snippet = (x?.snippet ?? "").toString();
@@ -240,7 +249,7 @@ export default async (request) => {
       },
     };
     const kbPromptLen = sectionKb.length;
-    const kbLen = Array.isArray(kb) ? kb.length : 0;
+    const kbLen = Array.isArray(kbForPrompt) ? kbForPrompt.length : 0;
 
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
     const generationConfig = {
@@ -308,7 +317,7 @@ export default async (request) => {
             kb: kbPromptLen,
             user: (userText || "").length,
           },
-          usedKb: Array.isArray(kb) ? kb.map(({ title }) => title) : [],
+          usedKb: Array.isArray(kbForPrompt) ? kbForPrompt.map(({ title }) => title) : [],
         },
       };
 
@@ -347,7 +356,7 @@ export default async (request) => {
       return facts;
     }
 
-    const kbText = (Array.isArray(kb) ? kb.map((x) => x?.snippet || "").join(" ") : "") || "";
+    const kbText = (Array.isArray(kbForPrompt) ? kbForPrompt.map((x) => x?.snippet || "").join(" ") : "") || "";
     const kbFacts = extractFacts(kbText);
     const ansFacts = extractFacts(safeText);
 
@@ -358,7 +367,12 @@ export default async (request) => {
     }
 
     // Als het kanaal "social" is: maximaal 4 zinnen, max 1 emoji
+    const mainFact = kbFacts[0];
+
     const isSocial = typeof type === "string" && /social/i.test(type);
+    if (isSocial && mainFact) {
+      safeText = safeText.replace(/\b(\d+)\s*(dagen?|maanden?)\b/gi, `${mainFact.n} ${mainFact.unit}`);
+    }
     const finalText = isSocial ? stripSocialToTwoSentences(safeText) : safeText;
     const respPayload = {
       text: finalText,
@@ -369,13 +383,13 @@ export default async (request) => {
         temperature,
         topP: 0.95,
         topK: 50,
-        usedKb: Array.isArray(kb) ? kb.map(({ title }) => title) : [],
+        usedKb: Array.isArray(kbForPrompt) ? kbForPrompt.map(({ title }) => title) : [],
       },
     };
 
-    respPayload.meta.usedKb = (kb || []).map((x) => x.title);
+    respPayload.meta.usedKb = (kbForPrompt || []).map((x) => x.title);
     if (DEBUG) {
-      addDbg("kbLen", (kb || []).length);
+      addDbg("kbLen", (kbForPrompt || []).length);
     }
 
     if (DEBUG) {
