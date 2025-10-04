@@ -1,0 +1,35 @@
+diff --git a/src/components/BluelineChatpilot.jsx b/src/components/BluelineChatpilot.jsx
+index 8811b65..ec18c49 100644
+--- a/src/components/BluelineChatpilot.jsx
++++ b/src/components/BluelineChatpilot.jsx
+@@ -559,11 +559,11 @@ function BluelineChatpilotInner() {
+     setIsTyping(true);
+ 
+     let kbItems = [];
+-    const orgId = activeOrgId || null;
++    const kbOrgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
+ 
+-    if (orgId && supabase) {
++    if (kbOrgId && supabase) {
+       try {
+-        const { items } = await searchKb({ supabase, orgId, query: trimmed, limit: 3 });
++        const { items } = await searchKb({ supabase, orgId: kbOrgId, query: trimmed, limit: 3 });
+         if (Array.isArray(items) && items.length) {
+           kbItems = items.slice(0, 3).map((it) => ({
+             id: it?.id ?? null,
+@@ -773,13 +773,8 @@ function BluelineChatpilotInner() {
+                               {m.text}
+                             </div>
+                             {!isUser && usedKbItems.length > 0 && (
+-                              <div className="max-w-[560px] text-[12px] text-[#8b8d94]">
+-                                <div className="font-medium text-[#6b6e77]">🛈 Gebruikte kennisbank</div>
+-                                <div className="mt-1 space-y-0.5">
+-                                  {usedKbItems.map((item, itemIdx) => (
+-                                    <div key={item?.id ?? itemIdx}>• {item?.title || "Onbekende bron"}</div>
+-                                  ))}
+-                                </div>
++                              <div className="max-w-[560px] text-sm text-gray-500 mt-2">
++                                🛈 Gebruikte kennisbank: {usedKbItems.map((item) => item?.title || "Onbekende bron").join(", ")}
+                               </div>
+                             )}
+                           </div>
