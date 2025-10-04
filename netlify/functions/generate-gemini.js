@@ -167,19 +167,8 @@ export default async (request) => {
       note("serverKB: client kb used");
     }
 
-    const q = String(userText || "").toLowerCase();
-    const qTokens = (q.match(/[a-z0-9]{5,}/g) || []);
-
-    function isRelevant(item) {
-      const hay = `${item?.title || ""} ${item?.snippet || ""}`.toLowerCase();
-      return qTokens.length === 0 ? true : qTokens.some((t) => hay.includes(t));
-    }
-
-    const kbFiltered = (Array.isArray(kb) ? kb : [])
-      .filter(isRelevant)
-      .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0));
-
-    const kbForPrompt = kbFiltered
+    const kbForPrompt = (Array.isArray(kb) ? kb : [])
+      .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0))
       .slice(0, 2)
       .map((x) => ({ ...x, snippet: String(x?.snippet || "").slice(0, 200) }));
 
@@ -196,7 +185,6 @@ export default async (request) => {
 
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
     const profile = buildProfileDirectives(profileKey);
-    const promptHeader = "Antwoord direct en alleen met het eindresultaat. Geen uitleg of tussenstappen.\n\n";
     const sectionHeader = `Je bent de klantenservice-assistent.\nSchrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam).`;
     const sectionChannel = `\n\n${channelLine(type)}`;
     const sectionStyle = profile
@@ -218,7 +206,6 @@ export default async (request) => {
       : "";
     const sectionQuestion = `\n\nVraag:\n\n${userText || ""}`;
     const fullPrompt =
-      promptHeader +
       sectionHeader +
       sectionChannel +
       sectionStyle +
@@ -252,7 +239,7 @@ export default async (request) => {
     const kbLen = Array.isArray(kbForPrompt) ? kbForPrompt.length : 0;
 
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
-    const isSocial = /social/i.test(String(body.type || ""));
+    const isSocial = typeof type === "string" && /social/i.test(type);
     const generationConfig = {
       temperature: 0.6,
       topP: 0.95,
@@ -276,6 +263,15 @@ export default async (request) => {
     );
 
     if (!resp.ok) {
+      if (resp.status === 429) {
+        return new Response(
+          JSON.stringify({
+            error: "Rate limited by Gemini (free tier)",
+            meta: { source: "error", modelUsed: MODEL, code: 429 },
+          }),
+          { status: 429, headers: JSON_HEADERS }
+        );
+      }
       const errText = await resp.text().catch(() => "");
       return new Response(
         JSON.stringify({
@@ -385,6 +381,15 @@ export default async (request) => {
     return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });
 
   } catch (e) {
+    if (e?.status === 429) {
+      return new Response(
+        JSON.stringify({
+          error: "Rate limited by Gemini (free tier)",
+          meta: { source: "error", modelUsed: MODEL, code: 429 },
+        }),
+        { status: 429, headers: JSON_HEADERS }
+      );
+    }
     const isTimeout = e?.message === "Timeout";
     return new Response(
       JSON.stringify({
