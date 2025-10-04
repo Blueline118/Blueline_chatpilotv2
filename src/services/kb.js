@@ -1,5 +1,8 @@
-export async function searchKb({ supabase, orgId, query, limit }) {
-  const k = limit ?? 3;
+import { supabase } from '../lib/supabaseClient';
+
+export async function searchKb(orgId, query, limit) {
+  const k = typeof limit === 'number' && limit > 0 ? limit : 3;
+  if (!orgId || !query) return [];
 
   try {
     const { data: rows } = await supabase
@@ -26,11 +29,9 @@ export async function searchKb({ supabase, orgId, query, limit }) {
 
     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
     const THRESHOLD = 0.1;
-    const filtered = items
+    return items
       .filter((i) => (i.rank ?? 0) >= THRESHOLD)
       .slice(0, k);
-
-    return { items: filtered };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     const wrapped = new Error(`KB_SEARCH_ERROR: ${err.message}`);

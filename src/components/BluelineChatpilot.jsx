@@ -477,7 +477,7 @@ function BluelineChatpilotInner() {
   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
-  const { supabase, activeOrgId } = useAuth();
+  const { activeOrgId } = useAuth();
   const navigate = useNavigate();
 
   function goToChatRoute() {
@@ -560,41 +560,26 @@ function BluelineChatpilotInner() {
     setIsTyping(true);
 
     setKbErrorMessage("");
-    let kbItems = [];
-    const kbOrgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
+    const userText = trimmed;
+    const type = messageType;
+    const orgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
+    let kb = [];
 
-    if (kbOrgId && supabase) {
+    try {
+      kb = await searchKb(orgId, userText, 5);
+    } catch (e) {
       if (process.env.NODE_ENV !== 'production') {
-        console.log("KB search start", {
-          activeOrgId,
-          orgId: kbOrgId,
-          q: trimmed.slice(0, 40),
-          k: 3,
-        });
+        console.warn('KB lookup failed:', e?.message || e);
       }
-
-      try {
-        const { items } = await searchKb({ supabase, orgId: kbOrgId, query: trimmed, limit: 3 });
-        const normalized = Array.isArray(items) ? items.slice(0, 3) : [];
-        kbItems = normalized.map((it) => ({
-          id: it?.id ?? null,
-          title: it?.title ?? "",
-          snippet: it?.snippet ?? it?.body ?? "",
-        }));
-
-        if (process.env.NODE_ENV !== 'production') {
-          console.log("KB search done", {
-            kbLength: kbItems.length,
-            firstTitle: kbItems[0]?.title ?? null,
-          });
-        }
-      } catch (error) {
-        kbItems = [];
-        setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
-      }
+      setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
+      kb = [];
     }
 
-    const payload = { userText: trimmed, type: messageType, tone, profileKey, kb: kbItems };
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('KB send payload:', { kbLen: kb.length, first: kb[0]?.title });
+    }
+
+    const body = { userText, type, tone, profileKey, kb };
 
     const chatId = currentChatIdRef.current;
     const uid = uidRef.current;
@@ -605,7 +590,7 @@ function BluelineChatpilotInner() {
       const r = await fetch("/.netlify/functions/generate-gemini?debug=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
       const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
