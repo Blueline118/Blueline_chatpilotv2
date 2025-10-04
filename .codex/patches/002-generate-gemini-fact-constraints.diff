@@ -1,0 +1,140 @@
+diff --git a/netlify/functions/generate-gemini.js b/netlify/functions/generate-gemini.js
+index b5a6b7e..942eba4 100644
+--- a/netlify/functions/generate-gemini.js
++++ b/netlify/functions/generate-gemini.js
+@@ -56,31 +56,30 @@ function stripSocialToTwoSentences(input) {
+   return two.length > 280 ? two.slice(0, 277).trim() + "…" : two;
+ }
+ 
+-/** Compact de KB-context naar totaalbudget (chars) */
+-// Compact KB: at most ~400 characters total, max 2 lines
+-function formatKbContextBudgeted(kbItems) {
++/** Compacte KB-sectie met beperkte bullets */
++function formatKbSection(kbItems) {
+   if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
++
+   const MAX_TOTAL = 400;
++  const MAX_LINES = 3;
+   const lines = [];
+   let used = 0;
+ 
+-  for (const it of kbItems.slice(0, 3)) {
+-    const title = (it?.title || "").toString().trim();
+-    const snip  = ((it?.snippet || it?.body || "") + "").trim();
+-    if (!snip) continue;
++  for (const item of kbItems) {
++    if (lines.length >= MAX_LINES) break;
++    const title = (item?.title || "").toString().trim();
++    const snippet = ((item?.snippet || item?.body || "") + "").trim();
++    if (!snippet) continue;
+ 
+-    let line = title ? `• ${title}: ${snip}` : `• ${snip}`;
+-    if (line.length > 240) line = line.slice(0, 240) + "…";
++    let bullet = title ? `• ${title}: ${snippet}` : `• ${snippet}`;
++    if (bullet.length > 260) bullet = bullet.slice(0, 257).trimEnd() + "…";
+ 
+-    if (used + line.length > MAX_TOTAL) break;
+-    lines.push(line);
+-    used += line.length;
+-    if (lines.length >= 2) break; // max 2 bullets
++    if (lines.length > 0 && used + bullet.length > MAX_TOTAL) break;
++    lines.push(bullet);
++    used += bullet.length;
+   }
+ 
+-  return lines.length
+-    ? `Feiten (kort):\n${lines.join("\n")}`
+-    : "";
++  return lines.length ? `KB\n${lines.join("\n")}` : "";
+ }
+ 
+ /** Compacte profielrichtlijnen (alleen stijl en verboden termen) */
+@@ -163,36 +162,41 @@ export default async (request) => {
+     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
+     const temperature = envTemp ?? 0.7;
+ 
+-function channelLine(type) {
+-  const t = (type || "").toLowerCase();
+-  if (t.includes("social")) {
+-  return "SOCIAL: Antwoord in maximaal 2 korte zinnen (≤ 220 tekens totaal). Geen aanhef of afsluiting. Eén passende emoji is oké.";
+-}
+-  if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
+-    return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
+-  }
+-  // fallback (pas desgewenst aan)
+-  return "E-mail: 2–3 korte alinea’s (±80–140 woorden); geen onderwerpregel.";
+-}
++    function channelLine(type) {
++      const t = (type || "").toLowerCase();
++      if (t.includes("social")) {
++        return "Social: max 2 zinnen (≤220 tekens). Geen aanhef of afsluiting. Max 1 emoji.";
++      }
++      if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
++        return "E-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.";
++      }
++      return "E-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.";
++    }
+ 
+-   // Prompt samenstellen zonder systemInstruction veld (v1 compat)
+-const system  = baseSystemDirectives();
+-const profile = buildProfileDirectives(profileKey);
+-const kbBlock =
+-  typeof formatKbContextBudgeted === "function"
+-    ? formatKbContextBudgeted(kb)
+-    : (typeof formatKbContext === "function" ? formatKbContext(kb, 3, 280) : "");
+-
+-const userPrompt = [
+-  system,               // kort systeemkader
+-  channelLine(type),    // dynamische kanaalregel (Social/E-mail)
+-  profile,              // compact profiel (stijl/lexicon hints)
+-  kbBlock || null,      // compacte KB-context (optioneel)
+-  // 🔽 NIEUWE REGEL: alleen relevante KB gebruiken, anders veilige route
+-  "Belangrijk: gebruik uitsluitend relevante kennisbank-fragmenten. Past niets uit de KB, zeg dat duidelijk en geef een veilige route (bijv. reset-wachtwoord of contact opnemen).",
+-  "Vraag:",
+-  userText
+-].filter(Boolean).join("\n\n");
++    // Prompt samenstellen zonder systemInstruction veld (v1 compat)
++    const system = baseSystemDirectives();
++    const profile = buildProfileDirectives(profileKey);
++    const rulesSection = [
++      "Regels:",
++      "• Gebruik uitsluitend de meegegeven kennisbank-snippets als primaire bron. Als KB niet leeg is: beantwoord met die inhoud.",
++      "• Neem feiten (bedragen, aantallen, datums, termijnen, namen) letterlijk over uit de KB. Verander geen cijfers/eenheden.",
++      "• Als KB leeg is: geef een kort, veilig antwoord zonder specifieke cijfers/voorwaarden en adviseer waar nodig vervolg (link/klantenservice).",
++      "• Respecteer kanaalregels: Social = max 2 zinnen (~220 tekens), E-mail = 2–3 korte alinea’s.",
++      "• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.",
++    ].join("\n");
++    const kbBlock = formatKbSection(kb);
++
++    const userPrompt = [
++      system,
++      channelLine(type),
++      profile,
++      rulesSection,
++      kbBlock || null,
++      "Vraag:",
++      userText,
++    ]
++      .filter(Boolean)
++      .join("\n\n");
+ 
+ // Voor debug: korte prompt-preview (ook bij 502)
+ 
+@@ -267,7 +271,7 @@ const promptPreview = userPrompt.slice(0, 600);
+         user: (userText || "").length,
+       },
+       usedKb: Array.isArray(kb)
+-        ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
++        ? kb.slice(0, 3).map(({ title }) => title).filter(Boolean)
+         : [],
+     },
+   };
+@@ -301,7 +305,7 @@ const respPayload = {
+     topP: 0.95,
+     topK: 50,
+     usedKb: Array.isArray(kb)
+-      ? kb.slice(0, 3).map(({ id, title }) => ({ id, title }))
++      ? kb.slice(0, 3).map(({ title }) => title).filter(Boolean)
+       : [],
+   },
+ };
