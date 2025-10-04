@@ -341,8 +341,31 @@ const promptPreview = userPrompt.slice(0, 600);
       return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
     }
 
+    // ---- Numeric fact lock (post-check) ----
+function extractFacts(text) {
+  if (typeof text !== "string") return [];
+  const facts = [];
+  // zoek combinaties "24 maanden", "30 dagen", etc.
+  const re = /\b(\d+)\s*(dagen?|maanden?)\b/gi;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    facts.push({ n: m[1], unit: m[2].toLowerCase(), raw: m[0] });
+  }
+  return facts;
+}
 
-    const modelText = stripSubjectLine(firstText);
+const kbText = (Array.isArray(kb) ? kb.map(x => x.snippet).join(" ") : "") || "";
+const kbFacts = extractFacts(kbText);
+const ansFacts = extractFacts(modelText);
+
+// Als KB feiten heeft, maar antwoord geen enkel exact KB-getal bevat → minimale correctie
+if (kbFacts.length && !ansFacts.some(af => kbFacts.some(kf => af.n === kf.n && af.unit === kf.unit))) {
+  // Kies het eerste KB-feit als “belangrijkste”
+  const main = kbFacts[0];
+  modelText = `${modelText} ${main.n} ${main.unit} volgens de kennisbank.`;
+}
+
+let modelText = stripSubjectLine(firstText);
     // Als het kanaal "social" is: maximaal 4 zinnen, max 1 emoji
     const isSocial = typeof type === "string" && /social/i.test(type);
     const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
