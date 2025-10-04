@@ -474,7 +474,7 @@ function MobileSidebar({ open, onClose, onNewChat, onToggleFeed, feedOpen }) {
 
 /******************** Main ********************/
 function BluelineChatpilotInner() {
-  const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+  const loaded = typeof window !== "undefined" ? safeLoad() : { profileKey: "default" };
   const location = useLocation();
   const isMembers = location.pathname.startsWith('/members');
   const { activeOrgId } = useAuth();
@@ -499,7 +499,6 @@ function BluelineChatpilotInner() {
   const currentChatIdRef = useRef(null);
 
   // Chat state
-  const [messageType, setMessageType] = useState(loaded.messageType || "Social Media");
   const tone = "Automatisch"; // geen UI-pills
   const [profileKey, setProfileKey] = useState(loaded.profileKey || "default");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -535,7 +534,7 @@ function BluelineChatpilotInner() {
   useEffect(() => { if (showSend) setShowSendDelayed(true); else { const t = setTimeout(() => setShowSendDelayed(false), 200); return () => clearTimeout(t); } }, [showSend]);
   useEffect(() => { listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => { if (inputRef.current) autoresizeTextarea(inputRef.current); return () => copiedTimer.current && clearTimeout(copiedTimer.current); }, []);
-  useEffect(() => { safeSave({ messageType, tone, profileKey }); }, [messageType, tone, profileKey]);
+  useEffect(() => { safeSave({ tone, profileKey }); }, [tone, profileKey]);
 
   // Init anonId + recents + start chatId
   useEffect(() => {
@@ -550,7 +549,7 @@ function BluelineChatpilotInner() {
     e?.preventDefault();
     const trimmed = (input || "").trim();
     if (!trimmed) return;
-    const userMeta = { type: messageType, tone, profileKey };
+    const userMeta = { type: "E-mail", tone, profileKey };
     const userMessage = { role: "user", text: trimmed, meta: userMeta, ts: Date.now() };
     // verwijder hero zodra eerste user message komt
     setMessages((prev) => prev.filter((m) => m.text !== "__hero__"));
@@ -561,7 +560,6 @@ function BluelineChatpilotInner() {
 
     setKbErrorMessage("");
     const userText = trimmed;
-    const type = messageType;
     const orgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
     let kb = [];
 
@@ -574,12 +572,12 @@ function BluelineChatpilotInner() {
       kb = [];
     }
 
-    const body = { userText, type, tone, profileKey, kb };
+    const body = { userText, type: "E-mail", tone, profileKey, kb };
 
     console.log("=== KB SEND PAYLOAD ===", body);
     console.debug('[Chat send payload]', {
       userText,
-      type,
+      type: "E-mail",
       tone,
       profileKey,
       kb: Array.isArray(kb) ? kb.map((k) => k.title) : [],
@@ -597,14 +595,14 @@ function BluelineChatpilotInner() {
         body: JSON.stringify(body),
       });
       const data = await r.json();
-      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
+      const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, "E-mail", tone);
       const usedKb = Array.isArray(data?.meta?.usedKb) ? data.meta.usedKb : [];
-      const assistantMeta = { type: messageType, tone, profileKey, usedKb };
+      const assistantMeta = { type: "E-mail", tone, profileKey, usedKb };
       assistantMessage = { role: "assistant", text: reply, meta: assistantMeta, ts: Date.now() };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
-      const reply = generateAssistantReply(trimmed, messageType, tone);
-      assistantMessage = { role: "assistant", text: reply, meta: { type: messageType, tone, profileKey, usedKb: [] }, ts: Date.now() };
+      const reply = generateAssistantReply(trimmed, "E-mail", tone);
+      assistantMessage = { role: "assistant", text: reply, meta: { type: "E-mail", tone, profileKey, usedKb: [] }, ts: Date.now() };
       setMessages((prev) => [...prev, assistantMessage]);
     } finally {
       setIsTyping(false);
@@ -841,7 +839,7 @@ function BluelineChatpilotInner() {
                   />
                 </div>
 
-                {/* onderregel: + (profiel), type toggles, mic + send */}
+                {/* onderregel: + (profiel), mic + send */}
                 <div className="absolute left-0 right-0 bottom-0 h-10 flex items-center">
                   {/* Links */}
                   <div className="pl-4 flex items-center gap-3 relative">
@@ -857,7 +855,7 @@ function BluelineChatpilotInner() {
                           <button
                             key={p.key}
                             type="button"
-                            onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ messageType, tone, profileKey: p.key }); }}
+                            onClick={() => { setProfileKey(p.key); setProfileMenuOpen(false); safeSave({ tone, profileKey: p.key }); }}
                             className={cx("block w-full text-left px-3 py-2 text-sm hover:bg-blue-50", profileKey === p.key && "font-semibold text-[#194297]")}
                           >
                             {p.label}
@@ -866,12 +864,6 @@ function BluelineChatpilotInner() {
                       </div>
                     )}
 
-                    {/* Type toggles */}
-                    <div className="flex items-center gap-4 text-[14px]">
-                      {["Social Media","E-mail"].map((t) => (
-                        <button key={t} type="button" onClick={() => setMessageType(t)} className={cx("rounded-md px-2 py-1 transition-colors", messageType === t ? "text-[#194297] font-semibold" : "text-[#66676b] hover:bg-blue-50")}>{t}</button>
-                      ))}
-                    </div>
                   </div>
 
                   {/* Rechts */}

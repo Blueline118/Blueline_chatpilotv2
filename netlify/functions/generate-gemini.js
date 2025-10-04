@@ -111,8 +111,10 @@ export default async (request) => {
       payload = {};
     }
 
-    const { userText, type, tone, profileKey = "default" } = payload || {};
+    const { userText, tone, profileKey = "default" } = payload || {};
     const body = payload || {};
+    const type = "E-mail"; // overschrijft eventueel meegegeven type
+    body.type = type;
 
     const hasUrl = !!process.env.SUPABASE_URL;
     const srvKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -122,8 +124,8 @@ export default async (request) => {
     addDbg("envHasServiceRoleKey", hasSrv);
     addDbg("envServiceKeyTail", srvKeyTail);
 
-    if (!userText || !type || !tone) {
-      return new Response(JSON.stringify({ error: "Missing fields (userText, type, tone)" }), {
+    if (!userText || !tone) {
+      return new Response(JSON.stringify({ error: "Missing fields (userText, tone)" }), {
         status: 400,
         headers: JSON_HEADERS,
       });
@@ -172,25 +174,14 @@ export default async (request) => {
       .slice(0, 2)
       .map((x) => ({ ...x, snippet: String(x?.snippet || "").slice(0, 200) }));
 
-    function channelLine(type) {
-      const t = (type || "").toLowerCase();
-      if (t.includes("social")) {
-        return "Social: max 4 zinnen (≤400 tekens). Geen aanhef of afsluiting. Max 1 emoji.";
-      }
-      if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
-        return "E-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.";
-      }
-      return "E-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.";
-    }
-
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
     const profile = buildProfileDirectives(profileKey);
     const sectionHeader = `Je bent de klantenservice-assistent.\nSchrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam).`;
-    const sectionChannel = `\n\n${channelLine(type)}`;
+    const sectionChannel = `\n\nE-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.`;
     const sectionStyle = profile
       ? `\n\n${profile}`
       : `\n\nStijl: korte zinnen; geen jargon; positief geformuleerd\nVermijd: ticket, case, RMA`;
-    const sectionRules = `\n\nRegels:\n• Gebruik alléén de KB hieronder als bron.\n• Feiten letterlijk overnemen (cijfers/eenheden exact).\n• Als KB leeg is: veilig, kort antwoord zonder cijfers; verwijs naar website/klantenservice.\n• Social: max 4 zinnen, 1 emoji. E-mail: 2–3 korte alinea’s.\n• Geen herhaling. Geen aannames. Zeg het als info ontbreekt.`;
+    const sectionRules = `\n\nRegels:\n• Gebruik alléén de KB hieronder als bron.\n• Feiten letterlijk overnemen (cijfers/eenheden exact).\n• Als KB leeg is: veilig, kort antwoord zonder cijfers; verwijs naar website/klantenservice.\n• Geen herhaling. Geen aannames. Zeg het als info ontbreekt.`;
     const sectionKb = Array.isArray(kbForPrompt) && kbForPrompt.length
       ? `\n\nKB\n` +
         kbForPrompt
@@ -239,7 +230,6 @@ export default async (request) => {
     const kbLen = Array.isArray(kbForPrompt) ? kbForPrompt.length : 0;
 
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
-    const isSocial = typeof type === "string" && /social/i.test(type);
     const generationConfig = {
       temperature: 0.6,
       topP: 0.95,
@@ -315,8 +305,8 @@ export default async (request) => {
             user: (userText || "").length,
           },
           usedKb: usedKbTitles,
-          channelDetected: isSocial ? "social" : "email",
-          typeReceived: body.type || null,
+          channelDetected: "email",
+          typeReceived: "E-mail",
         },
         debug: baseDebug,
       };
@@ -338,7 +328,8 @@ export default async (request) => {
     }
 
     const modelText = stripSubjectLine(firstText);
-    const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
+    const safeText = null;
+    const finalText = safeText ?? modelText;
     const baseMeta = {
       source: "model",
       build: BUILD_MARK,
@@ -347,8 +338,8 @@ export default async (request) => {
       topP: generationConfig.topP,
       topK: generationConfig.topK,
       usedKb: usedKbTitles,
-      channelDetected: isSocial ? "social" : "email",
-      typeReceived: body.type || null,
+      channelDetected: "email",
+      typeReceived: "E-mail",
     };
     const respPayload = {
       text: finalText,
