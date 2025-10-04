@@ -194,7 +194,7 @@ export default async (request) => {
 
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
     const profile = buildProfileDirectives(profileKey);
-    const promptHeader = "Antwoord direct en alleen met het eindresultaat. Geen uitleg of tussenstappen.\nSluit je output af met:\n---END---\n\n";
+    const promptHeader = "Antwoord direct en alleen met het eindresultaat. Geen uitleg of tussenstappen.\n\n";
     const sectionHeader = `Je bent de klantenservice-assistent.\nSchrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam).`;
     const sectionChannel = `\n\n${channelLine(type)}`;
     const sectionStyle = profile
@@ -250,13 +250,12 @@ export default async (request) => {
     const kbLen = Array.isArray(kbForPrompt) ? kbForPrompt.length : 0;
 
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
-    const isSocialType = /social/i.test(String(body.type || ""));
+    const isSocial = /social/i.test(String(body.type || ""));
     const generationConfig = {
-      temperature: isSocialType ? 0.2 : 0.3,
-      topP: 0.8,
-      topK: 1,
-      maxOutputTokens: isSocialType ? 384 : 640,
-      stopSequences: ["\n\n---END---"],
+      temperature: isSocial ? 0.4 : 0.5,
+      topP: 0.9,
+      topK: 40,
+      maxOutputTokens: 2048,
     };
     if (envTemp !== null) {
       generationConfig.temperature = envTemp;
@@ -379,7 +378,6 @@ export default async (request) => {
       safeText = `${safeText} ${main.n} ${main.unit} volgens de kennisbank.`;
     }
 
-    const isSocial = typeof type === "string" && /social/i.test(type);
     const finalText = isSocial ? stripSocialToTwoSentences(safeText) : safeText;
     const respPayload = {
       text: finalText,
