@@ -177,7 +177,7 @@ const promptPreview = userPrompt.slice(0, 600);
   topP: 0.95,
   topK: 50,
   // meer budget zodat er na "thoughts" ook tekst overblijft:
-  maxOutputTokens: 1024,
+  maxOutputTokens: 2048,
 };
     const promptLen = userPrompt.length;
     const systemLen = system.length;
