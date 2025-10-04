@@ -37,6 +37,7 @@ function stripSubjectLine(s) {
 
 function stripSocialToTwoSentences(input) {
   if (!input || typeof input !== "string") return input;
+
   // Max 1 emoji: verwijder extra's
   const emojiRegex = /([\p{Emoji_Presentation}\p{Emoji}\uFE0F])/gu;
   let emojiCount = 0;
@@ -45,15 +46,16 @@ function stripSocialToTwoSentences(input) {
     return emojiCount <= 1 ? m : "";
   });
 
-  // Pak max 2 zinnen op basis van punt/uitroepteken/vraagteken
+  // Pak max 4 zinnen op basis van punt/uitroepteken/vraagteken
   const parts = noExtraEmojis
     .split(/(?<=[.!?])\s+/)
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const two = parts.slice(0, 2).join(" ");
+  const four = parts.slice(0, 4).join(" ");
+
   // Hard cap als extra veiligheidsnet
-  return two.length > 280 ? two.slice(0, 277).trim() + "…" : two;
+  return four.length > 280 ? four.slice(0, 277).trim() + "…" : four;
 }
 
 /** Compacte KB-sectie met beperkte bullets */
@@ -212,7 +214,7 @@ export default async (request) => {
     function channelLine(type) {
       const t = (type || "").toLowerCase();
       if (t.includes("social")) {
-        return "Social: max 2 zinnen (≤220 tekens). Geen aanhef of afsluiting. Max 1 emoji.";
+        return "Social: max 4 zinnen (≤400 tekens). Geen aanhef of afsluiting. Max 1 emoji.";
       }
       if (t.includes("mail") || t.includes("e-mail") || t.includes("email")) {
         return "E-mail: antwoord in 2–3 korte alinea’s; geen onderwerpregel.";
@@ -341,7 +343,7 @@ const promptPreview = userPrompt.slice(0, 600);
 
 
     const modelText = stripSubjectLine(firstText);
-    // Als het kanaal "social" is: maximaal 1–2 zinnen, max 1 emoji
+    // Als het kanaal "social" is: maximaal 4 zinnen, max 1 emoji
     const isSocial = typeof type === "string" && /social/i.test(type);
     const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
 
