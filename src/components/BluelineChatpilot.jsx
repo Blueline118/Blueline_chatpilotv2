@@ -519,6 +519,7 @@ function BluelineChatpilotInner() {
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const copiedTimer = useRef(null);
+  const [kbErrorMessage, setKbErrorMessage] = useState("");
 
   // Init hero + rotaties
   useEffect(() => {
@@ -558,21 +559,38 @@ function BluelineChatpilotInner() {
     if (inputRef.current) autoresizeTextarea(inputRef.current);
     setIsTyping(true);
 
+    setKbErrorMessage("");
     let kbItems = [];
     const kbOrgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
 
     if (kbOrgId && supabase) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log("KB search start", {
+          activeOrgId,
+          orgId: kbOrgId,
+          q: trimmed.slice(0, 40),
+          k: 3,
+        });
+      }
+
       try {
         const { items } = await searchKb({ supabase, orgId: kbOrgId, query: trimmed, limit: 3 });
-        if (Array.isArray(items) && items.length) {
-          kbItems = items.slice(0, 3).map((it) => ({
-            id: it?.id ?? null,
-            title: it?.title ?? "",
-            snippet: it?.snippet ?? it?.body ?? "",
-          }));
+        const normalized = Array.isArray(items) ? items.slice(0, 3) : [];
+        kbItems = normalized.map((it) => ({
+          id: it?.id ?? null,
+          title: it?.title ?? "",
+          snippet: it?.snippet ?? it?.body ?? "",
+        }));
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log("KB search done", {
+            kbLength: kbItems.length,
+            firstTitle: kbItems[0]?.title ?? null,
+          });
         }
-      } catch {
+      } catch (error) {
         kbItems = [];
+        setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
       }
     }
 
@@ -880,6 +898,12 @@ function BluelineChatpilotInner() {
                 </div>
               </div>
             </form>
+
+            {kbErrorMessage && (
+              <p className="mx-auto max-w-[760px] px-4 md:px-5 text-xs text-gray-500 mt-1">
+                {kbErrorMessage}
+              </p>
+            )}
 
             {/* Disclaimer */}
             <div className="text-center text-[12px] text-[#66676b] pb-3">Chatpilot kan fouten maken. Controleer belangrijke informatie.</div>
