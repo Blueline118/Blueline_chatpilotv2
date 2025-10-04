@@ -584,7 +584,7 @@ function BluelineChatpilotInner() {
     let assistantMessage = null;
 
     try {
-      const r = await fetch("/.netlify/functions/generate-gemini", {
+      const r = await fetch("/.netlify/functions/generate-gemini?debug=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
