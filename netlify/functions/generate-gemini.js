@@ -1,7 +1,5 @@
 // netlify/functions/generate-gemini.js
 
-import supabaseServer from "./supabaseServer.js";
-
 // ────────────────────────────────────────────────────────────────────────────────
 // Config
 // ────────────────────────────────────────────────────────────────────────────────
@@ -116,6 +114,13 @@ export default async (request) => {
   try {
     const url = new URL(request.url);
     const DEBUG = url.searchParams.get("debug") === "1";
+    const dbg = { notes: [] };
+    const addDbg = (k, v) => {
+      dbg[k] = v;
+    };
+    const note = (m) => {
+      dbg.notes.push(m);
+    };
     if (url.searchParams.get("ping")) {
       return new Response(JSON.stringify({ ok: true, pong: true, build: BUILD_MARK }), {
         headers: JSON_HEADERS,
@@ -147,6 +152,14 @@ export default async (request) => {
 
     const { userText, type, tone, profileKey = "default" } = payload || {};
 
+    const hasUrl = !!process.env.SUPABASE_URL;
+    const srvKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    const hasSrv = !!srvKey;
+    const srvKeyTail = srvKey ? srvKey.slice(-4) : "";
+    addDbg("envHasSupabaseUrl", hasUrl);
+    addDbg("envHasServiceRoleKey", hasSrv);
+    addDbg("envServiceKeyTail", srvKeyTail);
+
     if (!userText || !type || !tone) {
       return new Response(JSON.stringify({ error: "Missing fields (userText, type, tone)" }), {
         status: 400,
@@ -155,26 +168,41 @@ export default async (request) => {
     }
 
     const orgId = payload?.orgId || "54ec8e89-d265-474d-98fc-d2ba579ac83f";
+    const qText = (payload?.userText || "").slice(0, 80);
+    addDbg("orgIdUsed", orgId);
+    addDbg("userTextPreview", qText);
 
-    let kb = [];
-    if (Array.isArray(payload?.kb) && payload.kb.length > 0) {
-      kb = payload.kb;
-    } else {
-      const { data: rows, error } = await supabaseServer.rpc("kb_search_chunks", {
-        p_org: orgId,
-        q: userText,
-        k: 5,
-      });
-      if (error) {
-        console.error("SERVER_KB_ERROR", error.message);
-      } else {
-        kb = (rows || []).map((r) => ({
+    let kb = Array.isArray(payload?.kb) ? payload.kb : [];
+    addDbg("clientKbLen", Array.isArray(kb) ? kb.length : -1);
+
+    if (!kb || kb.length === 0) {
+      note("serverKB: fallback path");
+      try {
+        const { default: supabaseServer } = await import("./supabaseServer.js");
+        addDbg("serverRpcArgs", { p_org: orgId, q: qText, k: 5 });
+        const { data: rows, error } = await supabaseServer.rpc("kb_search_chunks", {
+          p_org: orgId,
+          q: userText,
+          k: 5,
+        });
+
+        if (error) {
+          addDbg("serverKbError", error.message || String(error));
+          console.error("SERVER_KB_ERROR", error.message || error);
+        }
+        const mapped = (rows || []).map((r) => ({
           id: r.id,
           title: r.title,
           snippet: r.snippet,
           rank: r.rank,
         }));
+        addDbg("serverKbCount", mapped.length);
+        kb = mapped;
+      } catch (e) {
+        addDbg("serverKbCatch", e?.message || String(e));
       }
+    } else {
+      note("serverKB: client kb used");
     }
 
     // Temperatuur
@@ -272,60 +300,68 @@ const promptPreview = userPrompt.slice(0, 600);
     
 
     if (!firstText || firstText.trim() === "") {
-  const payload = {
-    error: "Empty model response",
-    meta: {
-      source: "empty",
-      build: BUILD_MARK,
-      modelUsed: MODEL,
-      finishReason,
-      blockReason,
-      safetyRatings,
-      // ▶︎ altijd meegeven (niet alleen in DEBUG), zodat je het in UI/Network ziet
-      promptPreview: userPrompt.slice(0, 600),
-      promptLengths: {
-        total: promptLen,
-        system: systemLen,
-        profile: profileLen,
-        kb: kbPromptLen,
-        user: (userText || "").length,
-      },
-      usedKb: Array.isArray(kb) ? kb.map(({ title }) => title).filter(Boolean) : [],
-    },
-  };
+      const payload = {
+        error: "Empty model response",
+        meta: {
+          source: "empty",
+          build: BUILD_MARK,
+          modelUsed: MODEL,
+          finishReason,
+          blockReason,
+          safetyRatings,
+          // ▶︎ altijd meegeven (niet alleen in DEBUG), zodat je het in UI/Network ziet
+          promptPreview: userPrompt.slice(0, 600),
+          promptLengths: {
+            total: promptLen,
+            system: systemLen,
+            profile: profileLen,
+            kb: kbPromptLen,
+            user: (userText || "").length,
+          },
+          usedKb: Array.isArray(kb) ? kb.map(({ title }) => title) : [],
+        },
+      };
 
-  // Extra’s alleen bij ?debug=1
-  if (DEBUG) {
-    payload.debug = {
-      generationConfig,
-      contentsSent: contents,
-      upstream: data,
-      kbLen,
-    };
-  }
+      // Extra’s alleen bij ?debug=1
+      if (DEBUG) {
+        payload.debug = {
+          generationConfig,
+          contentsSent: contents,
+          upstream: data,
+          kbLen,
+        };
+        payload.debug = {
+          ...payload.debug,
+          ...dbg,
+        };
+      }
 
-  return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
-}
+      return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
+    }
 
 
     const modelText = stripSubjectLine(firstText);
+    // Als het kanaal "social" is: maximaal 1–2 zinnen, max 1 emoji
+    const isSocial = typeof type === "string" && /social/i.test(type);
+    const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
 
-// Als het kanaal "social" is: maximaal 1–2 zinnen, max 1 emoji
-const isSocial = typeof type === "string" && /social/i.test(type);
-const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
+    const respPayload = {
+      text: finalText,
+      meta: {
+        source: "model",
+        build: BUILD_MARK,
+        modelUsed: MODEL,
+        temperature,
+        topP: 0.95,
+        topK: 50,
+        usedKb: Array.isArray(kb) ? kb.map(({ title }) => title) : [],
+      },
+    };
 
-const respPayload = {
-  text: finalText,
-  meta: {
-    source: "model",
-    build: BUILD_MARK,
-    modelUsed: MODEL,
-    temperature,
-    topP: 0.95,
-    topK: 50,
-    usedKb: Array.isArray(kb) ? kb.map(({ title }) => title).filter(Boolean) : [],
-  },
-};
+    respPayload.meta.usedKb = (kb || []).map((x) => x.title);
+    if (DEBUG) {
+      addDbg("kbLen", (kb || []).length);
+    }
 
     if (DEBUG) {
       respPayload.debug = {
@@ -340,6 +376,7 @@ const respPayload = {
         finishReason,
         blockReason,
         safetyRatings,
+        ...dbg,
       };
     }
 
