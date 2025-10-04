@@ -758,7 +758,6 @@ function BluelineChatpilotInner() {
                   <div className="py-5 flex flex-col gap-5" ref={listRef} role="log" aria-live="polite">
                     {messages.filter(m=>m.text !== "__hero__").map((m, idx) => {
                       const isUser = m.role === "user";
-                      const usedKbItems = !isUser && Array.isArray(m?.meta?.usedKb) ? m.meta.usedKb : [];
                       return (
                         <div key={idx} className={cx("flex", isUser ? "justify-end" : "justify-start")}>
                           <div className={cx("flex flex-col gap-2 max-w-[560px]", isUser ? "items-end" : "items-start")}>
@@ -772,9 +771,21 @@ function BluelineChatpilotInner() {
                             >
                               {m.text}
                             </div>
-                            {!isUser && usedKbItems.length > 0 && (
-                              <div className="max-w-[560px] text-sm text-gray-500 mt-2">
-                                🛈 Gebruikte kennisbank: {usedKbItems.map((item) => item?.title || "Onbekende bron").join(", ")}
+                            {!isUser && Array.isArray(m.meta?.usedKb) && m.meta.usedKb.length > 0 && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                                <span className="inline-flex items-center gap-1">
+                                  <span>🛈</span>
+                                  <span>Gebruikte kennisbank:</span>
+                                </span>
+                                {m.meta.usedKb.map((t, i) => (
+                                  <span
+                                    key={i}
+                                    className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200"
+                                    title={t || 'Onbekende bron'}
+                                  >
+                                    {t || 'Onbekende bron'}
+                                  </span>
+                                ))}
                               </div>
                             )}
                           </div>
