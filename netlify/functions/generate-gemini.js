@@ -58,32 +58,6 @@ function stripSocialToTwoSentences(input) {
   return four.length > 280 ? four.slice(0, 277).trim() + "…" : four;
 }
 
-/** Compacte KB-sectie met beperkte bullets */
-function formatKbSection(kbItems) {
-  if (!Array.isArray(kbItems) || kbItems.length === 0) return "";
-
-  const MAX_TOTAL = 400;
-  const MAX_LINES = 3;
-  const lines = [];
-  let used = 0;
-
-  for (const item of kbItems) {
-    if (lines.length >= MAX_LINES) break;
-    const title = (item?.title || "").toString().trim();
-    const snippet = ((item?.snippet || item?.body || "") + "").trim();
-    if (!snippet) continue;
-
-    let bullet = title ? `• ${title}: ${snippet}` : `• ${snippet}`;
-    if (bullet.length > 260) bullet = bullet.slice(0, 257).trimEnd() + "…";
-
-    if (lines.length > 0 && used + bullet.length > MAX_TOTAL) break;
-    lines.push(bullet);
-    used += bullet.length;
-  }
-
-  return lines.length ? `KB\n${lines.join("\n")}` : "";
-}
-
 /** Compacte profielrichtlijnen (alleen stijl en verboden termen) */
 function buildProfileDirectives(profileKey) {
   const PROFILES = {
@@ -102,15 +76,6 @@ function buildProfileDirectives(profileKey) {
     p.avoid?.length ? `Vermijd: ${p.avoid.join(", ")}` : null,
   ].filter(Boolean).join("\n");
 }
-
-/** Basissysteemrichtlijnen (ultra-compact) */
-function baseSystemDirectives() {
-  return [
-    "Je bent de klantenservice-assistent.",
-    "Schrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam)."
-  ].join("\n");
-}
-
 
 export default async (request) => {
   try {
@@ -223,38 +188,61 @@ export default async (request) => {
     }
 
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
-    const system = baseSystemDirectives();
     const profile = buildProfileDirectives(profileKey);
-    const rulesSection = [
-      "Regels:",
-      "• Gebruik uitsluitend de meegegeven kennisbank-snippets als primaire bron. Als KB niet leeg is: beantwoord met die inhoud.",
-      "• Neem feiten (bedragen, aantallen, datums, termijnen, namen) letterlijk over uit de KB. Verander geen cijfers/eenheden.",
-      "• Als KB leeg is: geef een kort, veilig antwoord zonder specifieke cijfers/voorwaarden en adviseer waar nodig vervolg (link/klantenservice).",
-      "• Respecteer kanaalregels: Social = max 2 zinnen (~220 tekens), E-mail = 2–3 korte alinea’s.",
-      "• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.",
-    ].join("\n");
-    const kbBlock = formatKbSection(kb);
-    const kbPromptLen = (kbBlock || "").length;
+    const sectionHeader = `Je bent de klantenservice-assistent.\nSchrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam).`;
+    const sectionChannel = `\n\n${channelLine(type)}`;
+    const sectionStyle = profile
+      ? `\n\n${profile}`
+      : `\n\nStijl: korte zinnen; geen jargon; positief geformuleerd\nVermijd: ticket, case, RMA`;
+    const sectionRules = `\n\nRegels:\n• Gebruik uitsluitend de meegegeven kennisbank-snippets als primaire bron. Als KB niet leeg is: beantwoord met die inhoud.\n• Neem feiten (bedragen, aantallen, datums, termijnen, namen) letterlijk over uit de KB. Verander geen cijfers/eenheden.\n• Als KB leeg is: geef een kort, veilig antwoord zonder specifieke cijfers/voorwaarden en adviseer waar nodig vervolg (link/klantenservice).\n• Respecteer kanaalregels: Social = max 4 zinnen, E-mail = 2–3 korte alinea’s.\n• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.`;
+    const sectionKb = Array.isArray(kb) && kb.length
+      ? `\n\nKB\n` +
+        kb
+          .map((x) => {
+            const title = (x?.title ?? "").toString();
+            const snippet = (x?.snippet ?? "").toString();
+            if (!title && !snippet) return "";
+            const prefix = title ? `• ${title}:` : "•";
+            return `${prefix} ${snippet}`.trim();
+          })
+          .filter(Boolean)
+          .join("\n")
+      : "";
+    const sectionQuestion = `\n\nVraag:\n\n${userText || ""}`;
+    const fullPrompt =
+      sectionHeader +
+      sectionChannel +
+      sectionStyle +
+      sectionRules +
+      sectionKb +
+      sectionQuestion;
+
+    // simpele tokenschatter (~4 chars per token)
+    const est = (s) => Math.ceil(((s || "").length) / 4);
+    const debugSections = {
+      chars: {
+        header: sectionHeader.length,
+        channel: sectionChannel.length,
+        style: sectionStyle.length,
+        rules: sectionRules.length,
+        kb: sectionKb.length,
+        question: sectionQuestion.length,
+        total: fullPrompt.length,
+      },
+      estTokens: {
+        header: est(sectionHeader),
+        channel: est(sectionChannel),
+        style: est(sectionStyle),
+        rules: est(sectionRules),
+        kb: est(sectionKb),
+        question: est(sectionQuestion),
+        total: est(fullPrompt),
+      },
+    };
+    const kbPromptLen = sectionKb.length;
     const kbLen = Array.isArray(kb) ? kb.length : 0;
 
-    const userPrompt = [
-      system,
-      channelLine(type),
-      profile,
-      rulesSection,
-      kbBlock || null,
-      "Vraag:",
-      userText,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-
-// Voor debug: korte prompt-preview (ook bij 502)
-
-const promptPreview = userPrompt.slice(0, 600);
-
-
-    const contents = [{ role: "user", parts: [{ text: userPrompt }] }];
+    const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
     const generationConfig = {
   temperature,
   topP: 0.95,
@@ -262,9 +250,9 @@ const promptPreview = userPrompt.slice(0, 600);
   // meer budget zodat er na "thoughts" ook tekst overblijft:
   maxOutputTokens: 2048,
 };
-    const promptLen = userPrompt.length;
-    const systemLen = system.length;
-    const profileLen = profile.length;
+    const promptLen = fullPrompt.length;
+    const systemLen = sectionHeader.length;
+    const profileLen = sectionStyle.length;
 
     const payloadForGemini = { contents, generationConfig };
 
@@ -312,7 +300,7 @@ const promptPreview = userPrompt.slice(0, 600);
           blockReason,
           safetyRatings,
           // ▶︎ altijd meegeven (niet alleen in DEBUG), zodat je het in UI/Network ziet
-          promptPreview: userPrompt.slice(0, 600),
+          promptPreview: fullPrompt.slice(0, 600),
           promptLengths: {
             total: promptLen,
             system: systemLen,
@@ -336,6 +324,9 @@ const promptPreview = userPrompt.slice(0, 600);
           ...payload.debug,
           ...dbg,
         };
+        payload.debug.fullPrompt = fullPrompt;
+        payload.debug.sectionLengths = debugSections.chars;
+        payload.debug.sectionTokensApprox = debugSections.estTokens;
       }
 
       return new Response(JSON.stringify(payload), { status: 502, headers: JSON_HEADERS });
@@ -394,7 +385,7 @@ const promptPreview = userPrompt.slice(0, 600);
         profileLen,
         kbLen,
         kbPromptLen,
-        promptPreview: userPrompt.slice(0, 1200),
+        promptPreview: fullPrompt.slice(0, 1200),
         generationConfig,
         contentsSent: contents,
         finishReason,
@@ -402,6 +393,9 @@ const promptPreview = userPrompt.slice(0, 600);
         safetyRatings,
         ...dbg,
       };
+      respPayload.debug.fullPrompt = fullPrompt;
+      respPayload.debug.sectionLengths = debugSections.chars;
+      respPayload.debug.sectionTokensApprox = debugSections.estTokens;
     }
 
     return new Response(JSON.stringify(respPayload), { headers: JSON_HEADERS });
