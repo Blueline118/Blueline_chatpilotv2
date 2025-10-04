@@ -118,6 +118,7 @@ export default async (request) => {
     }
 
     const { userText, type, tone, profileKey = "default" } = payload || {};
+    const body = payload || {};
 
     const hasUrl = !!process.env.SUPABASE_URL;
     const srvKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -172,18 +173,13 @@ export default async (request) => {
       note("serverKB: client kb used");
     }
 
-    const kbTop2 = (Array.isArray(kb) ? [...kb] : [])
+    const kbForPrompt = (Array.isArray(kb) ? kb : [])
       .sort((a, b) => (b?.rank ?? 0) - (a?.rank ?? 0))
       .slice(0, 2)
-      .map((x) => ({
-        ...x,
-        snippet: (x?.snippet || "").slice(0, 220),
-      }));
-    const kbForPrompt = kbTop2;
+      .map((x) => ({ ...x, snippet: String(x?.snippet || "").slice(0, 200) }));
 
     // Temperatuur
     const envTemp = process?.env?.GEMINI_TEMPERATURE ? clampTemp(process.env.GEMINI_TEMPERATURE) : null;
-    const temperature = envTemp ?? 0.7;
 
     function channelLine(type) {
       const t = (type || "").toLowerCase();
@@ -198,12 +194,13 @@ export default async (request) => {
 
     // Prompt samenstellen zonder systemInstruction veld (v1 compat)
     const profile = buildProfileDirectives(profileKey);
+    const promptHeader = "Antwoord direct en alleen met het eindresultaat. Geen uitleg of tussenstappen.\nSluit je output af met:\n---END---\n\n";
     const sectionHeader = `Je bent de klantenservice-assistent.\nSchrijf in het Nederlands en klink vriendelijk-professioneel (menselijk, empathisch, behulpzaam).`;
     const sectionChannel = `\n\n${channelLine(type)}`;
     const sectionStyle = profile
       ? `\n\n${profile}`
       : `\n\nStijl: korte zinnen; geen jargon; positief geformuleerd\nVermijd: ticket, case, RMA`;
-    const sectionRules = `\n\nRegels:\n• Gebruik uitsluitend de meegegeven kennisbank-snippets als primaire bron. Als KB niet leeg is: beantwoord met die inhoud.\n• Neem feiten (bedragen, aantallen, datums, termijnen, namen) letterlijk over uit de KB. Verander geen cijfers/eenheden.\n• Als KB leeg is: geef een kort, veilig antwoord zonder specifieke cijfers/voorwaarden en adviseer waar nodig vervolg (link/klantenservice).\n• Respecteer kanaalregels: Social = max 4 zinnen, E-mail = 2–3 korte alinea’s.\n• Wees beknopt, geen herhaling, geen ‘hallucinaties’. Zeg expliciet dat info ontbreekt als het niet in KB staat.`;
+    const sectionRules = `\n\nRegels:\n• Gebruik alléén de KB hieronder als bron.\n• Feiten letterlijk overnemen (cijfers/eenheden exact).\n• Als KB leeg is: veilig, kort antwoord zonder cijfers; verwijs naar website/klantenservice.\n• Social: max 4 zinnen, 1 emoji. E-mail: 2–3 korte alinea’s.\n• Geen herhaling. Geen aannames. Zeg het als info ontbreekt.`;
     const sectionKb = Array.isArray(kbForPrompt) && kbForPrompt.length
       ? `\n\nKB\n` +
         kbForPrompt
@@ -219,6 +216,7 @@ export default async (request) => {
       : "";
     const sectionQuestion = `\n\nVraag:\n\n${userText || ""}`;
     const fullPrompt =
+      promptHeader +
       sectionHeader +
       sectionChannel +
       sectionStyle +
@@ -252,13 +250,17 @@ export default async (request) => {
     const kbLen = Array.isArray(kbForPrompt) ? kbForPrompt.length : 0;
 
     const contents = [{ role: "user", parts: [{ text: fullPrompt }] }];
+    const isSocialType = /social/i.test(String(body.type || ""));
     const generationConfig = {
-  temperature,
-  topP: 0.95,
-  topK: 50,
-  // meer budget zodat er na "thoughts" ook tekst overblijft:
-  maxOutputTokens: 2048,
-};
+      temperature: isSocialType ? 0.2 : 0.3,
+      topP: 0.8,
+      topK: 1,
+      maxOutputTokens: isSocialType ? 384 : 640,
+      stopSequences: ["\n\n---END---"],
+    };
+    if (envTemp !== null) {
+      generationConfig.temperature = envTemp;
+    }
     const promptLen = fullPrompt.length;
     const systemLen = sectionHeader.length;
     const profileLen = sectionStyle.length;
@@ -342,37 +344,42 @@ export default async (request) => {
     }
 
     let modelText = stripSubjectLine(firstText);
-    let safeText = modelText; // mutable copy for post-processing
+    let safeText = modelText;
 
-    // ---- Numeric fact lock (post-check) ----
     function extractFacts(text) {
       if (typeof text !== "string") return [];
-      const facts = [];
-      const re = /\b(\d+)\s*(dagen?|maanden?)\b/gi; // e.g., "30 dagen", "24 maanden"
+      const out = [],
+        re = /\b(\d+)\s*(dagen?|maanden?|mnd(?:en)?)\b/gi;
       let m;
       while ((m = re.exec(text)) !== null) {
-        facts.push({ n: m[1], unit: m[2].toLowerCase(), raw: m[0] });
+        let u = m[2].toLowerCase();
+        if (/^mnd/.test(u)) u = "maanden";
+        if (u === "maand") u = "maanden";
+        if (u === "dag") u = "dagen";
+        out.push({ n: m[1], unit: u, raw: m[0] });
       }
-      return facts;
+      return out;
+    }
+    function normalizeAnswerNumbers(answer, kbFacts) {
+      if (typeof answer !== "string" || !kbFacts.length) return answer;
+      const main = kbFacts[0];
+      return answer.replace(/\b(\d+)\s*(dagen?|maanden?|mnd(?:en)?)\b/gi, `${main.n} ${main.unit}`);
     }
 
-    const kbText = (Array.isArray(kbForPrompt) ? kbForPrompt.map((x) => x?.snippet || "").join(" ") : "") || "";
+    const kbText = kbForPrompt.map((x) => x.snippet).join(" ");
     const kbFacts = extractFacts(kbText);
-    const ansFacts = extractFacts(safeText);
 
-    // Als KB feiten heeft maar geen enkel exact KB-getal in het antwoord staat → voeg 1 zin toe
-    if (kbFacts.length && !ansFacts.some((af) => kbFacts.some((kf) => af.n === kf.n && af.unit === kf.unit))) {
-      const main = kbFacts[0]; // pak het eerste KB-feit
+    safeText = normalizeAnswerNumbers(safeText, kbFacts);
+
+    const ansFacts = extractFacts(safeText);
+    const hasExact =
+      kbFacts.length && ansFacts.some((a) => kbFacts.some((k) => a.n === k.n && a.unit === k.unit));
+    if (kbFacts.length && !hasExact) {
+      const main = kbFacts[0];
       safeText = `${safeText} ${main.n} ${main.unit} volgens de kennisbank.`;
     }
 
-    // Als het kanaal "social" is: maximaal 4 zinnen, max 1 emoji
-    const mainFact = kbFacts[0];
-
     const isSocial = typeof type === "string" && /social/i.test(type);
-    if (isSocial && mainFact) {
-      safeText = safeText.replace(/\b(\d+)\s*(dagen?|maanden?)\b/gi, `${mainFact.n} ${mainFact.unit}`);
-    }
     const finalText = isSocial ? stripSocialToTwoSentences(safeText) : safeText;
     const respPayload = {
       text: finalText,
@@ -380,9 +387,9 @@ export default async (request) => {
         source: "model",
         build: BUILD_MARK,
         modelUsed: MODEL,
-        temperature,
-        topP: 0.95,
-        topK: 50,
+        temperature: generationConfig.temperature,
+        topP: generationConfig.topP,
+        topK: generationConfig.topK,
         usedKb: Array.isArray(kbForPrompt) ? kbForPrompt.map(({ title }) => title) : [],
       },
     };
