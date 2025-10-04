@@ -4,6 +4,10 @@ export async function searchKb(orgId, query, limit) {
   const k = typeof limit === 'number' && limit > 0 ? limit : 3;
   if (!orgId || !query) return [];
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log("=== KB SEARCH CALLED ===", { orgId, q: query, k });
+  }
+
   try {
     const { data: rows } = await supabase
       .rpc("kb_search_chunks", {
@@ -29,9 +33,11 @@ export async function searchKb(orgId, query, limit) {
 
     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
     const THRESHOLD = 0.1;
-    return items
+    const filtered = items
       .filter((i) => (i.rank ?? 0) >= THRESHOLD)
       .slice(0, k);
+
+    return Array.isArray(filtered) ? filtered : [];
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     const wrapped = new Error(`KB_SEARCH_ERROR: ${err.message}`);

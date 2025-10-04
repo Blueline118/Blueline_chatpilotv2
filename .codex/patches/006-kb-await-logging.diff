@@ -1,0 +1,58 @@
+diff --git a/src/components/BluelineChatpilot.jsx b/src/components/BluelineChatpilot.jsx
+index 8621afc..ba7b099 100644
+--- a/src/components/BluelineChatpilot.jsx
++++ b/src/components/BluelineChatpilot.jsx
+@@ -567,20 +567,17 @@ function BluelineChatpilotInner() {
+ 
+     try {
+       kb = await searchKb(orgId, userText, 5);
+-    } catch (e) {
+-      if (process.env.NODE_ENV !== 'production') {
+-        console.warn('KB lookup failed:', e?.message || e);
+-      }
++      console.log("=== KB RESULT ===", { len: kb.length, first: kb[0]?.title, kb });
++    } catch (err) {
++      console.error("=== KB ERROR ===", err?.message || err);
+       setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
+       kb = [];
+     }
+ 
+-    if (process.env.NODE_ENV !== 'production') {
+-      console.log('KB send payload:', { kbLen: kb.length, first: kb[0]?.title });
+-    }
+-
+     const body = { userText, type, tone, profileKey, kb };
+ 
++    console.log("=== KB SEND PAYLOAD ===", body);
++
+     const chatId = currentChatIdRef.current;
+     const uid = uidRef.current;
+     const title = trimmed.replace(/\s+/g, " ").slice(0, 40) || "Chat";
+diff --git a/src/services/kb.js b/src/services/kb.js
+index 2958637..f3d5674 100644
+--- a/src/services/kb.js
++++ b/src/services/kb.js
+@@ -4,6 +4,10 @@ export async function searchKb(orgId, query, limit) {
+   const k = typeof limit === 'number' && limit > 0 ? limit : 3;
+   if (!orgId || !query) return [];
+ 
++  if (process.env.NODE_ENV !== 'production') {
++    console.log("=== KB SEARCH CALLED ===", { orgId, q: query, k });
++  }
++
+   try {
+     const { data: rows } = await supabase
+       .rpc("kb_search_chunks", {
+@@ -29,9 +33,11 @@ export async function searchKb(orgId, query, limit) {
+ 
+     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
+     const THRESHOLD = 0.1;
+-    return items
++    const filtered = items
+       .filter((i) => (i.rank ?? 0) >= THRESHOLD)
+       .slice(0, k);
++
++    return Array.isArray(filtered) ? filtered : [];
+   } catch (error) {
+     const err = error instanceof Error ? error : new Error(String(error));
+     const wrapped = new Error(`KB_SEARCH_ERROR: ${err.message}`);

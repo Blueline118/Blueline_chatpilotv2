@@ -567,19 +567,16 @@ function BluelineChatpilotInner() {
 
     try {
       kb = await searchKb(orgId, userText, 5);
-    } catch (e) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('KB lookup failed:', e?.message || e);
-      }
+      console.log("=== KB RESULT ===", { len: kb.length, first: kb[0]?.title, kb });
+    } catch (err) {
+      console.error("=== KB ERROR ===", err?.message || err);
       setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
       kb = [];
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('KB send payload:', { kbLen: kb.length, first: kb[0]?.title });
-    }
-
     const body = { userText, type, tone, profileKey, kb };
+
+    console.log("=== KB SEND PAYLOAD ===", body);
 
     const chatId = currentChatIdRef.current;
     const uid = uidRef.current;
