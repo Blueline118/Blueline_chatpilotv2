@@ -1,0 +1,106 @@
+diff --git a/src/components/BluelineChatpilot.jsx b/src/components/BluelineChatpilot.jsx
+index db075a7..8621afc 100644
+--- a/src/components/BluelineChatpilot.jsx
++++ b/src/components/BluelineChatpilot.jsx
+@@ -477,7 +477,7 @@ function BluelineChatpilotInner() {
+   const loaded = typeof window !== "undefined" ? safeLoad() : { messageType: "Social Media", tone: "Formeel", profileKey: "default" };
+   const location = useLocation();
+   const isMembers = location.pathname.startsWith('/members');
+-  const { supabase, activeOrgId } = useAuth();
++  const { activeOrgId } = useAuth();
+   const navigate = useNavigate();
+ 
+   function goToChatRoute() {
+@@ -560,41 +560,26 @@ function BluelineChatpilotInner() {
+     setIsTyping(true);
+ 
+     setKbErrorMessage("");
+-    let kbItems = [];
+-    const kbOrgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
++    const userText = trimmed;
++    const type = messageType;
++    const orgId = activeOrgId || '54ec8e89-d265-474d-98fc-d2ba579ac83f';
++    let kb = [];
+ 
+-    if (kbOrgId && supabase) {
++    try {
++      kb = await searchKb(orgId, userText, 5);
++    } catch (e) {
+       if (process.env.NODE_ENV !== 'production') {
+-        console.log("KB search start", {
+-          activeOrgId,
+-          orgId: kbOrgId,
+-          q: trimmed.slice(0, 40),
+-          k: 3,
+-        });
++        console.warn('KB lookup failed:', e?.message || e);
+       }
++      setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
++      kb = [];
++    }
+ 
+-      try {
+-        const { items } = await searchKb({ supabase, orgId: kbOrgId, query: trimmed, limit: 3 });
+-        const normalized = Array.isArray(items) ? items.slice(0, 3) : [];
+-        kbItems = normalized.map((it) => ({
+-          id: it?.id ?? null,
+-          title: it?.title ?? "",
+-          snippet: it?.snippet ?? it?.body ?? "",
+-        }));
+-
+-        if (process.env.NODE_ENV !== 'production') {
+-          console.log("KB search done", {
+-            kbLength: kbItems.length,
+-            firstTitle: kbItems[0]?.title ?? null,
+-          });
+-        }
+-      } catch (error) {
+-        kbItems = [];
+-        setKbErrorMessage("KB kon niet worden opgehaald (mogelijk geen toegang of RLS). Antwoord zonder KB gegeven.");
+-      }
++    if (process.env.NODE_ENV !== 'production') {
++      console.log('KB send payload:', { kbLen: kb.length, first: kb[0]?.title });
+     }
+ 
+-    const payload = { userText: trimmed, type: messageType, tone, profileKey, kb: kbItems };
++    const body = { userText, type, tone, profileKey, kb };
+ 
+     const chatId = currentChatIdRef.current;
+     const uid = uidRef.current;
+@@ -605,7 +590,7 @@ function BluelineChatpilotInner() {
+       const r = await fetch("/.netlify/functions/generate-gemini?debug=1", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+-        body: JSON.stringify(payload),
++        body: JSON.stringify(body),
+       });
+       const data = await r.json();
+       const reply = r.ok && data?.text ? data.text : generateAssistantReply(trimmed, messageType, tone);
+diff --git a/src/services/kb.js b/src/services/kb.js
+index 4bb7ed5..2958637 100644
+--- a/src/services/kb.js
++++ b/src/services/kb.js
+@@ -1,5 +1,8 @@
+-export async function searchKb({ supabase, orgId, query, limit }) {
+-  const k = limit ?? 3;
++import { supabase } from '../lib/supabaseClient';
++
++export async function searchKb(orgId, query, limit) {
++  const k = typeof limit === 'number' && limit > 0 ? limit : 3;
++  if (!orgId || !query) return [];
+ 
+   try {
+     const { data: rows } = await supabase
+@@ -26,11 +29,9 @@ export async function searchKb({ supabase, orgId, query, limit }) {
+ 
+     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
+     const THRESHOLD = 0.1;
+-    const filtered = items
++    return items
+       .filter((i) => (i.rank ?? 0) >= THRESHOLD)
+       .slice(0, k);
+-
+-    return { items: filtered };
+   } catch (error) {
+     const err = error instanceof Error ? error : new Error(String(error));
+     const wrapped = new Error(`KB_SEARCH_ERROR: ${err.message}`);
