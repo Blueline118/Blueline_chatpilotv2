@@ -365,7 +365,7 @@ if (kbFacts.length && !ansFacts.some(af => kbFacts.some(kf => af.n === kf.n && a
   modelText = `${modelText} ${main.n} ${main.unit} volgens de kennisbank.`;
 }
 
-    const modelText = stripSubjectLine(firstText);
+let modelText = stripSubjectLine(firstText);
     // Als het kanaal "social" is: maximaal 4 zinnen, max 1 emoji
     const isSocial = typeof type === "string" && /social/i.test(type);
     const finalText = isSocial ? stripSocialToTwoSentences(modelText) : modelText;
