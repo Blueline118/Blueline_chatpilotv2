@@ -23,12 +23,25 @@ export async function searchKb(orgId, query, limit) {
     }
 
     const items = Array.isArray(rows)
-      ? rows.map((row, index) => ({
-          id: row?.id ?? row?.chunk_id ?? row?.document_id ?? null,
-          title: row?.title ?? row?.chunk_title ?? row?.document_title ?? '',
-          snippet: row?.snippet ?? row?.chunk_snippet ?? row?.content ?? '',
-          rank: typeof row?.rank === 'number' ? row.rank : (index + 1) * 0.05, // fallback klein positief
-        }))
+      ? rows.map((row, index) => {
+          const rawTags =
+            row?.tags ??
+            row?.chunk_tags ??
+            row?.document_tags ??
+            row?.chunkTags ??
+            row?.documentTags ??
+            row?.preview_tags ??
+            row?.previewTags ??
+            null;
+
+          return {
+            id: row?.id ?? row?.chunk_id ?? row?.document_id ?? null,
+            title: row?.title ?? row?.chunk_title ?? row?.document_title ?? '',
+            snippet: row?.snippet ?? row?.chunk_snippet ?? row?.content ?? '',
+            rank: typeof row?.rank === 'number' ? row.rank : (index + 1) * 0.05, // fallback klein positief
+            tags: Array.isArray(rawTags) ? rawTags : [],
+          };
+        })
       : [];
 
     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
