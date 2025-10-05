@@ -23,13 +23,16 @@ export async function searchKb(orgId, query, limit) {
     }
 
     const items = Array.isArray(rows)
-      ? rows.map((row, index) => ({
-          id: row?.id ?? row?.chunk_id ?? row?.document_id ?? null,
-          title: row?.title ?? row?.chunk_title ?? row?.document_title ?? '',
-          snippet: row?.snippet ?? row?.chunk_snippet ?? row?.content ?? '',
-          rank: typeof row?.rank === 'number' ? row.rank : (index + 1) * 0.05, // fallback klein positief
-        }))
-      : [];
+  ? rows.map((row, index) => ({
+      id: row?.id ?? row?.chunk_id ?? row?.document_id ?? null,
+      title: row?.title ?? row?.chunk_title ?? row?.document_title ?? '',
+      snippet: row?.snippet ?? row?.chunk_snippet ?? row?.content ?? '',
+      rank: typeof row?.rank === 'number' ? row.rank : (index + 1) * 0.05, // fallback klein positief
+      // ✅ nieuw: tags optioneel doorgeven (non-breaking)
+      tags: Array.isArray(row?.tags) ? row.tags : [],
+    }))
+  : [];
+
 
     // Relevantie-drempel (pas later gerust aan, bv. 0.05–0.20)
     const THRESHOLD = 0.1;
